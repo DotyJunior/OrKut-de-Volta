@@ -7,6 +7,7 @@ interface HeaderProps {
   userName: string;
   searchQuery: string;
   setSearchQuery: (query: string) => void;
+  onLogout?: () => void;
 }
 
 export default function OrkutHeader({ 
@@ -14,7 +15,8 @@ export default function OrkutHeader({
   setCurrentTab, 
   userName,
   searchQuery,
-  setSearchQuery
+  setSearchQuery,
+  onLogout
 }: HeaderProps) {
 
   const menuItems = [
@@ -59,7 +61,7 @@ export default function OrkutHeader({
 
           {/* Right: Username, Settings link, Orkut Secret, and Connection Security Badge */}
           <div className="flex flex-col items-center md:items-end gap-1.5 text-center md:text-right font-sans">
-            <div className="text-[12px] text-[#0d213f] font-semibold flex items-center gap-1.5">
+            <div className="text-[12px] text-[#0d213f] font-semibold flex items-center gap-1.5 flex-wrap justify-center md:justify-end">
               <span>Olá {userName}</span>
               <span className="text-neutral-500">|</span>
               <button 
@@ -68,6 +70,17 @@ export default function OrkutHeader({
               >
                 Configurações
               </button>
+              {onLogout && (
+                <>
+                  <span className="text-neutral-500">|</span>
+                  <button 
+                    onClick={onLogout} 
+                    className="hover:underline font-extrabold text-rose-700 cursor-pointer uppercase text-[10.5px] tracking-tight"
+                  >
+                    Sair
+                  </button>
+                </>
+              )}
               <span className="text-neutral-500">|</span>
               <span className="text-[10px] tracking-wide text-neutral-800 font-bold uppercase font-sans">
                 ORKUT SECRET

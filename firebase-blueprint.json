@@ -1,0 +1,303 @@
+{
+  "entities": {
+    "Profile": {
+      "title": "Profile",
+      "description": "User profile data including customizable settings",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "avatar": {
+          "type": "string"
+        },
+        "location": {
+          "type": "string"
+        },
+        "relationship": {
+          "type": "string"
+        },
+        "humor": {
+          "type": "string"
+        },
+        "hereFor": {
+          "type": "string"
+        },
+        "fashion": {
+          "type": "string"
+        },
+        "religion": {
+          "type": "string"
+        },
+        "ethnicity": {
+          "type": "string"
+        },
+        "languages": {
+          "type": "string"
+        },
+        "hometown": {
+          "type": "string"
+        },
+        "webpage": {
+          "type": "string"
+        },
+        "passions": {
+          "type": "string"
+        },
+        "aboutMe": {
+          "type": "string"
+        },
+        "trusty": {
+          "type": "integer"
+        },
+        "cool": {
+          "type": "integer"
+        },
+        "sexy": {
+          "type": "integer"
+        },
+        "fans": {
+          "type": "integer"
+        },
+        "username": {
+          "type": "string"
+        },
+        "theme": {
+          "type": "string"
+        },
+        "statusOnline": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "avatar"
+      ]
+    },
+    "Scrap": {
+      "title": "Scrap",
+      "description": "Scrapbook entry representing public messages from other users",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "fromId": {
+          "type": "string"
+        },
+        "fromName": {
+          "type": "string"
+        },
+        "fromAvatar": {
+          "type": "string"
+        },
+        "toId": {
+          "type": "string"
+        },
+        "timestamp": {
+          "type": "string"
+        },
+        "rawContent": {
+          "type": "string"
+        },
+        "isEncrypted": {
+          "type": "boolean"
+        },
+        "likes": {
+          "type": "integer"
+        },
+        "likedByMe": {
+          "type": "boolean"
+        },
+        "sharesCount": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "fromId",
+        "fromName",
+        "toId",
+        "rawContent",
+        "isEncrypted"
+      ]
+    },
+    "Testimonial": {
+      "title": "Testimonial",
+      "description": "Nostalgic testimonial entry, optionally encrypted",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "fromId": {
+          "type": "string"
+        },
+        "fromName": {
+          "type": "string"
+        },
+        "fromAvatar": {
+          "type": "string"
+        },
+        "toId": {
+          "type": "string"
+        },
+        "timestamp": {
+          "type": "string"
+        },
+        "content": {
+          "type": "string"
+        },
+        "isEncrypted": {
+          "type": "boolean"
+        },
+        "unlocked": {
+          "type": "boolean"
+        },
+        "ciphertext": {
+          "type": "string"
+        },
+        "aesKeyHex": {
+          "type": "string"
+        },
+        "likes": {
+          "type": "integer"
+        },
+        "likedByMe": {
+          "type": "boolean"
+        },
+        "sharesCount": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "fromId",
+        "fromName",
+        "toId",
+        "content",
+        "isEncrypted"
+      ]
+    },
+    "JoinedCommunity": {
+      "title": "JoinedCommunity",
+      "description": "List of communities joined by a user",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string"
+        },
+        "communityIds": {
+          "type": "array"
+        }
+      },
+      "required": [
+        "userId",
+        "communityIds"
+      ]
+    },
+    "Album": {
+      "title": "Album",
+      "description": "User photo album containing multiple photo items",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "profileId": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "theme": {
+          "type": "string"
+        },
+        "photos": {
+          "type": "array"
+        },
+        "createdAt": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "profileId",
+        "name",
+        "photos"
+      ]
+    },
+    "SharedMemory": {
+      "title": "SharedMemory",
+      "description": "Milestones shared to the nostalgic feeds",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "sharerName": {
+          "type": "string"
+        },
+        "sharerAvatar": {
+          "type": "string"
+        },
+        "itemType": {
+          "type": "string"
+        },
+        "itemTitle": {
+          "type": "string"
+        },
+        "targetUser": {
+          "type": "string"
+        },
+        "timestamp": {
+          "type": "string"
+        },
+        "likes": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "sharerName",
+        "itemType",
+        "itemTitle",
+        "timestamp",
+        "likes"
+      ]
+    }
+  },
+  "firestore": {
+    "/profiles/{profileId}": {
+      "schema": "Profile",
+      "description": "User profiles indexed by profile ID"
+    },
+    "/scraps/{scrapId}": {
+      "schema": "Scrap",
+      "description": "All public scrapbook entries"
+    },
+    "/testimonials/{testimonialId}": {
+      "schema": "Testimonial",
+      "description": "All public/private testimonials"
+    },
+    "/joined_communities/{userId}": {
+      "schema": "JoinedCommunity",
+      "description": "Document containing communityIds joined by a particular user"
+    },
+    "/albums/{albumId}": {
+      "schema": "Album",
+      "description": "User photo albums"
+    },
+    "/shared_memories/{memoryId}": {
+      "schema": "SharedMemory",
+      "description": "Feeds of shared memories"
+    }
+  }
+}

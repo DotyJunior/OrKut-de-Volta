@@ -24,6 +24,7 @@ interface ProfileLayoutProps {
   onShareToFeed: (itemTitle: string, itemType: string) => void;
   onLikeShare: (id: string, liked: boolean, count: number) => void;
   onOpenSecretChat?: (targetFriendId?: string) => void;
+  onRateProfile?: (profileId: string, type: 'trusty' | 'cool' | 'sexy' | 'fans', value: number) => void;
 }
 
 export default function ProfileLayout({
@@ -42,6 +43,7 @@ export default function ProfileLayout({
   onShareToFeed,
   onLikeShare,
   onOpenSecretChat,
+  onRateProfile,
 }: ProfileLayoutProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [showIdentityWizard, setShowIdentityWizard] = useState(false);
@@ -135,38 +137,132 @@ export default function ProfileLayout({
     setIsEditing(false);
   };
 
+  // Track fanned profiles in state
+  const [fannedProfiles, setFannedProfiles] = useState<Record<string, boolean>>(() => {
+    try {
+      const stored = localStorage.getItem('fanned_profiles');
+      return stored ? JSON.parse(stored) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  const isFanOfThisUser = fannedProfiles[profile.id] || false;
+
+  const playRatingSound = (type: 'trusty' | 'cool' | 'sexy' | 'fans') => {
+    try {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContextClass) return;
+      const ctx = new AudioContextClass();
+      const playFreq = (freq: number, start: number, duration: number, soundType: 'sine' | 'triangle' = 'sine', vol = 0.05) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = soundType;
+        osc.frequency.setValueAtTime(freq, ctx.currentTime + start);
+        gain.gain.setValueAtTime(vol, ctx.currentTime + start);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + duration);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(ctx.currentTime + start);
+        osc.stop(ctx.currentTime + start + duration);
+      };
+
+      if (type === 'trusty') {
+        playFreq(523.25, 0, 0.15, 'sine', 0.04);
+        playFreq(659.25, 0.08, 0.15, 'sine', 0.04);
+      } else if (type === 'cool') {
+        playFreq(587.33, 0, 0.15, 'triangle', 0.04);
+        playFreq(880, 0.08, 0.2, 'sine', 0.03);
+      } else if (type === 'sexy') {
+        playFreq(349.23, 0, 0.15, 'sine', 0.05);
+        playFreq(523.25, 0.06, 0.2, 'sine', 0.04);
+      } else {
+        playFreq(783.99, 0, 0.1, 'sine', 0.04);
+        playFreq(987.77, 0.06, 0.1, 'sine', 0.04);
+        playFreq(1174.66, 0.12, 0.2, 'sine', 0.03);
+      }
+    } catch (e) {
+      console.log("Audio permission deferred in preview frame.");
+    }
+  };
+
   // Icon arrays for rating visualization
   const renderSmileys = (count: number) => {
-    return Array.from({ length: 3 }).map((_, idx) => (
-      <Smile
-        key={idx}
-        size={18}
-        fill={idx < count ? '#fbbf24' : 'none'}
-        className={`${idx < count ? 'text-[#f59e0b]' : 'text-neutral-300'}`}
-      />
-    ));
+    return Array.from({ length: 3 }).map((_, idx) => {
+      const active = idx < count;
+      return (
+        <button
+          key={idx}
+          onClick={() => {
+            if (!isOwnProfile && onRateProfile) {
+              playRatingSound('trusty');
+              onRateProfile(profile.id, 'trusty', idx + 1);
+            }
+          }}
+          disabled={isOwnProfile}
+          className={`${!isOwnProfile ? 'cursor-pointer hover:scale-125 hover:rotate-12 active:scale-95 transition-all outline-none border-0 bg-transparent p-0' : ''} focus:outline-none`}
+          title={!isOwnProfile ? `Classificar Confiabilidade: ${idx + 1}/3` : `Confiável: ${count}/3`}
+        >
+          <Smile
+            size={18}
+            fill={active ? '#fbbf24' : 'none'}
+            className={`${active ? 'text-[#f59e0b]' : 'text-neutral-300'} transition-colors`}
+          />
+        </button>
+      );
+    });
   };
 
   const renderIceCubes = (count: number) => {
-    return Array.from({ length: 3 }).map((_, idx) => (
-      <IceCream
-        key={idx}
-        size={18}
-        fill={idx < count ? '#38bdf8' : 'none'}
-        className={`${idx < count ? 'text-[#0284c7]' : 'text-neutral-300'}`}
-      />
-    ));
+    return Array.from({ length: 3 }).map((_, idx) => {
+      const active = idx < count;
+      return (
+        <button
+          key={idx}
+          onClick={() => {
+            if (!isOwnProfile && onRateProfile) {
+              playRatingSound('cool');
+              onRateProfile(profile.id, 'cool', idx + 1);
+            }
+          }}
+          disabled={isOwnProfile}
+          className={`${!isOwnProfile ? 'cursor-pointer hover:scale-125 active:scale-95 transition-all outline-none border-0 bg-transparent p-0' : ''} focus:outline-none`}
+          title={!isOwnProfile ? `Classificar Legal/Divertido: ${idx + 1}/3` : `Legal: ${count}/3`}
+        >
+          <IceCream
+            size={18}
+            fill={active ? '#38bdf8' : 'none'}
+            className={`${active ? 'text-[#0284c7]' : 'text-neutral-300'} transition-colors`}
+          />
+        </button>
+      );
+    });
   };
 
   const renderHearts = (count: number) => {
-    return Array.from({ length: 3 }).map((_, idx) => (
-      <Heart
-        key={idx}
-        size={18}
-        fill={idx < count ? '#f43f5e' : 'none'}
-        className={`${idx < count ? 'text-[#e11d48]' : 'text-neutral-300'}`}
-      />
-    ));
+    return Array.from({ length: 3 }).map((_, idx) => {
+      const active = idx < count;
+      return (
+        <button
+          key={idx}
+          onClick={() => {
+            if (!isOwnProfile && onRateProfile) {
+              playRatingSound('sexy');
+              onRateProfile(profile.id, 'sexy', idx + 1);
+            }
+          }}
+          disabled={isOwnProfile}
+          className={`${!isOwnProfile ? 'cursor-pointer hover:scale-125 hover:-rotate-12 active:scale-95 transition-all outline-none border-0 bg-transparent p-0' : ''} focus:outline-none`}
+          title={!isOwnProfile ? `Classificar Sexy: ${idx + 1}/3` : `Sexy: ${count}/3`}
+        >
+          <Heart
+            size={18}
+            fill={active ? '#f43f5e' : 'none'}
+            className={`${active ? 'text-[#e11d48]' : 'text-neutral-300'} transition-colors`}
+          />
+        </button>
+      );
+    });
   };
 
   return (
@@ -410,35 +506,75 @@ export default function ProfileLayout({
           </div>
 
           {/* Retro Orkut Badges Ratings */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 py-1 mb-2 font-sans">
-            <div className="bg-neutral-100/40 border border-neutral-200/40 rounded p-2 text-center flex flex-col items-center justify-center">
-              <span className="text-[10px] text-neutral-500 font-bold uppercase mb-1">Confiável</span>
-              <div id="meter-trusty" className="flex gap-0.5">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 py-1 mb-3 font-sans select-none">
+            <div className={`bg-neutral-100/40 border border-neutral-200/40 rounded p-2 text-center flex flex-col items-center justify-center transition-all ${!isOwnProfile ? 'hover:bg-[#fefce8]/40 hover:border-amber-200' : ''}`}>
+              <span className="text-[10px] text-neutral-500 font-semibold uppercase mb-1 flex items-center gap-1">
+                Confiável {!isOwnProfile && <span className="text-[9px] text-[#406a94] normal-case font-normal">(votar)</span>}
+              </span>
+              <div id="meter-trusty" className="flex gap-1.5 py-0.5">
                 {renderSmileys(profile.trusty)}
               </div>
             </div>
 
-            <div className="bg-neutral-100/40 border border-neutral-200/40 rounded p-2 text-center flex flex-col items-center justify-center">
-              <span className="text-[10px] text-neutral-500 font-bold uppercase mb-1">Legal</span>
-              <div id="meter-cool" className="flex gap-0.5">
+            <div className={`bg-neutral-100/40 border border-neutral-200/40 rounded p-2 text-center flex flex-col items-center justify-center transition-all ${!isOwnProfile ? 'hover:bg-[#f0f9ff]/40 hover:border-sky-200' : ''}`}>
+              <span className="text-[10px] text-neutral-500 font-semibold uppercase mb-1 flex items-center gap-1">
+                Legal {!isOwnProfile && <span className="text-[9px] text-[#406a94] normal-case font-normal">(votar)</span>}
+              </span>
+              <div id="meter-cool" className="flex gap-1.5 py-0.5">
                 {renderIceCubes(profile.cool)}
               </div>
             </div>
 
-            <div className="bg-neutral-100/40 border border-neutral-200/40 rounded p-2 text-center flex flex-col items-center justify-center">
-              <span className="text-[10px] text-neutral-500 font-bold uppercase mb-1">Sexy</span>
-              <div id="meter-sexy" className="flex gap-0.5">
+            <div className={`bg-neutral-100/40 border border-neutral-200/40 rounded p-2 text-center flex flex-col items-center justify-center transition-all ${!isOwnProfile ? 'hover:bg-[#fff1f2]/40 hover:border-rose-200' : ''}`}>
+              <span className="text-[10px] text-neutral-500 font-semibold uppercase mb-1 flex items-center gap-1">
+                Sexy {!isOwnProfile && <span className="text-[9px] text-[#406a94] normal-case font-normal">(votar)</span>}
+              </span>
+              <div id="meter-sexy" className="flex gap-1.5 py-0.5">
                 {renderHearts(profile.sexy)}
               </div>
             </div>
 
-            <div className="bg-neutral-100/40 border border-neutral-200/40 rounded p-2 text-center flex flex-col items-center justify-center">
-              <span className="text-[10px] text-neutral-500 font-bold uppercase mb-1">Fãs</span>
-              <div id="meter-fans" className="flex gap-0.5 items-center justify-center text-[#d97706] font-bold text-sm">
-                <Star size={16} fill="#fbbf24" className="text-[#fbbf24]" />
-                <span className="ml-1 text-[11px] font-sans">{profile.fans} fãs</span>
+            <button
+              id="meter-fans"
+              disabled={isOwnProfile}
+              onClick={() => {
+                if (!isOwnProfile && onRateProfile) {
+                  playRatingSound('fans');
+                  const delta = isFanOfThisUser ? -1 : 1;
+                  const updated = {
+                    ...fannedProfiles,
+                    [profile.id]: !isFanOfThisUser
+                  };
+                  setFannedProfiles(updated);
+                  try {
+                    localStorage.setItem('fanned_profiles', JSON.stringify(updated));
+                  } catch (e) {}
+                  onRateProfile(profile.id, 'fans', delta);
+                }
+              }}
+              className={`border rounded p-2 text-center flex flex-col items-center justify-center w-full focus:outline-none transition-all ${
+                isOwnProfile 
+                  ? 'bg-neutral-100/40 border-neutral-200/40' 
+                  : `cursor-pointer hover:scale-[1.02] shadow-xs ${
+                      isFanOfThisUser 
+                        ? 'bg-amber-50/70 border-amber-300 text-amber-800 font-extrabold shadow-[0_1px_6px_rgba(251,191,36,0.15)]' 
+                        : 'bg-neutral-100/40 border-neutral-200/40 hover:bg-amber-50/20 hover:border-amber-250 text-neutral-600'
+                    }`
+              }`}
+              title={!isOwnProfile ? (isFanOfThisUser ? 'Você é fã! Clique para deixar de ser' : 'Tornar-se fã deste membro') : `Fãs: ${profile.fans}`}
+            >
+              <span className="text-[10px] text-neutral-500 font-semibold uppercase mb-1 flex items-center gap-1">
+                Fãs {!isOwnProfile && <span className="text-[9px] text-[#d97706] normal-case font-normal">{isFanOfThisUser ? '★ Já é fã!' : '(clique p/ ser fã)'}</span>}
+              </span>
+              <div className="flex gap-1 items-center justify-center text-[#d97706] font-bold text-sm">
+                <Star 
+                  size={16} 
+                  fill={isFanOfThisUser || isOwnProfile ? "#fbbf24" : "none"} 
+                  className={`${isFanOfThisUser || isOwnProfile ? 'text-[#f59e0b]' : 'text-neutral-300'} transition-all hover:scale-110`} 
+                />
+                <span className="ml-1 text-[11px] font-sans text-amber-800">{profile.fans} fãs</span>
               </div>
-            </div>
+            </button>
           </div>
         </div>
 

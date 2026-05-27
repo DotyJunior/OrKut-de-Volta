@@ -36,10 +36,13 @@ export default function Scrapbook({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!scrapText.trim()) return;
+    if (!scrapText.trim() || isProcessing) return;
 
     setIsProcessing(true);
     try {
+      // 1.5 seconds debounce/cooldown delay to prevent spam
+      await new Promise(resolve => setTimeout(resolve, 1500));
+
       let finalScrap: Omit<Scrap, 'id' | 'timestamp'> = {
         fromId: currentUser.id,
         fromName: currentUser.name,
@@ -131,7 +134,12 @@ export default function Scrapbook({
       {/* Write form */}
       {!isOwnProfile && (
         <form onSubmit={handleSubmit} className="bg-neutral-50 border border-neutral-200 rounded p-3 mb-6">
-          <label className="block text-xs font-bold text-neutral-600 uppercase mb-2">Escrever novo scrapbook:</label>
+          <div className="flex justify-between items-center mb-2">
+            <label className="block text-xs font-bold text-neutral-600 uppercase">Escrever novo scrapbook:</label>
+            <span id="scrapbook-char-counter" className="text-[10px] font-mono text-neutral-500 bg-neutral-200/55 px-1.5 py-0.5 rounded">
+              {scrapText.length} caracteres
+            </span>
+          </div>
           <textarea
             id="scrapbook-textarea"
             rows={3}
@@ -186,11 +194,16 @@ export default function Scrapbook({
               className="flex items-center gap-1.5 px-4 py-1.5 bg-[#dee7f4] hover:bg-[#c6d7ed] border border-[#adc3df] text-[#1d4ed8] font-bold text-xs rounded transition-all cursor-pointer shadow-sm disabled:opacity-50"
             >
               {isProcessing ? (
-                <RefreshCw className="animate-spin" size={14} />
+                <>
+                  <RefreshCw className="animate-spin" size={14} />
+                  <span>Aguarde (1.5s)...</span>
+                </>
               ) : (
-                <Send size={14} />
+                <>
+                  <Send size={14} />
+                  <span>Enviar Scrap</span>
+                </>
               )}
-              Enviar Scrap
             </button>
           </div>
         </form>

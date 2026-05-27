@@ -1,0 +1,52 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Catch-all safety fallback
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Profiles Collection
+    match /profiles/{profileId} {
+      allow read: if true;
+      allow create, update: if profileId != null && profileId.size() <= 128;
+      allow delete: if false;
+    }
+
+    // Scraps Collection
+    match /scraps/{scrapId} {
+      allow read: if true;
+      allow create, update: if scrapId != null && scrapId.size() <= 128;
+      allow delete: if true;
+    }
+
+    // Testimonials Collection
+    match /testimonials/{testimonialId} {
+      allow read: if true;
+      allow create, update: if testimonialId != null && testimonialId.size() <= 128;
+      allow delete: if true;
+    }
+
+    // Joined Communities Collection
+    match /joined_communities/{userId} {
+      allow read: if true;
+      allow create, update: if userId != null && userId.size() <= 128;
+      allow delete: if true;
+    }
+
+    // Albums Collection
+    match /albums/{albumId} {
+      allow read: if true;
+      allow create, update: if albumId != null && albumId.size() <= 128;
+      allow delete: if true;
+    }
+
+    // Shared memories Collection
+    match /shared_memories/{memoryId} {
+      allow read: if true;
+      allow create, update: if memoryId != null && memoryId.size() <= 128;
+      allow delete: if true;
+    }
+  }
+}
