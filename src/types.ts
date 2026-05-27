@@ -1,0 +1,129 @@
+export interface Profile {
+  id: string;
+  name: string;
+  avatar: string;
+  location: string;
+  relationship: string;
+  humor: string;
+  hereFor: string;
+  fashion: string;
+  religion: string;
+  ethnicity: string;
+  languages: string;
+  hometown: string;
+  webpage: string;
+  passions: string;
+  aboutMe: string;
+  // Trust/Cool/Sexy/Fans meters
+  trusty: number; // 0 to 3 yellow smileys
+  cool: number;   // 0 to 3 blue ice cubes
+  sexy: number;   // 0 to 3 red hearts
+  fans: number;   // star counts
+  username?: string;
+  theme?: string;
+  statusOnline?: string;
+}
+
+export interface Scrap {
+  id: string;
+  fromName: string;
+  fromAvatar: string;
+  fromId: string;
+  toId: string;
+  timestamp: string;
+  rawContent: string;
+  ciphertext?: string;
+  isEncrypted: boolean;
+  algorithm?: string;
+  signature?: string;
+  likes?: number;
+  likedByMe?: boolean;
+  sharesCount?: number;
+}
+
+export interface Testimonial {
+  id: string;
+  fromName: string;
+  fromAvatar: string;
+  fromId: string;
+  toId: string;
+  timestamp: string;
+  content: string;
+  isEncrypted: boolean;
+  ciphertext?: string;
+  aesKeyHex?: string;
+  unlocked: boolean;
+  likes?: number;
+  likedByMe?: boolean;
+  sharesCount?: number;
+}
+
+export interface Community {
+  id: string;
+  name: string;
+  description: string;
+  members: number;
+  avatar: string; // custom color/emoji or icon
+  category: string;
+  secureMode: boolean; // Needs cryptographic key signature check to enter
+}
+
+export interface Friend {
+  id: string;
+  name: string;
+  avatar: string;
+  location: string;
+}
+
+export interface RustConsoleLog {
+  id: string;
+  text: string;
+  type: 'info' | 'success' | 'warning' | 'error' | 'stdout' | 'comment';
+  timestamp: string;
+}
+
+export interface PhotoComment {
+  id: string;
+  authorName: string;
+  authorAvatar: string;
+  text: string;
+  date: string;
+}
+
+export interface Photo {
+  id: string;
+  url: string;
+  caption: string;
+  song?: string;
+  gifUrl?: string;
+  likes: number;
+  likedByMe?: boolean;
+  comments: PhotoComment[];
+  date: string;
+}
+
+export interface Album {
+  id: string;
+  profileId: string;
+  name: string;
+  description: string;
+  theme: 'neon-hacker' | 'emo-2008' | 'vhs' | 'cyberpunk' | 'glitter' | 'gotico' | 'polaroid' | 'old-camera';
+  photos: Photo[];
+  createdAt: string;
+  likes?: number;
+  likedByMe?: boolean;
+  sharesCount?: number;
+}
+
+export interface SharedMemory {
+  id: string;
+  sharerName: string;
+  sharerAvatar: string;
+  itemType: 'photo' | 'scrap' | 'testimonial' | 'album' | 'post';
+  itemTitle: string;
+  targetUser?: string;
+  timestamp: string;
+  likes: number;
+  likedByMe?: boolean;
+}
+
