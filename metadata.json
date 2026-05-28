@@ -1,6 +1,6 @@
 {
-  "name": "Orkut Criptografado",
-  "description": "Uma réplica interativa e nostálgica do Orkut focada em criptografia, segurança moderna e vídeo-chamadas integradas com o Google Meet.",
+  "name": "Scrapzone",
+  "description": "Uma réplica interativa e nostálgica do Scrapzone focada em criptografia e segurança moderna.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

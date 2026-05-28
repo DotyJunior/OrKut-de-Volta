@@ -579,7 +579,7 @@ export default function PhotoAlbums({
               
               <div className="flex items-center gap-2 text-indigo-400 font-bold text-xs uppercase mb-3">
                 <Camera size={14} className="animate-spin text-pink-500" />
-                Orkut-Secure Photo Loader
+                Scrapzone-Secure Photo Loader
               </div>
 
               <span className="text-[11px] text-green-400 block h-10 italic leading-snug">

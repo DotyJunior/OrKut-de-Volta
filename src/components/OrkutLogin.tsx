@@ -56,6 +56,13 @@ export default function OrkutLogin({ onLoginSuccess, defaultProfiles }: OrkutLog
   const [regAgreeTerms, setRegAgreeTerms] = useState(true);
   const [regAvatarIndex, setRegAvatarIndex] = useState(0);
 
+  // SMS Phone Verification states
+  const [showSmsModal, setShowSmsModal] = useState(false);
+  const [generatedSmsCode, setGeneratedSmsCode] = useState('');
+  const [userSmsInput, setUserSmsInput] = useState('');
+  const [smsError, setSmsError] = useState('');
+  const [smsSuccessNotification, setSmsSuccessNotification] = useState<string | null>(null);
+
   // Form Fields - Recover
   const [recoverEmail, setRecoverEmail] = useState('');
 
@@ -147,7 +154,7 @@ export default function OrkutLogin({ onLoginSuccess, defaultProfiles }: OrkutLog
           languages: 'Português',
           hometown: 'Curitiba',
           webpage: '',
-          passions: 'Orkut do futuro seguros',
+          passions: 'Scrapzone segura',
           aboutMe: 'Acabei de entrar nesta incrível rede social humana e segura!',
           trusty: 3,
           cool: 3,
@@ -267,7 +274,7 @@ export default function OrkutLogin({ onLoginSuccess, defaultProfiles }: OrkutLog
         hometown: 'Curitiba',
         webpage: '',
         passions: 'Música retro, scraps seguros, comunidades clássicas',
-        aboutMe: 'Oi, acabei de criar minha conta no Orkut Seguro! Mandem recados, fiquem à vontade para bisbilhotar o meu perfil e adicionar aos favoritos. 😉',
+        aboutMe: 'Oi, acabei de criar minha conta no Scrapzone! Mandem recados, fiquem à vontade para bisbilhotar o meu perfil e adicionar aos favoritos. 😉',
         trusty: 3,
         cool: 3,
         sexy: 3,
@@ -311,6 +318,32 @@ export default function OrkutLogin({ onLoginSuccess, defaultProfiles }: OrkutLog
     }
   };
 
+  // SMS simulation trigger
+  const sendSmsCode = (phone: string) => {
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    setGeneratedSmsCode(code);
+    setUserSmsInput('');
+    setSmsError('');
+    
+    // Show high-fidelity SMS notification toast on screen of the browser
+    setSmsSuccessNotification(`📱 Novo SMS recebido no número ${phone}:\n[Scrapzone Secure] codigo de seguranca: ${code}. Guarde com seguranca.`);
+  };
+
+  const handleVerifySmsAndRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSmsError('');
+
+    if (userSmsInput.trim() !== generatedSmsCode) {
+      setSmsError('Código de verificação SMS inválido ou incorreto. Insira o código correto enviado.');
+      return;
+    }
+
+    // Correct! Proceed to execute standard registration
+    setShowSmsModal(false);
+    setSmsSuccessNotification(null);
+    await executeRegister();
+  };
+
   // Register processing with 1.5s security debounce built-in
   const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -321,9 +354,16 @@ export default function OrkutLogin({ onLoginSuccess, defaultProfiles }: OrkutLog
     const cleanName = sanitizeInput(regFullName);
     const cleanUsername = sanitizeInput(regUsername).toLowerCase().replace(/\s+/g, '');
     const cleanEmail = regEmail.trim();
+    const cleanPhone = sanitizeInput(regPhone);
 
-    if (!cleanName || !cleanUsername || !cleanEmail || !regPassword) {
-      setErrorMessage('Por favor, preencha todos os campos obrigatórios (Nome, Usuário, E-mail, Senha).');
+    if (!cleanName || !cleanUsername || !cleanEmail || !cleanPhone || !regPassword) {
+      setErrorMessage('Por favor, preencha todos os campos obrigatórios (Nome, Usuário, E-mail, Celular, Senha).');
+      return;
+    }
+
+    const phoneDigits = cleanPhone.replace(/\D/g, '');
+    if (phoneDigits.length < 10 || phoneDigits.length > 11) {
+      setErrorMessage('Por favor, insira um celular válido com DDD (10 ou 11 dígitos, ex: 41991234567).');
       return;
     }
 
@@ -411,7 +451,8 @@ export default function OrkutLogin({ onLoginSuccess, defaultProfiles }: OrkutLog
     if (action === 'login') {
       await executeLogin();
     } else if (action === 'register') {
-      await executeRegister();
+      sendSmsCode(regPhone);
+      setShowSmsModal(true);
     }
   };
 
@@ -435,14 +476,14 @@ export default function OrkutLogin({ onLoginSuccess, defaultProfiles }: OrkutLog
         {/* LEFT COLUMN: Old web social greeting and description banner */}
         <div className="flex-1 flex flex-col justify-center text-center md:text-left py-4 px-2 md:px-0">
           
-          {/* Logo Brand "orkut" in pink retro format */}
-          <div className="flex justify-center md:justify-start items-center gap-1.5 mb-4 animate-fade-in">
-            <h1 className="text-6xl md:text-7xl font-extrabold text-[#ed3fa7] font-sans tracking-tighter drop-shadow-sm select-none">
-              orkut
-            </h1>
-            <span className="bg-[#1b4372] text-[10px] text-white font-black px-1.5 py-0.5 rounded-sm uppercase tracking-wider scale-90 self-end mb-2.5 shadow-[0_1px_3px_rgba(0,0,0,0.1)]">
-              secure
-            </span>
+          {/* Logo Brand image logo */}
+          <div className="flex justify-center md:justify-start items-center gap-1.5 mb-6 animate-fade-in select-none">
+            <img 
+              src="https://i.ibb.co/jPnKJzdr/4ecc3956-03fd-4bef-ac7a-f56ac44b6000-removalai-preview.png" 
+              alt="Scrapzone Logo" 
+              className="h-[150px] md:h-[160px] object-contain"
+              referrerPolicy="no-referrer"
+            />
           </div>
 
           <h2 className="text-xl md:text-2xl font-bold text-[#1b4372] tracking-normal mb-6 leading-snug">
@@ -506,7 +547,7 @@ export default function OrkutLogin({ onLoginSuccess, defaultProfiles }: OrkutLog
                 >
                   <div className="mb-5 text-center sm:text-left border-b border-neutral-100 pb-3">
                     <h3 className="text-lg font-black text-[#1b4372] tracking-tight font-sans">
-                      Acesse o Orkut Seguro
+                      Acesse o Scrapzone
                     </h3>
                     <p className="text-xs text-neutral-500 mt-0.5">
                       Insira seus dados para reconectar-se com segurança
@@ -658,7 +699,7 @@ export default function OrkutLogin({ onLoginSuccess, defaultProfiles }: OrkutLog
                 >
                   <div className="mb-4 text-center sm:text-left border-b border-neutral-100 pb-2.5">
                     <h3 className="text-lg font-black text-[#1b4372] tracking-tight font-sans">
-                      Novo Registro no Orkut Seguro
+                      Novo Registro no Scrapzone
                     </h3>
                     <p className="text-xs text-neutral-500 mt-0.5">
                       Crie sua conta para participar da nossa rede social humana
@@ -773,10 +814,10 @@ export default function OrkutLogin({ onLoginSuccess, defaultProfiles }: OrkutLog
                       </div>
                     </div>
 
-                    {/* Phone - Optional */}
+                    {/* Phone - Mandatory */}
                     <div className="space-y-1">
                       <label className="block text-[11px] font-black text-neutral-600 uppercase tracking-wide">
-                        Telefone de Contato (Opcional):
+                        Número de Celular: *
                       </label>
                       <div className="relative">
                         <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-neutral-400">
@@ -785,9 +826,10 @@ export default function OrkutLogin({ onLoginSuccess, defaultProfiles }: OrkutLog
                         <input
                           id="reg-phone-input"
                           type="tel"
+                          required
                           value={regPhone}
                           onChange={(e) => setRegPhone(e.target.value)}
-                          placeholder="(41) 99123-4567"
+                          placeholder="Ex: (41) 99123-4567"
                           disabled={isProcessing}
                           className="w-full text-xs pl-9 pr-3 py-1.5 border border-neutral-300 rounded focus:border-[#406a94] focus:outline-none bg-neutral-50/55 text-neutral-800 shadow-inner"
                         />
@@ -1014,6 +1056,146 @@ export default function OrkutLogin({ onLoginSuccess, defaultProfiles }: OrkutLog
             onSuccess={handleCaptchaSuccess}
             onCancel={handleCaptchaCancel}
           />
+        )}
+      </AnimatePresence>
+
+      {/* SMS Phone Verification Retro Modal */}
+      <AnimatePresence>
+        {showSmsModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4"
+          >
+            <motion.div
+              initial={{ y: -30, scale: 0.95 }}
+              animate={{ y: 0, scale: 1 }}
+              exit={{ y: -30, scale: 0.95 }}
+              className="max-w-md w-full bg-[#f3f7fc] border-2 border-[#1b4372] rounded shadow-2xl overflow-hidden font-sans text-left"
+            >
+              {/* Window Header */}
+              <div className="bg-[#1b4372] px-4 py-2.5 flex items-center justify-between text-white select-none">
+                <span className="text-xs font-black uppercase tracking-wider flex items-center gap-1.5">
+                  <Phone size={13} className="text-pink-400" />
+                  Verificação Obrigatória de Celular
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowSmsModal(false);
+                    setSmsSuccessNotification(null);
+                  }}
+                  className="text-neutral-300 hover:text-white font-bold text-xs bg-transparent border-none cursor-pointer"
+                >
+                  [ Fechar ]
+                </button>
+              </div>
+
+              {/* Content Panel */}
+              <div className="p-5 space-y-4">
+                <div className="bg-blue-50 border border-blue-200 rounded p-3 text-xs text-[#1e3a8a] leading-relaxed">
+                  <span className="font-bold block mb-1">Passo Integridade e Segurança:</span>
+                  Enviamos um código de segurança SMS de 6 dígitos para o número <strong className="text-black font-semibold">{regPhone}</strong>. Insira-o abaixo para concluir seu cadastro na rede.
+                </div>
+
+                {smsError && (
+                  <div className="bg-rose-50 border border-rose-200 text-rose-800 p-2.5 rounded text-xs flex items-start gap-1.5 font-sans animate-fade-in">
+                    <AlertCircle size={15} className="flex-shrink-0 mt-0.5 text-rose-605" />
+                    <span>{smsError}</span>
+                  </div>
+                )}
+
+                <form onSubmit={handleVerifySmsAndRegister} className="space-y-4">
+                  <div className="space-y-1">
+                    <label className="block text-[11px] font-black text-neutral-600 uppercase tracking-wide text-center sm:text-left">
+                      Código de Verificação de SMS (6 dígitos):
+                    </label>
+                    <input
+                      type="text"
+                      maxLength={6}
+                      value={userSmsInput}
+                      onChange={(e) => setUserSmsInput(e.target.value.replace(/\D/g, ''))}
+                      placeholder="Ex: 123456"
+                      className="w-full text-center text-lg tracking-widest font-mono py-2 bg-white border-2 border-neutral-350 rounded focus:border-[#1b4372] focus:outline-none text-[#1b4372]"
+                      required
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-2 pt-1">
+                    <button
+                      type="submit"
+                      className="w-full py-2 bg-[#ed3fa7] hover:bg-[#d6278f] active:bg-[#ba1e7a] text-white font-black text-xs uppercase tracking-wide rounded cursor-pointer transition-all flex items-center justify-center gap-1.5 border-none"
+                    >
+                      <span>✓ Confirmar Código & Registrar</span>
+                    </button>
+
+                    <div className="flex justify-between items-center text-xs mt-1">
+                      <button
+                        type="button"
+                        onClick={() => sendSmsCode(regPhone)}
+                        className="text-[#103056] font-bold hover:underline bg-transparent border-none cursor-pointer"
+                      >
+                        Reenviar SMS 🔄
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowSmsModal(false);
+                          setSmsSuccessNotification(null);
+                        }}
+                        className="text-neutral-500 hover:text-neutral-700 underline bg-transparent border-none cursor-pointer"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                </form>
+              </div>
+
+              {/* Bottom Decorative Status Area */}
+              <div className="bg-[#dee7f4] border-t border-[#b7cbdc] px-4 py-2 flex items-center justify-between text-[10px] text-neutral-600 font-sans">
+                <span>Status: Aguardando Código</span>
+                <span className="font-semibold text-emerald-700">Conexão Criptografada SSL</span>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Simulated SMS Notification Toast */}
+      <AnimatePresence>
+        {smsSuccessNotification && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            className="fixed bottom-4 right-4 z-[9999] max-w-sm w-full bg-[#1b233a] border-2 border-blue-500 rounded-lg shadow-2xl p-4 text-white font-sans flex items-start gap-3"
+            id="sms-simulation-toast"
+          >
+            <div className="bg-sky-500/20 p-2 rounded-full text-sky-400 mt-0.5 animate-pulse flex-shrink-0">
+              <Phone size={18} className="text-sky-400" />
+            </div>
+            <div className="flex-1 text-left">
+              <div className="flex justify-between items-center mb-1">
+                <span className="text-[10px] uppercase font-black tracking-wider text-sky-400">Mensagem Recebida (SMS)</span>
+                <button 
+                  onClick={() => setSmsSuccessNotification(null)}
+                  className="text-neutral-400 hover:text-white font-bold text-xs bg-transparent border-none cursor-pointer p-0"
+                >
+                  ×
+                </button>
+              </div>
+              <p className="text-xs text-neutral-200 font-mono font-medium whitespace-pre-line leading-relaxed">
+                {smsSuccessNotification}
+              </p>
+              <div className="mt-2 text-[8px] text-neutral-400 font-mono flex justify-between items-center">
+                <span>Simulado • Rede Scrapzone Móvel</span>
+                <span className="text-neutral-500">Agora</span>
+              </div>
+            </div>
+          </motion.div>
         )}
       </AnimatePresence>
 

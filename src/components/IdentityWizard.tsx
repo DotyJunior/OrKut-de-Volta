@@ -62,7 +62,7 @@ export default function IdentityWizard({ onComplete, onClose, currentProfile }: 
 
   // Retro themes list
   const themePresets = [
-    { id: 'default', name: 'Padrão Clássico', desc: 'O bom e velho azul do Orkut de 2004.' },
+    { id: 'default', name: 'Padrão Clássico', desc: 'O bom e velho azul de 2004.' },
     { id: 'neon-hacker', name: 'Neon Hacker', desc: 'Verde terminal, CRT e brilho sob o chassi.' },
     { id: 'emo-2008', name: 'Emo 2008', desc: 'Rosa choque, corações pretos e Linkin Park no talo.' },
     { id: 'rock-underground', name: 'Rock Underground', desc: 'Laranja chapa e fumaça de Curitiba.' },
@@ -106,7 +106,7 @@ export default function IdentityWizard({ onComplete, onClose, currentProfile }: 
         <div className="bg-[#dee7f4] px-4 py-2 border-b border-indigo-200 flex justify-between items-center bg-gradient-to-r from-[#dee7f4] to-[#adc3df]">
           <span className="text-xs font-bold text-neutral-800 flex items-center gap-1.5 font-sans">
             <Tv size={14} className="text-[#d946ef]" /> 
-            WIZARD DE IDENTIDADE DIGITAL ORKUT
+            WIZARD DE IDENTIDADE DIGITAL SCRAPZONE
           </span>
           <button 
             onClick={onClose}
@@ -141,7 +141,7 @@ export default function IdentityWizard({ onComplete, onClose, currentProfile }: 
                   <p className="font-bold text-indigo-900 mb-1 flex items-center gap-1">
                     🚀 Volta pro lado humano da internet
                   </p>
-                  Não criamos logs de navegação vazados no mercado. O Orkut-Secure valida sua identidade usando assinaturas assimétricas em memória-segura.
+                  Não criamos logs de navegação vazados no mercado. O Scrapzone-Secure valida sua identidade usando assinaturas assimétricas em memória-segura.
                 </div>
 
                 <div className="space-y-3 font-sans">

@@ -6,7 +6,7 @@ export default function OrkutFooter() {
       <div className="max-w-6xl mx-auto px-4 text-center">
         {/* Foot links */}
         <div className="flex flex-wrap justify-center gap-x-4 gap-y-2 text-xs font-sans text-[#1d4ed8] font-semibold mb-4">
-          <a href="#about" className="hover:underline">Sobre o Orkut Criptografado</a>
+          <a href="#about" className="hover:underline">Sobre o Scrapzone</a>
           <span className="text-neutral-400">·</span>
           <a href="#rust-sec-console" className="hover:underline flex items-center gap-0.5">
             <Fingerprint size={12} />
@@ -25,7 +25,7 @@ export default function OrkutFooter() {
 
         {/* Foot details */}
         <div className="text-[11px] text-neutral-500 font-sans leading-relaxed">
-          <p>© 2004 - 2026 Orkut Secure Inc. Todos os scraps e recados enviados são encriptados na origem via AES-256-GCM.</p>
+          <p>© 2004 - 2026 Scrapzone Secure Inc. Todos os scraps e recados enviados são encriptados na origem via AES-256-GCM.</p>
           <p className="flex justify-center items-center gap-1 mt-1 font-mono text-[9px] text-[#2563eb]">
             <ShieldAlert size={10} />
             Memory-safe protection: BORROW_CHECK_OK — sandbox isolated linear WebAssembly boundaries.

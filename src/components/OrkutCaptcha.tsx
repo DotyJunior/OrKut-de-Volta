@@ -206,7 +206,7 @@ export default function OrkutCaptcha({ onSuccess, onCancel }: OrkutCaptchaProps)
         <div className="bg-gradient-to-r from-[#1b4372] to-[#255e9e] px-4 py-2.5 flex items-center justify-between text-white border-b border-[#0f2d50]">
           <div className="flex items-center gap-1.5 text-xs font-bold leading-none font-sans uppercase tracking-wider">
             <ShieldCheck size={14} className="text-pink-400" />
-            <span>Anti-Bot Orkut Link</span>
+            <span>Anti-Bot Scrapzone Link</span>
           </div>
           <button 
             onClick={onCancel}

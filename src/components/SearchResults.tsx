@@ -79,7 +79,7 @@ export default function SearchResults({
           <AlertCircle size={40} className="text-blue-400 mb-3 animate-pulse" />
           <h3 className="font-bold text-sm text-neutral-700">Nenhum resultado encontrado</h3>
           <p className="text-xs max-w-sm mt-1">
-            Não encontramos amigos, comunidades ou recados contendo o termo pesquisado. Tente buscar algo diferente, como "pinhão", "Rust", "Orkut", "Curi" ou "odeio".
+            Não encontramos amigos, comunidades ou recados contendo o termo pesquisado. Tente buscar algo diferente, como "pinhão", "Rust", "Scrapzone", "Curi" ou "odeio".
           </p>
         </div>
       ) : (

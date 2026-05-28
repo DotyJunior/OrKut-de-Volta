@@ -26,7 +26,7 @@ export default function RustSecLab() {
   // 2. Virus depoimento simulation state
   const [simRunning, setSimRunning] = useState(true);
   const [oldNetPopups, setOldNetPopups] = useState<string[]>([
-    '🔥 VIRUS DEPO: SEU ORKUT FOI HACKEADO!',
+    '🔥 VIRUS DEPO: SEU SCRAPZONE FOI HACKEADO!',
     '🚨 CLIQUE AQUI PARA VER QUEM VISITOU SEU PERFIL',
     '💀 ERRO: BUFFER OVERFLOW EM DEPOIMENTO.EXE'
   ]);
@@ -48,7 +48,7 @@ export default function RustSecLab() {
     '     RUST SECURE ENGINE (WASM SANDBOX v2.04)     ',
     '==================================================',
     'Digite "help" para ver os comandos de segurança disponíveis.',
-    'Sua sessão Orkut-Secure é emulada de forma isolada.',
+    'Sua sessão Scrapzone-Secure é emulada de forma isolada.',
   ]);
   const terminalBottomRef = useRef<HTMLDivElement>(null);
 
@@ -108,7 +108,7 @@ export default function RustSecLab() {
     const cmd = terminalInput.toLowerCase().trim();
     if (!cmd) return;
 
-    setTerminalLogs(prev => [...prev, `guest@orkut-sec:~$ ${terminalInput}`]);
+    setTerminalLogs(prev => [...prev, `guest@scrapzone-sec:~$ ${terminalInput}`]);
     setTerminalInput('');
 
     switch (cmd) {

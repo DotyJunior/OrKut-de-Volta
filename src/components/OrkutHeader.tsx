@@ -83,7 +83,7 @@ export default function OrkutHeader({
               )}
               <span className="text-neutral-500">|</span>
               <span className="text-[10px] tracking-wide text-neutral-800 font-bold uppercase font-sans">
-                ORKUT SECRET
+                SCRAPZONE SECRET
               </span>
             </div>
 
@@ -101,17 +101,20 @@ export default function OrkutHeader({
       <div className="bg-[#dbe4f1] border-b border-[#c4dafa] py-3.5 px-4">
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center gap-4">
           
-          {/* Brand Logo orkuti/orkut */}
+          {/* Brand Logo Scrapzone */}
           <div 
-            className="flex items-baseline cursor-pointer" 
+            className="flex items-center cursor-pointer select-none" 
             onClick={() => {
               setSearchQuery('');
               setCurrentTab('profile');
             }}
           >
-            <h1 className="text-4xl font-extrabold text-[#ed3fa7] font-sans tracking-tight leading-none pr-3 select-none">
-              orkut
-            </h1>
+            <img 
+              src="https://i.ibb.co/jPnKJzdr/4ecc3956-03fd-4bef-ac7a-f56ac44b6000-removalai-preview.png" 
+              alt="Scrapzone Logo" 
+              className="h-[60px] md:h-[65px] object-contain transition-transform hover:scale-102 active:scale-98"
+              referrerPolicy="no-referrer"
+            />
           </div>
 
           {/* Horizontal Vintage Menu Alignment directly adjacent to the logo, exactly like reference images */}

@@ -51,10 +51,10 @@ export default function Communities({ communities, onJoinCommunity, joinedIds }:
       <div className="flex flex-col md:flex-row md:items-center justify-between border-b pb-3 mb-4 gap-3">
         <div>
           <h2 className="text-lg font-bold font-sans text-neutral-800 flex items-center gap-1.5">
-            👥 Comunidades do Orkut Criptografado
+            👥 Comunidades do Scrapzone Criptografado
           </h2>
           <p className="text-xs text-neutral-500 font-sans">
-            Entre nas maiores e mais nostálgicas comunidades do Orkut, agora isoladas com algoritmos criptográficos.
+            Entre nas maiores e mais nostálgicas comunidades do Scrapzone, agora isoladas com algoritmos criptográficos.
           </p>
         </div>
 

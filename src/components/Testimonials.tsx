@@ -90,7 +90,7 @@ export default function Testimonials({
           🌟 Depoimentos (Testimonials) de <strong>{activeProfile.name}</strong>
         </h2>
         <p className="text-xs text-neutral-500 font-sans">
-          "Depoimento só aceita se for legal!" - No Orkut clássico as pessoas se declaravam para os melhores amigos. No <strong>Orkut Secure</strong>, seus depoimentos são protegidos por chaves criptográficas para que os fofoqueiros do feed não vejam sua declaração!
+          "Depoimento só aceita se for legal!" - No Scrapzone clássico as pessoas se declaravam para os melhores amigos. No <strong>Scrapzone Secure</strong>, seus depoimentos são protegidos por chaves criptográficas para que os fofoqueiros do feed não vejam sua declaração!
         </p>
       </div>
 

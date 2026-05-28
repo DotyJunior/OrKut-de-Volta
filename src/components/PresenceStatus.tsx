@@ -328,7 +328,7 @@ export default function PresenceStatus({ profileId, isOwnProfile, profileName }:
               className="absolute left-0 mt-1.5 z-50 w-44 bg-white border border-neutral-350 rounded shadow-[0_4px_12px_rgba(0,0,0,0.15)] overflow-hidden text-xs text-neutral-800"
             >
               <div className="bg-[#dee7f4] px-2.5 py-1 text-[10px] uppercase font-bold tracking-wider text-[#1d4ed8] font-sans flex justify-between items-center border-b border-dashed border-neutral-300">
-                <span>Estado MSN / Orkut</span>
+                <span>Estado MSN / Scrapzone</span>
                 <span className="text-[10px] animate-pulse">⚡</span>
               </div>
               

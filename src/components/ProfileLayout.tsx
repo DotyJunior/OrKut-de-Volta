@@ -2,7 +2,6 @@ import { useState, FormEvent } from 'react';
 import { Eye, Edit, Save, ShieldCheck, Heart, IceCream, Smile, Star, MapPin, Sparkles, KeyRound, Palette, RefreshCw, Send, MessageSquare } from 'lucide-react';
 import { Profile, Friend, Community, Album, Photo, SharedMemory } from '../types';
 import { getThemeStyles } from '../lib/theme';
-import { connectGoogleMeet, createGoogleMeeting, getMeetAccessToken } from '../lib/workspace';
 import SocialSidebar from './SocialSidebar';
 import IdentityWizard from './IdentityWizard';
 import SocialActions from './SocialActions';
@@ -273,7 +272,7 @@ export default function ProfileLayout({
         <div className="lg:col-span-12 bg-gradient-to-r from-pink-500 via-purple-600 to-indigo-600 text-white rounded-lg p-4 shadow-sm flex flex-col sm:flex-row justify-between items-center gap-3">
           <div className="text-left">
             <h4 className="font-bold flex items-center gap-1.5 text-sm">
-              <Sparkles size={16} /> Ainda não personalizou sua Identidade Digital Orkut?
+              <Sparkles size={16} /> Ainda não personalizou sua Identidade Digital Scrapzone?
             </h4>
             <p className="text-[11px] text-[#dee7f4] mt-1">
               Escolha seu nome de autor, username exclusivo, status clássico dos anos 2000 chapa e ative um dos 8 temas de profile!
@@ -369,7 +368,7 @@ export default function ProfileLayout({
               onClick={() => {
                 playShutterSound();
                 if (onOpenSecretChat) {
-                  // Connects to active friend if viewing a friend's page, or defaults to lucas
+                   // Connects to active friend if viewing a friend's page, or defaults to lucas
                   onOpenSecretChat(profile.id === 'me' ? 'lucas' : profile.id);
                 }
               }}
@@ -378,48 +377,6 @@ export default function ProfileLayout({
             >
               💬 Mensagem
             </GlossyRetroButton>
-          </div>
-
-          <div className="border-t border-dashed border-neutral-350 mt-2.5 pt-2.5 text-center">
-            <div className="text-[10px] uppercase font-bold text-neutral-500 mb-1.5 font-sans">
-              Google Meet 🎥
-            </div>
-            {profile.id !== 'me' ? (
-              <GlossyRetroButton
-                id="sidebar-btn-meet-friend"
-                onClick={() => {
-                  playShutterSound();
-                  if (onOpenSecretChat) {
-                    onOpenSecretChat(profile.id);
-                  }
-                }}
-                variant="action"
-                className="w-full h-11 bg-sky-600 hover:bg-sky-700 text-white border-sky-400"
-              >
-                🎥 Chamar p/ Meet
-              </GlossyRetroButton>
-            ) : (
-              <GlossyRetroButton
-                id="sidebar-btn-meet-quick"
-                onClick={async () => {
-                  playShutterSound();
-                  try {
-                    let activeToken = getMeetAccessToken();
-                    if (!activeToken) {
-                      activeToken = await connectGoogleMeet();
-                    }
-                    const space = await createGoogleMeeting(activeToken);
-                    window.prompt("Copie e compartilhe o link de videoconferência do Google Meet criado:", space.meetingUri);
-                  } catch (err: any) {
-                    alert(err.message || 'Falha ao criar sala do Google Meet.');
-                  }
-                }}
-                variant="action"
-                className="w-full h-11 bg-blue-600 hover:bg-blue-700 text-white border-blue-400"
-              >
-                🎥 Criar Reunião
-              </GlossyRetroButton>
-            )}
           </div>
 
         </div>
@@ -799,7 +756,7 @@ export default function ProfileLayout({
                     onChange={(e) => setEditForm({ ...editForm, theme: e.target.value })}
                     className="w-full px-2 py-1.5 border border-pink-400 bg-pink-50/10 text-[#d946ef] font-bold rounded cursor-pointer"
                   >
-                    <option value="default">Padrão Orkut Clássico (Azul)</option>
+                    <option value="default">Padrão Scrapzone Clássico (Azul)</option>
                     <option value="neon-hacker">Neon Hacker (Verde Terminal)</option>
                     <option value="emo-2008">Emo 2008 (Rosa Choque e Preto)</option>
                     <option value="rock-underground">Rock Underground (Chapa Laranja)</option>
@@ -999,7 +956,7 @@ export default function ProfileLayout({
                           <span className="text-xl">🖼️</span>
                           <div>
                             <p className="font-bold text-sky-700 italic">“{entry.itemTitle.replace('Foto: ', '')}”</p>
-                            <span className="text-[9px] text-neutral-400">Verificado em Orkut Secure Albums</span>
+                            <span className="text-[9px] text-neutral-400">Verificado em Scrapzone Secure Albums</span>
                           </div>
                         </div>
                       )}

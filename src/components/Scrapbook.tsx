@@ -119,9 +119,9 @@ export default function Scrapbook({
 
       {cryptoExplainOpen && (
         <div className="bg-blue-50 border border-blue-200 rounded p-3 mb-4 text-xs text-blue-800 font-sans leading-relaxed">
-          <h4 className="font-bold mb-1 flex items-center gap-1">🛡️ Infraestrutura Crypto do Orkut Secure:</h4>
+          <h4 className="font-bold mb-1 flex items-center gap-1">🛡️ Infraestrutura Crypto do Scrapzone Secure:</h4>
           <p className="mb-2">
-            No Orkut de 2004, mensagens eram salvas em texto puro em servidores frágeis de SQL. Aqui, se você selecionar <strong>Criptografia Ativa</strong>, a mensagem é imediatamente encriptada no seu próprio navegador usando <strong>Symmetric AES-256-GCM</strong>.
+            No antigo Orkut de 2004, mensagens eram salvas em texto puro em servidores frágeis de SQL. Aqui, se você selecionar <strong>Criptografia Ativa</strong>, a mensagem é imediatamente encriptada no seu próprio navegador usando <strong>Symmetric AES-256-GCM</strong>.
           </p>
           <ul className="list-disc pl-4 space-y-1">
             <li><strong>Chave Secreta:</strong> Usada para embaralhar a string localmente.</li>
