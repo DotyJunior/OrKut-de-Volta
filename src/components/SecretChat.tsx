@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Shield, Clock, Send, ShieldAlert, Circle, ChevronDown } from 'lucide-react';
+import { X, Shield, Clock, Send, ShieldAlert, Circle, ChevronDown, Video, LogOut, AlertTriangle } from 'lucide-react';
 import { Friend } from '../types';
+import { connectGoogleMeet, getMeetAccessToken, createGoogleMeeting, disconnectGoogleMeet } from '../lib/workspace';
 
 interface ChatMessage {
   id: string;
@@ -70,6 +71,11 @@ export default function SecretChat({
   const [messageInput, setMessageInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   
+  // Google Meet connection states
+  const [googleMeetToken, setGoogleMeetToken] = useState<string | null>(getMeetAccessToken());
+  const [isMeetCreating, setIsMeetCreating] = useState(false);
+  const [meetError, setMeetError] = useState<string | null>(null);
+
   const feedRef = useRef<HTMLDivElement>(null);
   const activePartner = fullCharactersList.find(p => p.id === activePartnerId) || fullCharactersList[0];
 
@@ -88,6 +94,13 @@ export default function SecretChat({
   useEffect(() => {
     setActivePartnerId(initialTargetFriendId);
   }, [initialTargetFriendId]);
+
+  // Synchronize Google Meet Token
+  useEffect(() => {
+    if (isOpen) {
+      setGoogleMeetToken(getMeetAccessToken());
+    }
+  }, [isOpen]);
 
   // Clean-up expired messages and Load Saved Chat on mount & when activePartnerId changes
   useEffect(() => {
@@ -161,8 +174,8 @@ export default function SecretChat({
     }
   }, [messages, isTyping]);
 
-  const handleSendMessage = async () => {
-    const text = messageInput.trim();
+  const sendChatMessage = async (textToSend: string) => {
+    const text = textToSend.trim();
     if (!text) return;
 
     const storageKey = `orkut_secure_secret_chat_${activePartnerId}`;
@@ -178,10 +191,18 @@ export default function SecretChat({
       createdAt: nowMs
     };
 
-    const updated = [...messages, newMsg];
-    setMessages(updated);
+    setMessages(prev => [...prev, newMsg]);
+
+    // Read previous messages from storage to append correctly
+    let savedMessages: ChatMessage[] = [];
+    const saved = localStorage.getItem(storageKey);
+    if (saved) {
+      try {
+        savedMessages = JSON.parse(saved);
+      } catch (err) {}
+    }
+    const updated = [...savedMessages, newMsg];
     localStorage.setItem(storageKey, JSON.stringify(updated));
-    setMessageInput('');
 
     // Trigger synthetic/API response from the selected Orkut character!
     setIsTyping(true);
@@ -227,11 +248,23 @@ export default function SecretChat({
         hacker: "Interceptei o quantum tunnel... mas essa chave descartável com exclusão em 48h me brecou."
       };
 
+      // Customized response if it's a Google Meet invite!
+      let replyText = fallbacks[activePartnerId] || "Mensagem privada criptografada recebida com sucesso.";
+      if (text.includes('meet.google.com')) {
+        const meetFallbacks: Record<string, string> = {
+          lucas: "Opa, vídeo chamada?! Demorô parça! Abre aí que eu já clico para entrar 🎥👍",
+          alexandre: "Iniciando a videoconferência segura pelo Google Meet. Conectando meu feed parlamentar.",
+          orkut: "Wonderful! Let's connect over a real-time Google Meet. I am joining now!",
+          hacker: "Uma videoconferência criptografada pelo Google Meet? Massa, estou entrando no meet virtual."
+        };
+        replyText = meetFallbacks[activePartnerId] || "Conectando ao Google Meet...";
+      }
+
       const fallbackMsg: ChatMessage = {
         id: 'chat_fb_' + Math.random().toString(36).substr(2, 9),
         senderId: activePartnerId,
         senderName: activePartner.name,
-        text: fallbacks[activePartnerId] || "Mensagem privada criptografada recebida com sucesso.",
+        text: replyText,
         timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
         createdAt: Date.now()
       };
@@ -244,6 +277,50 @@ export default function SecretChat({
     } finally {
       setIsTyping(false);
     }
+  };
+
+  const handleSendMessage = async () => {
+    const text = messageInput.trim();
+    if (!text) return;
+    setMessageInput('');
+    await sendChatMessage(text);
+  };
+
+  // Google Meet Handlers
+  const handleConnectMeet = async () => {
+    try {
+      setMeetError(null);
+      const token = await connectGoogleMeet();
+      setGoogleMeetToken(token);
+    } catch (err: any) {
+      setMeetError(err.message || 'Falha ao conectar com o Google.');
+    }
+  };
+
+  const handleCreateMeet = async () => {
+    try {
+      setMeetError(null);
+      setIsMeetCreating(true);
+      const meeting = await createGoogleMeeting(googleMeetToken || undefined);
+      
+      // Auto send the meet invite link to the chat!
+      const inviteMsg = `🎥 Você recebeu um convite para uma Vídeo Chamada! Entre na minha sala do Google Meet:\n${meeting.meetingUri}`;
+      await sendChatMessage(inviteMsg);
+    } catch (err: any) {
+      console.error('Meet creation failed:', err);
+      setMeetError(err.message || 'Falha ao criar sala do Google Meet.');
+      if (err.message && (err.message.includes('Autenticação') || err.message.includes('token'))) {
+        disconnectGoogleMeet();
+        setGoogleMeetToken(null);
+      }
+    } finally {
+      setIsMeetCreating(false);
+    }
+  };
+
+  const handleDisconnectMeet = () => {
+    disconnectGoogleMeet();
+    setGoogleMeetToken(null);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -450,6 +527,13 @@ export default function SecretChat({
           ) : (
             messages.map((msg) => {
               const isMe = msg.senderId === 'me';
+              const hasMeet = msg.text.includes('meet.google.com');
+              let meetUrl = '';
+              if (hasMeet) {
+                const match = msg.text.match(/https:\/\/meet\.google\.com\/[a-z0-9-]+/);
+                if (match) meetUrl = match[0];
+              }
+
               return (
                 <div 
                   key={msg.id}
@@ -460,6 +544,22 @@ export default function SecretChat({
                   }`}
                 >
                   <p className="whitespace-pre-line font-sans font-medium">{msg.text}</p>
+                  {hasMeet && meetUrl && (
+                    <div className="mt-2.5 p-2.5 bg-gradient-to-r from-blue-900/40 to-indigo-900/40 rounded-lg border border-blue-500/30 text-left">
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <div className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
+                        <span className="text-[10px] uppercase tracking-wider font-bold text-sky-400">Google Meet Ativo</span>
+                      </div>
+                      <a 
+                        href={meetUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-[11px] font-bold rounded-md transition-all uppercase tracking-wide no-underline cursor-pointer shadow-[0_0_10px_rgba(59,130,246,0.3)] hover:scale-[1.02] border-none"
+                      >
+                        🎥 Entrar na Chamada
+                      </a>
+                    </div>
+                  )}
                   <span 
                     className="bubble-time text-[8px] text-[#6b7fa0] block mt-1 tracking-wider"
                     style={{
@@ -489,6 +589,59 @@ export default function SecretChat({
         <div 
           className="input-zone p-4 bg-black/25 border-t border-[#a855f7]/12 flex flex-col gap-2.5 text-left"
         >
+          {/* Google Meet Quick Action Bar */}
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center justify-between border border-[#a855f7]/15 rounded-lg p-2 bg-[#120a2a]/60 text-xs">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <div className="w-5 h-5 rounded-full bg-blue-600/25 flex items-center justify-center text-blue-400">
+                  <Video size={10} className="text-sky-400" />
+                </div>
+                <div className="text-[10px] min-w-0">
+                  <p className="font-bold text-[#dce8ff] truncate">Google Meet</p>
+                  <p className="text-[9px] text-[#6b7fa0] truncate">
+                    {googleMeetToken ? 'Conectado • Inicie o Meet' : 'Chame para vídeo-chamada'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1.5 flex-shrink-0">
+                {googleMeetToken ? (
+                  <>
+                    <button
+                      onClick={handleCreateMeet}
+                      disabled={isMeetCreating}
+                      className="px-2 py-1 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 text-white font-bold text-[9px] uppercase tracking-wider rounded transition-all cursor-pointer border-none shadow-[0_0_8px_rgba(59,130,246,0.3)]"
+                    >
+                      {isMeetCreating ? 'Criando...' : 'Iniciar Meet 🎥'}
+                    </button>
+                    <button
+                      onClick={handleDisconnectMeet}
+                      title="Desconectar do Google"
+                      className="p-1 text-red-400 hover:text-red-300 rounded cursor-pointer bg-transparent border-none"
+                    >
+                      <LogOut size={11} />
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={handleConnectMeet}
+                    className="px-2 py-1 bg-[#1a0f30] border border-blue-500/30 hover:border-blue-500/70 text-[#00d4ff] hover:text-white font-bold text-[9px] uppercase tracking-wider rounded transition-all cursor-pointer"
+                  >
+                    Conectar 🔑
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {meetError && (
+              <div className="text-[9px] text-red-300 font-medium px-2 py-1 bg-red-950/40 border border-red-900/30 rounded flex items-center gap-1">
+                <AlertTriangle size={10} className="flex-shrink-0 text-red-400" />
+                <span className="truncate">{meetError}</span>
+                <button onClick={() => setMeetError(null)} className="ml-auto text-red-400 font-bold hover:text-white bg-transparent border-none cursor-pointer">×</button>
+              </div>
+            )}
+          </div>
+
           <div className="textarea-wrap relative">
             <textarea
               id="chat-message-input"

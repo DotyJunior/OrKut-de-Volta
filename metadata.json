@@ -1,6 +1,6 @@
 {
   "name": "Orkut Criptografado",
-  "description": "Uma réplica interativa e nostálgica do Orkut focada em criptografia e segurança moderna com simulação de Rust WASM.",
+  "description": "Uma réplica interativa e nostálgica do Orkut focada em criptografia, segurança moderna e vídeo-chamadas integradas com o Google Meet.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

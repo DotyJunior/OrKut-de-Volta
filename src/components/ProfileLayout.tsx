@@ -2,6 +2,7 @@ import { useState, FormEvent } from 'react';
 import { Eye, Edit, Save, ShieldCheck, Heart, IceCream, Smile, Star, MapPin, Sparkles, KeyRound, Palette, RefreshCw, Send, MessageSquare } from 'lucide-react';
 import { Profile, Friend, Community, Album, Photo, SharedMemory } from '../types';
 import { getThemeStyles } from '../lib/theme';
+import { connectGoogleMeet, createGoogleMeeting, getMeetAccessToken } from '../lib/workspace';
 import SocialSidebar from './SocialSidebar';
 import IdentityWizard from './IdentityWizard';
 import SocialActions from './SocialActions';
@@ -377,6 +378,48 @@ export default function ProfileLayout({
             >
               💬 Mensagem
             </GlossyRetroButton>
+          </div>
+
+          <div className="border-t border-dashed border-neutral-350 mt-2.5 pt-2.5 text-center">
+            <div className="text-[10px] uppercase font-bold text-neutral-500 mb-1.5 font-sans">
+              Google Meet 🎥
+            </div>
+            {profile.id !== 'me' ? (
+              <GlossyRetroButton
+                id="sidebar-btn-meet-friend"
+                onClick={() => {
+                  playShutterSound();
+                  if (onOpenSecretChat) {
+                    onOpenSecretChat(profile.id);
+                  }
+                }}
+                variant="action"
+                className="w-full h-11 bg-sky-600 hover:bg-sky-700 text-white border-sky-400"
+              >
+                🎥 Chamar p/ Meet
+              </GlossyRetroButton>
+            ) : (
+              <GlossyRetroButton
+                id="sidebar-btn-meet-quick"
+                onClick={async () => {
+                  playShutterSound();
+                  try {
+                    let activeToken = getMeetAccessToken();
+                    if (!activeToken) {
+                      activeToken = await connectGoogleMeet();
+                    }
+                    const space = await createGoogleMeeting(activeToken);
+                    window.prompt("Copie e compartilhe o link de videoconferência do Google Meet criado:", space.meetingUri);
+                  } catch (err: any) {
+                    alert(err.message || 'Falha ao criar sala do Google Meet.');
+                  }
+                }}
+                variant="action"
+                className="w-full h-11 bg-blue-600 hover:bg-blue-700 text-white border-blue-400"
+              >
+                🎥 Criar Reunião
+              </GlossyRetroButton>
+            )}
           </div>
 
         </div>
