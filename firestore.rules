@@ -1,52 +1,165 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // Catch-all safety fallback
+
+    // ══════════════════════════════════════════════
+    // SEGURANÇA GLOBAL — bloqueia tudo por padrão
+    // Nenhuma coleção é acessível sem regra explícita
+    // ══════════════════════════════════════════════
     match /{document=**} {
       allow read, write: if false;
     }
 
-    // Profiles Collection
+    // ══════════════════════════════════════════════
+    // FUNÇÕES AUXILIARES DE SEGURANÇA
+    // ══════════════════════════════════════════════
+
+    // Verifica se o usuário está logado com email verificado
+    function isAuthenticated() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+
+    // Verifica se o usuário logado é o dono do documento
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Limita tamanho dos campos de texto (evita spam gigante)
+    function validTextSize(field, maxChars) {
+      return field.size() <= maxChars;
+    }
+
+    // Verifica se os dados enviados não contêm campos proibidos
+    function noForbiddenFields(data, forbidden) {
+      return !data.keys().hasAny(forbidden);
+    }
+
+    // Checa se a conta foi criada há mais de 60 segundos
+    // (evita bots que criam e já escrevem instantaneamente)
+    function accountNotBrandNew() {
+      return request.auth.token.firebase.sign_in_provider != 'anonymous'
+        && (request.time.toMillis() - request.auth.token.auth_time * 1000) > 60000;
+    }
+
+    // ══════════════════════════════════════════════
+    // PERFIS
+    // Leitura: qualquer um pode ver perfis públicos
+    // Escrita: só o próprio dono, autenticado
+    // ══════════════════════════════════════════════
     match /profiles/{profileId} {
       allow read: if true;
-      allow create, update: if profileId != null && profileId.size() <= 128;
+
+      allow create: if isOwner(profileId)
+        && accountNotBrandNew()
+        && validTextSize(request.resource.data.name, 80)
+        && validTextSize(request.resource.data.bio, 500)
+        && noForbiddenFields(request.resource.data, ['admin', 'banned', 'role']);
+
+      allow update: if isOwner(profileId)
+        && validTextSize(request.resource.data.name, 80)
+        && validTextSize(request.resource.data.bio, 500)
+        && noForbiddenFields(request.resource.data, ['admin', 'banned', 'role']);
+
+      // Perfis nunca são deletados — apenas desativados
       allow delete: if false;
     }
 
-    // Scraps Collection
+    // ══════════════════════════════════════════════
+    // RECADOS (SCRAPS)
+    // Leitura: qualquer um
+    // Criação: apenas usuários autenticados com email verificado
+    // Deleção: apenas o autor ou o dono do perfil que recebeu
+    // ══════════════════════════════════════════════
     match /scraps/{scrapId} {
       allow read: if true;
-      allow create, update: if scrapId != null && scrapId.size() <= 128;
-      allow delete: if true;
+
+      allow create: if isAuthenticated()
+        && accountNotBrandNew()
+        && request.resource.data.authorId == request.auth.uid
+        && validTextSize(request.resource.data.text, 1000)
+        && request.resource.data.keys().hasAll(['authorId', 'profileId', 'text', 'createdAt']);
+
+      allow update: if isAuthenticated()
+        && resource.data.authorId == request.auth.uid
+        && validTextSize(request.resource.data.text, 1000);
+
+      // Só o autor ou dono do perfil pode deletar
+      allow delete: if isAuthenticated()
+        && (resource.data.authorId == request.auth.uid
+          || resource.data.profileId == request.auth.uid);
     }
 
-    // Testimonials Collection
+    // ══════════════════════════════════════════════
+    // TESTEMUNHOS
+    // Precisam de aprovação — não aparecem automaticamente
+    // ══════════════════════════════════════════════
     match /testimonials/{testimonialId} {
       allow read: if true;
-      allow create, update: if testimonialId != null && testimonialId.size() <= 128;
-      allow delete: if true;
+
+      allow create: if isAuthenticated()
+        && accountNotBrandNew()
+        && request.resource.data.authorId == request.auth.uid
+        && validTextSize(request.resource.data.text, 500)
+        && request.resource.data.approved == false  // começa como não aprovado
+        && request.resource.data.keys().hasAll(['authorId', 'profileId', 'text', 'approved']);
+
+      // Só o dono do perfil pode aprovar/rejeitar
+      allow update: if isAuthenticated()
+        && resource.data.profileId == request.auth.uid;
+
+      allow delete: if isAuthenticated()
+        && (resource.data.authorId == request.auth.uid
+          || resource.data.profileId == request.auth.uid);
     }
 
-    // Joined Communities Collection
+    // ══════════════════════════════════════════════
+    // COMUNIDADES INGRESSADAS
+    // ══════════════════════════════════════════════
     match /joined_communities/{userId} {
       allow read: if true;
-      allow create, update: if userId != null && userId.size() <= 128;
-      allow delete: if true;
+
+      allow create, update: if isOwner(userId)
+        && accountNotBrandNew();
+
+      allow delete: if isOwner(userId);
     }
 
-    // Albums Collection
+    // ══════════════════════════════════════════════
+    // ÁLBUNS DE FOTOS
+    // ══════════════════════════════════════════════
     match /albums/{albumId} {
       allow read: if true;
-      allow create, update: if albumId != null && albumId.size() <= 128;
-      allow delete: if true;
+
+      allow create: if isAuthenticated()
+        && accountNotBrandNew()
+        && request.resource.data.ownerId == request.auth.uid
+        && validTextSize(request.resource.data.title, 100);
+
+      allow update: if isAuthenticated()
+        && resource.data.ownerId == request.auth.uid;
+
+      allow delete: if isAuthenticated()
+        && resource.data.ownerId == request.auth.uid;
     }
 
-    // Shared memories Collection
+    // ══════════════════════════════════════════════
+    // MEMÓRIAS COMPARTILHADAS
+    // ══════════════════════════════════════════════
     match /shared_memories/{memoryId} {
       allow read: if true;
-      allow create, update: if memoryId != null && memoryId.size() <= 128;
-      allow delete: if true;
+
+      allow create: if isAuthenticated()
+        && accountNotBrandNew()
+        && request.resource.data.authorId == request.auth.uid
+        && validTextSize(request.resource.data.caption, 300);
+
+      allow update: if isAuthenticated()
+        && resource.data.authorId == request.auth.uid;
+
+      allow delete: if isAuthenticated()
+        && resource.data.authorId == request.auth.uid;
     }
+
   }
 }
+
