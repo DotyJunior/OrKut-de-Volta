@@ -479,9 +479,9 @@ export default function OrkutLogin({ onLoginSuccess, defaultProfiles }: OrkutLog
           {/* Logo Brand image logo */}
           <div className="flex justify-center md:justify-start items-center gap-1.5 mb-6 animate-fade-in select-none">
             <img 
-              src="https://i.ibb.co/jPnKJzdr/4ecc3956-03fd-4bef-ac7a-f56ac44b6000-removalai-preview.png" 
+              src="https://i.imgur.com/dhYT8Fa.png" 
               alt="Scrapzone Logo" 
-              className="h-[150px] md:h-[160px] object-contain"
+              className="h-[210px] md:h-[220px] object-contain"
               referrerPolicy="no-referrer"
             />
           </div>

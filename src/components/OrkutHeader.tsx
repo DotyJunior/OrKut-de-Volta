@@ -59,7 +59,7 @@ export default function OrkutHeader({
             />
           </form>
 
-          {/* Right: Username, Settings link, Orkut Secret, and Connection Security Badge */}
+          {/* Right: Username, Settings link, and Connection Security Badge */}
           <div className="flex flex-col items-center md:items-end gap-1.5 text-center md:text-right font-sans">
             <div className="text-[12px] text-[#0d213f] font-semibold flex items-center gap-1.5 flex-wrap justify-center md:justify-end">
               <span>Olá {userName}</span>
@@ -81,10 +81,6 @@ export default function OrkutHeader({
                   </button>
                 </>
               )}
-              <span className="text-neutral-500">|</span>
-              <span className="text-[10px] tracking-wide text-neutral-800 font-bold uppercase font-sans">
-                SCRAPZONE SECRET
-              </span>
             </div>
 
             {/* Connection Security Badge */}
@@ -110,9 +106,9 @@ export default function OrkutHeader({
             }}
           >
             <img 
-              src="https://i.ibb.co/jPnKJzdr/4ecc3956-03fd-4bef-ac7a-f56ac44b6000-removalai-preview.png" 
+              src="https://i.imgur.com/dhYT8Fa.png" 
               alt="Scrapzone Logo" 
-              className="h-[60px] md:h-[65px] object-contain transition-transform hover:scale-102 active:scale-98"
+              className="h-[110px] md:h-[120px] object-contain transition-transform hover:scale-102 active:scale-98"
               referrerPolicy="no-referrer"
             />
           </div>
