@@ -258,15 +258,16 @@ export default function App() {
         const unsubscribeProfile = onSnapshot(docRef, (docSnap) => {
           if (docSnap.exists()) {
             const data = docSnap.data();
-            if (data.isEmailVerified === false) {
-              // Deny sessions with unverified e-mails: force complete sign-out
-              auth.signOut();
-              setCurrentUserProfile(null);
-            } else {
-              setCurrentUserProfile(data as Profile);
-            }
+            setCurrentUserProfile(data as Profile);
           } else {
-            // First time seeding
+            // If registration is in progress, do not seed defaultMe.
+            // Wait for the register process to write newUserProfile first.
+            if (localStorage.getItem('scrapzone_registering_in_progress') === 'true') {
+              setIsAuthLoading(false);
+              return;
+            }
+
+            // First time seeding fallback (for console/dev manual auth accounts)
             const defaultMe = {
               id: firebaseUser.uid,
               name: firebaseUser.displayName || 'Novo Usuário',
@@ -289,7 +290,8 @@ export default function App() {
               fans: 0,
               username: firebaseUser.email?.split('@')[0] || 'membro',
               theme: 'default',
-              statusOnline: '● Online Agora'
+              statusOnline: '● Online Agora',
+              isEmailVerified: true
             };
             setDoc(docRef, defaultMe).catch(err => console.error(err));
             setCurrentUserProfile(defaultMe);
@@ -994,11 +996,13 @@ export default function App() {
   }
 
   // Session gate
-  if (!currentUserProfile) {
+  if (!currentUserProfile || currentUserProfile.isEmailVerified === false) {
     return (
       <OrkutLogin 
         onLoginSuccess={handleLoginSuccess} 
         defaultProfiles={DEFAULT_PROFILES} 
+        isEmailUnverifiedProfile={currentUserProfile}
+        onLogout={handleLogout}
       />
     );
   }

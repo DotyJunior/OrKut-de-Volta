@@ -78,6 +78,41 @@
         "avatar"
       ]
     },
+    "PrivateProfile": {
+      "title": "PrivateProfile",
+      "description": "Private profile information containing PII and verification parameters",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "email": {
+          "type": "string"
+        },
+        "phone": {
+          "type": "string"
+        },
+        "emailCode": {
+          "type": "string"
+        },
+        "emailCodeExpiresAt": {
+          "type": "integer"
+        },
+        "emailCodeAttempts": {
+          "type": "integer"
+        },
+        "emailCodeResendsCount": {
+          "type": "integer"
+        },
+        "emailCodeLastSentAt": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "email"
+      ]
+    },
     "Scrap": {
       "title": "Scrap",
       "description": "Scrapbook entry representing public messages from other users",
@@ -278,6 +313,10 @@
     "/profiles/{profileId}": {
       "schema": "Profile",
       "description": "User profiles indexed by profile ID"
+    },
+    "/private_profiles/{userId}": {
+      "schema": "PrivateProfile",
+      "description": "Private user configurations including PII and verification parameters"
     },
     "/scraps/{scrapId}": {
       "schema": "Scrap",

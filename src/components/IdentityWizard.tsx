@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { evaluatePasswordStrength } from '../utils/password';
 import { 
   Lock, 
   Sparkles, 
@@ -35,6 +36,8 @@ export default function IdentityWizard({ onComplete, onClose, currentProfile }: 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [agreeTerms, setAgreeTerms] = useState(true);
+
+  const currentPasswordStrength = evaluatePasswordStrength(password);
 
   // Screen 2 fields
   const [fullName, setFullName] = useState(currentProfile.name);
@@ -177,6 +180,70 @@ export default function IdentityWizard({ onComplete, onClose, currentProfile }: 
                     </div>
                   </div>
 
+                  {/* Password strength analysis for simulated wizard */}
+                  {password && (
+                    <div className="bg-slate-50 border border-slate-200 rounded p-3 space-y-2 text-xs font-sans animate-fade-in shadow-inner">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 border-b border-dashed border-slate-200 pb-1.5">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-slate-700">Força da Senha:</span>
+                          {currentPasswordStrength.label === 'Bloqueada' && (
+                            <span className="font-extrabold text-red-600 uppercase flex items-center gap-1">
+                              🔴 {currentPasswordStrength.label}
+                            </span>
+                          )}
+                          {currentPasswordStrength.label === 'Fraca' && (
+                            <span className="font-extrabold text-rose-500 uppercase flex items-center gap-1">
+                              🔴 {currentPasswordStrength.label}
+                            </span>
+                          )}
+                          {currentPasswordStrength.label === 'Média' && (
+                            <span className="font-extrabold text-amber-500 uppercase flex items-center gap-1">
+                              🟠 {currentPasswordStrength.label}
+                            </span>
+                          )}
+                          {currentPasswordStrength.label === 'Forte' && (
+                            <span className="font-extrabold text-emerald-600 uppercase flex items-center gap-1">
+                              🟢 {currentPasswordStrength.label}
+                            </span>
+                          )}
+                        </div>
+                        <span className="font-mono text-[11px] tracking-wider text-slate-600 font-bold">
+                          {currentPasswordStrength.progressBar}
+                        </span>
+                      </div>
+                      <div className={`text-[11px] leading-relaxed p-1.5 rounded font-sans ${
+                        currentPasswordStrength.label === 'Bloqueada' ? 'bg-rose-50 text-rose-700 font-semibold' :
+                        currentPasswordStrength.label === 'Fraca' ? 'bg-rose-50/30 text-neutral-600 font-medium' :
+                        currentPasswordStrength.label === 'Média' ? 'bg-amber-50/50 text-amber-800 font-medium' :
+                        'bg-emerald-50 text-emerald-800 font-semibold'
+                      }`}>
+                        {currentPasswordStrength.helpMessage}
+                      </div>
+
+                      {/* Criteria check dot items */}
+                      <div className="text-[10px] space-y-0.5 text-neutral-500">
+                        <div className="flex items-center gap-1">
+                          <span className={`${password.length >= 8 ? 'text-emerald-700 font-bold' : 'text-neutral-400'}`}>
+                            {password.length >= 8 ? '✓' : '✗'}
+                          </span>
+                          <span>Comprimento de pelo menos 8 caracteres ({password.length}/8)</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <span className={`${/[a-zA-Z]/.test(password) ? 'text-emerald-700 font-bold' : 'text-neutral-400'}`}>
+                            {/[a-zA-Z]/.test(password) ? '✓' : '✗'}
+                          </span>
+                          <span>Mínimo de 1 letra</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <span className={`${/[0-9]/.test(password) ? 'text-emerald-700 font-bold' : 'text-neutral-400'}`}>
+                            {/[0-9]/.test(password) ? '✓' : '✗'}
+                          </span>
+                          <span>Mínimo de 1 número</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   <label className="flex items-center gap-2 cursor-pointer mt-2 select-none">
                     <input
                       type="checkbox"
@@ -193,7 +260,7 @@ export default function IdentityWizard({ onComplete, onClose, currentProfile }: 
                 <div className="pt-2">
                   <button
                     type="submit"
-                    disabled={!email || !password || !agreeTerms}
+                    disabled={!email || !password || !agreeTerms || !currentPasswordStrength.isValidToSubmit || currentPasswordStrength.score === 0}
                     className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-neutral-300 text-white text-xs font-bold rounded cursor-pointer transition-all flex items-center justify-center gap-1 shadow-sm"
                   >
                     Prosseguir para Identidade

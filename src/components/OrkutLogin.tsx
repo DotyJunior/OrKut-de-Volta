@@ -23,20 +23,38 @@ import {
 import { doc, setDoc, getDocs, collection, query, where, getDoc } from 'firebase/firestore';
 import { auth, db, handleFirestoreError, OperationType } from '../firebase';
 import { Profile } from '../types';
+import { evaluatePasswordStrength } from '../utils/password';
 
 interface OrkutLoginProps {
   onLoginSuccess: (userProfile: Profile, isDemo: boolean) => void;
   defaultProfiles: Record<string, Profile>;
+  isEmailUnverifiedProfile?: Profile | null;
+  onLogout?: () => void;
 }
 
-export default function OrkutLogin({ onLoginSuccess, defaultProfiles }: OrkutLoginProps) {
+export default function OrkutLogin({ onLoginSuccess, defaultProfiles, isEmailUnverifiedProfile, onLogout }: OrkutLoginProps) {
   const [view, setView] = useState<'login' | 'register' | 'recover'>('login');
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
 
-  // Captcha Anti-Bot
-  const [attempts, setAttempts] = useState(0);
+  // Automatically open email verification modal if unverified profile is hydration-linked
+  React.useEffect(() => {
+    if (isEmailUnverifiedProfile) {
+      setPasswordVerificationPendingProfile(isEmailUnverifiedProfile);
+      setShowEmailVerifyModal(true);
+    }
+  }, [isEmailUnverifiedProfile]);
+
+  // Captcha & Lockout Anti-Bot
+  const [attempts, setAttempts] = useState(() => {
+    const cached = localStorage.getItem('scrapzone_login_attempts');
+    return cached ? parseInt(cached, 10) : 0;
+  });
+  const [lockoutUntil, setLockoutUntil] = useState(() => {
+    const cached = localStorage.getItem('scrapzone_login_lockout_until');
+    return cached ? parseInt(cached, 10) : 0;
+  });
   const [showCaptcha, setShowCaptcha] = useState(false);
   const [pendingAction, setPendingAction] = useState<'login' | 'register' | null>(null);
 
@@ -66,6 +84,9 @@ export default function OrkutLogin({ onLoginSuccess, defaultProfiles }: OrkutLog
   // Form Fields - Recover
   const [recoverEmail, setRecoverEmail] = useState('');
 
+  // Password analysis reactive state
+  const currentPasswordStrength = evaluatePasswordStrength(regPassword);
+
   // Retro Avatar Presets
   const avatarPresets = [
     'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150', // Default Classic Boy Blue
@@ -83,6 +104,16 @@ export default function OrkutLogin({ onLoginSuccess, defaultProfiles }: OrkutLog
 
   // Refactored helper: Core Login Executor
   const executeLogin = async () => {
+    // Active lockout check
+    const currentLockout = parseInt(localStorage.getItem('scrapzone_login_lockout_until') || '0', 10);
+    if (currentLockout && Date.now() < currentLockout) {
+      const remainingMs = currentLockout - Date.now();
+      const remainingMinutes = Math.ceil(remainingMs / 60000);
+      setErrorMessage(`⚠ Muitas tentativas de login inválidas. Acesso bloqueado por ${remainingMinutes} minuto(s).`);
+      setIsProcessing(false);
+      return;
+    }
+
     setIsProcessing(true);
     setErrorMessage('');
     const cleanInput = loginInput.trim();
@@ -169,9 +200,12 @@ export default function OrkutLogin({ onLoginSuccess, defaultProfiles }: OrkutLog
 
       // Check Email Verification status
       if (loggedProfile.isEmailVerified === false) {
-        const anyProfile = loggedProfile as any;
-        let code = anyProfile.emailCode;
-        let codeExpiresAt = anyProfile.emailCodeExpiresAt;
+        const privateDocRef = doc(db, 'private_profiles', uid);
+        const privateDocSnap = await getDoc(privateDocRef);
+        let privateData = privateDocSnap.exists() ? privateDocSnap.data() : null;
+
+        let code = privateData?.emailCode;
+        let codeExpiresAt = privateData?.emailCodeExpiresAt;
 
         const isExpired = !codeExpiresAt || Date.now() > codeExpiresAt;
         if (isExpired || !code) {
@@ -179,6 +213,9 @@ export default function OrkutLogin({ onLoginSuccess, defaultProfiles }: OrkutLog
           codeExpiresAt = Date.now() + 17 * 60 * 1000;
 
           const updatedFields = {
+            id: uid,
+            email: (loggedProfile as any).email || targetEmail,
+            phone: (loggedProfile as any).phone || '',
             emailCode: code,
             emailCodeExpiresAt: codeExpiresAt,
             emailCodeAttempts: 0,
@@ -186,19 +223,26 @@ export default function OrkutLogin({ onLoginSuccess, defaultProfiles }: OrkutLog
             emailCodeLastSentAt: Date.now()
           };
 
-          await setDoc(docRef, updatedFields, { merge: true });
-
-          anyProfile.emailCode = code;
-          anyProfile.emailCodeExpiresAt = codeExpiresAt;
-          anyProfile.emailCodeAttempts = 0;
-          anyProfile.emailCodeResendsCount = 1;
-          anyProfile.emailCodeLastSentAt = Date.now();
+          await setDoc(privateDocRef, updatedFields, { merge: true });
+          privateData = updatedFields;
         }
 
-        setPasswordVerificationPendingProfile(anyProfile);
+        // Synthesize a secure verified check profile object for component state memory only (NOT saved to public profiles)
+        const pendingObj = {
+          ...loggedProfile,
+          email: privateData?.email || (loggedProfile as any).email || targetEmail,
+          phone: privateData?.phone || (loggedProfile as any).phone || '',
+          emailCode: privateData?.emailCode,
+          emailCodeExpiresAt: privateData?.emailCodeExpiresAt,
+          emailCodeAttempts: privateData?.emailCodeAttempts || 0,
+          emailCodeResendsCount: privateData?.emailCodeResendsCount || 1,
+          emailCodeLastSentAt: privateData?.emailCodeLastSentAt || Date.now()
+        };
+
+        setPasswordVerificationPendingProfile(pendingObj);
         setIsProcessing(false);
         setShowEmailVerifyModal(true);
-        sendEmailSimulatedNotification(anyProfile.email || targetEmail, code);
+        sendEmailSimulatedNotification(pendingObj.email, code);
         return;
       }
 
@@ -209,13 +253,21 @@ export default function OrkutLogin({ onLoginSuccess, defaultProfiles }: OrkutLog
         localStorage.removeItem('orkut_remember_uid');
       }
 
+      // Successful login clears brute force history/lock state
+      localStorage.removeItem('scrapzone_login_attempts');
+      localStorage.removeItem('scrapzone_login_lockout_until');
+      setAttempts(0);
+      setLockoutUntil(0);
+
       setIsProcessing(false);
       onLoginSuccess(loggedProfile, false);
 
     } catch (err: any) {
       console.error('Firebase Auth Login Error: ', err);
       // Increment attempt counter upon failure!
-      setAttempts(prev => prev + 1);
+      const newAttempts = attempts + 1;
+      setAttempts(newAttempts);
+      localStorage.setItem('scrapzone_login_attempts', newAttempts.toString());
 
       let clientMsg = 'Erro ao realizar login. Verifique suas credenciais.';
       if (err.code === 'auth/invalid-credential' || err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') {
@@ -225,6 +277,15 @@ export default function OrkutLogin({ onLoginSuccess, defaultProfiles }: OrkutLog
       } else if (err.message) {
         clientMsg = err.message;
       }
+
+      // 5 failed login attempts block the attacker for 15 minutes
+      if (newAttempts >= 5) {
+        const lockTime = Date.now() + 15 * 60 * 1000;
+        setLockoutUntil(lockTime);
+        localStorage.setItem('scrapzone_login_lockout_until', lockTime.toString());
+        clientMsg = '⚠ Muitas tentativas de login inválidas. Acesso bloqueado por 15 minutos.';
+      }
+
       setErrorMessage(clientMsg);
       setIsProcessing(false);
     }
@@ -235,6 +296,15 @@ export default function OrkutLogin({ onLoginSuccess, defaultProfiles }: OrkutLog
     e.preventDefault();
     setErrorMessage('');
     setSuccessMessage('');
+
+    // Check active lockout barrier
+    const currentLockout = parseInt(localStorage.getItem('scrapzone_login_lockout_until') || '0', 10);
+    if (currentLockout && Date.now() < currentLockout) {
+      const remainingMs = currentLockout - Date.now();
+      const remainingMinutes = Math.ceil(remainingMs / 60000);
+      setErrorMessage(`⚠ Muitas tentativas de login inválidas. Acesso bloqueado por ${remainingMinutes} minuto(s).`);
+      return;
+    }
 
     const cleanInput = loginInput.trim();
     if (!cleanInput) {
@@ -297,6 +367,9 @@ Este código expira em 17 minutos. Não compartilhe com ninguém.`);
         throw new Error(`O usuário @${cleanUsername} já está registrado. Escolha outro nome.`);
       }
 
+      // Set registration in progress flag to block automatic default profile seeding in auth listener
+      localStorage.setItem('scrapzone_registering_in_progress', 'true');
+
       // Create authentication credentials using Firebase Secure Auth
       const userCredential = await createUserWithEmailAndPassword(auth, cleanEmail, regPassword);
       const uid = userCredential.user.uid;
@@ -305,13 +378,11 @@ Este código expira em 17 minutos. Não compartilhe com ninguém.`);
       const code = Math.floor(100000 + Math.random() * 900000).toString();
       const codeExpiresAt = Date.now() + 17 * 60 * 1000; // 17 minutes
 
-      // Build User profile record with pending state configuration
+      // Build general public user profile record (without sensitive fields)
       const newUserProfile: any = {
         id: uid,
         name: cleanName,
         username: cleanUsername,
-        email: cleanEmail,
-        phone: cleanPhone,
         avatar: avatarPresets[regAvatarIndex],
         location: 'Paraná, Brasil',
         relationship: 'Solteiro',
@@ -331,9 +402,14 @@ Este código expira em 17 minutos. Não compartilhe com ninguém.`);
         fans: 0,
         theme: 'default',
         statusOnline: '● Pendente de Verificação',
+        isEmailVerified: false
+      };
 
-        // EMAIL VERIFICATION METADATA
-        isEmailVerified: false,
+      // Build private secure parameters record
+      const newPrivateProfile: any = {
+        id: uid,
+        email: cleanEmail,
+        phone: cleanPhone,
         emailCode: code,
         emailCodeExpiresAt: codeExpiresAt,
         emailCodeAttempts: 0,
@@ -343,6 +419,11 @@ Este código expira em 17 minutos. Não compartilhe com ninguém.`);
 
       // Set profile doc in firestore
       await setDoc(doc(db, 'profiles', uid), newUserProfile);
+      // Set private parameters in isolated private collection
+      await setDoc(doc(db, 'private_profiles', uid), newPrivateProfile);
+
+      // Successfully wrote profile, discard flag
+      localStorage.removeItem('scrapzone_registering_in_progress');
 
       // Join default communities automatically (making them feel welcome!)
       await setDoc(doc(db, 'joined_communities', uid), {
@@ -350,8 +431,19 @@ Este código expira em 17 minutos. Não compartilhe com ninguém.`);
         communityIds: ['1', '3'] // 'Eu odeio acordar cedo' and 'Eu amo chocolate preto'
       });
 
-      // Prepare states for email confirmation step
-      setPasswordVerificationPendingProfile(newUserProfile);
+      // Prepare states for email confirmation step (keeping private helper details in React memory for current flows)
+      const clientPendingObj = {
+        ...newUserProfile,
+        email: cleanEmail,
+        phone: cleanPhone,
+        emailCode: code,
+        emailCodeExpiresAt: codeExpiresAt,
+        emailCodeAttempts: 0,
+        emailCodeResendsCount: 1,
+        emailCodeLastSentAt: Date.now()
+      };
+
+      setPasswordVerificationPendingProfile(clientPendingObj);
       setUserEmailVerifyInput('');
       setEmailVerifyError('');
       
@@ -363,6 +455,7 @@ Este código expira em 17 minutos. Não compartilhe com ninguém.`);
       setShowEmailVerifyModal(true);
 
     } catch (err: any) {
+      localStorage.removeItem('scrapzone_registering_in_progress');
       console.error('Registration Error: ', err);
       // Fail increments the login/register attempt counter
       setAttempts(prev => prev + 1);
@@ -408,8 +501,14 @@ Este código expira em 17 minutos. Não compartilhe com ninguém.`);
       return;
     }
 
-    if (regPassword.length < 6) {
-      setErrorMessage('Sua senha deve ter no mínimo 6 caracteres para garantir proteção criptográfica.');
+    const passwordStrength = evaluatePasswordStrength(regPassword);
+    if (passwordStrength.score === 0) {
+      setErrorMessage('⚠ Senha extremamente comum e vulnerável. Por favor, escolha outra senha.');
+      return;
+    }
+
+    if (!passwordStrength.isValidToSubmit) {
+      setErrorMessage('A sua senha não atende aos requisitos mínimos exigidos (mínimo de 8 caracteres, contendo pelo menos 1 letra e 1 número).');
       return;
     }
 
@@ -884,7 +983,7 @@ Este código expira em 17 minutos. Não compartilhe com ninguém.`);
                           required
                           value={regPassword}
                           onChange={(e) => setRegPassword(e.target.value)}
-                          placeholder="Mínimo 6 dígitos"
+                          placeholder="Mínimo 8 caracteres"
                           disabled={isProcessing}
                           className="w-full text-xs px-3 py-1.5 border border-neutral-300 rounded focus:border-[#406a94] focus:outline-none bg-neutral-50/55 text-neutral-800 shadow-inner"
                         />
@@ -907,6 +1006,82 @@ Este código expira em 17 minutos. Não compartilhe com ninguém.`);
                         />
                       </div>
                     </div>
+
+                    {/* PW Strength Visual Widget - Orkut Vintage Style */}
+                    {regPassword && (
+                      <div className="bg-[#f0f4f9] border border-[#b7cbdc] rounded p-3 space-y-2 text-xs font-sans animate-fade-in shadow-inner">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 border-b border-dashed border-[#b7cbdc] pb-1.5">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-bold text-[#1b4372]">Força da Senha:</span>
+                            {currentPasswordStrength.label === 'Bloqueada' && (
+                              <span className="font-extrabold text-[#b91c1c] uppercase flex items-center gap-1">
+                                🔴 {currentPasswordStrength.label}
+                              </span>
+                            )}
+                            {currentPasswordStrength.label === 'Fraca' && (
+                              <span className="font-extrabold text-rose-500 uppercase flex items-center gap-1">
+                                🔴 {currentPasswordStrength.label}
+                              </span>
+                            )}
+                            {currentPasswordStrength.label === 'Média' && (
+                              <span className="font-extrabold text-amber-500 uppercase flex items-center gap-1">
+                                🟠 {currentPasswordStrength.label}
+                              </span>
+                            )}
+                            {currentPasswordStrength.label === 'Forte' && (
+                              <span className="font-extrabold text-emerald-600 uppercase flex items-center gap-1">
+                                🟢 {currentPasswordStrength.label}
+                              </span>
+                            )}
+                          </div>
+                          
+                          <span className="font-mono text-[11px] tracking-wider text-[#1b4372] font-black">
+                            {currentPasswordStrength.progressBar}
+                          </span>
+                        </div>
+
+                        <div className={`text-[11px] leading-relaxed flex items-start gap-1 p-1 rounded font-sans ${
+                          currentPasswordStrength.label === 'Bloqueada' ? 'bg-rose-50 text-rose-700 font-semibold border border-rose-100' :
+                          currentPasswordStrength.label === 'Fraca' ? 'bg-rose-50/50 text-neutral-600 font-medium' :
+                          currentPasswordStrength.label === 'Média' ? 'bg-amber-50/50 text-amber-800 font-medium border border-amber-100/50' :
+                          'bg-emerald-50 text-emerald-800 font-semibold border border-emerald-100'
+                        }`}>
+                          <span>{currentPasswordStrength.helpMessage}</span>
+                        </div>
+
+                        {/* Criteria details checklist */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[10px] text-neutral-500 bg-white/70 p-2 rounded border border-[#dee7f4]">
+                          <div>
+                            <span className="font-bold block text-[#1b4372] mb-0.5 uppercase tracking-wider text-[9px]">Requisitos Mínimos:</span>
+                            <ul className="space-y-0.5 list-none pl-0">
+                              <li className={`${regPassword.length >= 8 ? 'text-emerald-700 font-bold' : 'text-neutral-500'}`}>
+                                {regPassword.length >= 8 ? '✓' : '✗'} 8 ou mais caracteres ({regPassword.length}/8)
+                              </li>
+                              <li className={`${/[a-zA-Z]/.test(regPassword) ? 'text-emerald-700 font-bold' : 'text-neutral-500'}`}>
+                                {/[a-zA-Z]/.test(regPassword) ? '✓' : '✗'} Pelo menos 1 letra
+                              </li>
+                              <li className={`${/[0-9]/.test(regPassword) ? 'text-emerald-700 font-bold' : 'text-neutral-500'}`}>
+                                {/[0-9]/.test(regPassword) ? '✓' : '✗'} Pelo menos 1 número
+                              </li>
+                            </ul>
+                          </div>
+                          <div>
+                            <span className="font-bold block text-[#1b4372] mb-0.5 uppercase tracking-wider text-[9px]">Recomendado para Máxima Segurança:</span>
+                            <ul className="space-y-0.5 list-none pl-0">
+                              <li className={`${regPassword.length >= 12 ? 'text-emerald-700 font-bold' : 'text-neutral-500'}`}>
+                                {regPassword.length >= 12 ? '✓' : '✗'} 12 ou mais caracteres ({regPassword.length}/12)
+                              </li>
+                              <li className={`${(/[A-Z]/.test(regPassword) && /[a-z]/.test(regPassword)) ? 'text-emerald-700 font-bold' : 'text-neutral-500'}`}>
+                                {(/[A-Z]/.test(regPassword) && /[a-z]/.test(regPassword)) ? '✓' : '✗'} Letras Maiúsculas & Minúsculas
+                              </li>
+                              <li className={`${/[!@#$%&*?_\-]/.test(regPassword) ? 'text-emerald-700 font-bold' : 'text-neutral-500'}`}>
+                                {/[!@#$%&*?_\-]/.test(regPassword) ? '✓' : '✗'} Símbolo (!@#$%&*?_-)
+                              </li>
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Agree terms */}
                     <div className="flex items-start gap-2 pt-1">
@@ -1120,6 +1295,9 @@ Este código expira em 17 minutos. Não compartilhe com ninguém.`);
                   onClick={() => {
                     setShowEmailVerifyModal(false);
                     setEmailSuccessNotification(null);
+                    if (isEmailUnverifiedProfile && onLogout) {
+                      onLogout();
+                    }
                   }}
                   className="text-neutral-300 hover:text-white font-bold text-xs bg-transparent border-none cursor-pointer font-mono"
                 >
@@ -1148,31 +1326,31 @@ Este código expira em 17 minutos. Não compartilhe com ninguém.`);
                   if (!passwordVerificationPendingProfile) return;
 
                   try {
-                    const docRef = doc(db, 'profiles', passwordVerificationPendingProfile.id);
-                    const docSnap = await getDoc(docRef);
-                    if (!docSnap.exists()) {
-                      setEmailVerifyError('Perfil de usuário não encontrado.');
+                    const privateDocRef = doc(db, 'private_profiles', passwordVerificationPendingProfile.id);
+                    const privateDocSnap = await getDoc(privateDocRef);
+                    if (!privateDocSnap.exists()) {
+                      setEmailVerifyError('Configuração privada do perfil não encontrada.');
                       return;
                     }
 
-                    const profile = docSnap.data();
+                    const privateProfile = privateDocSnap.data();
 
                     // Brute force check
-                    const currentAttempts = profile.emailCodeAttempts || 0;
+                    const currentAttempts = privateProfile.emailCodeAttempts || 0;
                     if (currentAttempts >= 5) {
                       setEmailVerifyError("⚠ Muitas tentativas inválidas. Solicite um novo código de verificação.");
                       return;
                     }
 
                     // Expiry check - 17 minutes limit
-                    const expiresAt = profile.emailCodeExpiresAt || 0;
+                    const expiresAt = privateProfile.emailCodeExpiresAt || 0;
                     if (Date.now() > expiresAt) {
                       setEmailVerifyError("⚠ Código expirado. Solicite um novo código de verificação.");
                       return;
                     }
 
                     const enteredCode = userEmailVerifyInput.trim();
-                    if (enteredCode !== profile.emailCode) {
+                    if (enteredCode !== privateProfile.emailCode) {
                       const newAttempts = currentAttempts + 1;
                       const updateData: any = {
                         emailCodeAttempts: newAttempts
@@ -1182,7 +1360,7 @@ Este código expira em 17 minutos. Não compartilhe com ninguém.`);
                         updateData.emailCode = null; // Discard invalid/reused code
                       }
 
-                      await setDoc(docRef, updateData, { merge: true });
+                      await setDoc(privateDocRef, updateData, { merge: true });
 
                       if (newAttempts >= 5) {
                         setEmailVerifyError("⚠ Muitas tentativas inválidas. Solicite um novo código de verificação.");
@@ -1192,17 +1370,23 @@ Este código expira em 17 minutos. Não compartilhe com ninguém.`);
                       return;
                     }
 
-                    // Success! Activate Account
-                    const activatedProfile = {
-                      ...profile,
+                    // Success! Update public state
+                    const publicDocRef = doc(db, 'profiles', passwordVerificationPendingProfile.id);
+                    await setDoc(publicDocRef, {
                       isEmailVerified: true,
-                      statusOnline: '● Online Agora',
+                      statusOnline: '● Online Agora'
+                    }, { merge: true });
+
+                    // Clear verification fields in private profile
+                    await setDoc(privateDocRef, {
                       emailCode: null,
                       emailCodeAttempts: 0,
                       emailCodeResendsCount: 0
-                    };
+                    }, { merge: true });
 
-                    await setDoc(docRef, activatedProfile);
+                    // Load updated public profile
+                    const publicSnap = await getDoc(publicDocRef);
+                    const activatedProfile = publicSnap.data() as Profile;
 
                     setEmailSuccessNotification(null);
                     setShowEmailVerifyModal(false);
@@ -1210,7 +1394,7 @@ Este código expira em 17 minutos. Não compartilhe com ninguém.`);
                     setPasswordVerificationPendingProfile(null);
                     setSuccessMessage('E-mail verificado com sucesso! Bem-vindo ao Scrapzone!');
 
-                    onLoginSuccess(activatedProfile as Profile, false);
+                    onLoginSuccess(activatedProfile, false);
 
                   } catch (err) {
                     console.error(err);
@@ -1247,21 +1431,21 @@ Este código expira em 17 minutos. Não compartilhe com ninguém.`);
                           if (!passwordVerificationPendingProfile) return;
                           
                           try {
-                            const docRef = doc(db, 'profiles', passwordVerificationPendingProfile.id);
-                            const docSnap = await getDoc(docRef);
-                            if (!docSnap.exists()) return;
+                            const privateDocRef = doc(db, 'private_profiles', passwordVerificationPendingProfile.id);
+                            const privateDocSnap = await getDoc(privateDocRef);
+                            if (!privateDocSnap.exists()) return;
 
-                            const profile = docSnap.data();
+                            const privateProfile = privateDocSnap.data();
 
                             // Resend exhaustion limit check: max 5 resends!
-                            const currentResends = profile.emailCodeResendsCount || 0;
+                            const currentResends = privateProfile.emailCodeResendsCount || 0;
                             if (currentResends >= 5) {
                               setEmailVerifyError("⚠ Limite de reenvio de código excedido (máximo de 5 envios).");
                               return;
                             }
 
                             // Anti-spam 1-minute interval limit
-                            const lastSent = profile.emailCodeLastSentAt || 0;
+                            const lastSent = privateProfile.emailCodeLastSentAt || 0;
                             const elapsed = Date.now() - lastSent;
                             if (elapsed < 60000) {
                               const waitSecs = Math.ceil((60000 - elapsed) / 1000);
@@ -1273,7 +1457,7 @@ Este código expira em 17 minutos. Não compartilhe com ninguém.`);
                             const newExpires = Date.now() + 17 * 60 * 1000;
 
                             const updated = {
-                              ...profile,
+                              ...privateProfile,
                               emailCode: newCode,
                               emailCodeExpiresAt: newExpires,
                               emailCodeAttempts: 0,
@@ -1281,8 +1465,17 @@ Este código expira em 17 minutos. Não compartilhe com ninguém.`);
                               emailCodeLastSentAt: Date.now()
                             };
 
-                            await setDoc(docRef, updated);
-                            setPasswordVerificationPendingProfile(updated);
+                            await setDoc(privateDocRef, updated);
+
+                            const pendingObj = {
+                              ...passwordVerificationPendingProfile,
+                              emailCode: newCode,
+                              emailCodeExpiresAt: newExpires,
+                              emailCodeAttempts: 0,
+                              emailCodeResendsCount: currentResends + 1,
+                              emailCodeLastSentAt: Date.now()
+                            };
+                            setPasswordVerificationPendingProfile(pendingObj);
 
                             sendEmailSimulatedNotification(passwordVerificationPendingProfile.email, newCode);
                             setEmailVerifyError('');
@@ -1303,6 +1496,9 @@ Este código expira em 17 minutos. Não compartilhe com ninguém.`);
                         onClick={() => {
                           setShowEmailVerifyModal(false);
                           setEmailSuccessNotification(null);
+                          if (isEmailUnverifiedProfile && onLogout) {
+                            onLogout();
+                          }
                         }}
                         className="text-neutral-500 hover:text-neutral-700 underline bg-transparent border-none cursor-pointer"
                       >

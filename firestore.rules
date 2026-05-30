@@ -23,6 +23,11 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Private Profiles Collection (PII & emailCode isolation)
+    match /private_profiles/{userId} {
+      allow read, write: if userId != null && userId.size() <= 128 && isOwner(userId);
+    }
+
     // Scraps Collection
     match /scraps/{scrapId} {
       allow read: if true;
