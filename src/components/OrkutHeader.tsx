@@ -23,7 +23,8 @@ export default function OrkutHeader({
     { id: 'profile', label: 'INICIO' },
     { id: 'scrapbook', label: 'PAGINA DE RECADOS' },
     { id: 'testimonials', label: 'DEPOIMENTOS' },
-    { id: 'communities', label: 'COMUNIDADES' }
+    { id: 'communities', label: 'COMUNIDADES' },
+    { id: 'scrapbook-builder', label: '🎨 BUILDER DE SCRAPS' }
   ];
 
   return (
@@ -114,7 +115,7 @@ export default function OrkutHeader({
           </div>
 
           {/* Horizontal Vintage Menu Alignment directly adjacent to the logo, exactly like reference images */}
-          <div className="flex flex-wrap gap-1.5 items-center">
+          <div className="flex flex-wrap gap-1.5 items-center justify-center md:justify-start w-full md:w-auto">
             {menuItems.map((item) => (
               <button
                 id={`tab-btn-${item.id}`}

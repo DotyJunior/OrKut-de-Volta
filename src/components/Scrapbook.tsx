@@ -12,6 +12,7 @@ interface ScrapbookProps {
   currentUser: { id: string; name: string; avatar: string };
   onLikeScrap?: (id: string, liked: boolean, count: number) => void;
   onShareToFeed: (itemTitle: string, itemType: string) => void;
+  onGoToBuilder?: () => void;
 }
 
 export default function Scrapbook({ 
@@ -21,7 +22,8 @@ export default function Scrapbook({
   isOwnProfile, 
   currentUser,
   onLikeScrap,
-  onShareToFeed
+  onShareToFeed,
+  onGoToBuilder
 }: ScrapbookProps) {
   const [scrapText, setScrapText] = useState('');
   const [useEncryption, setUseEncryption] = useState(true);
@@ -30,13 +32,57 @@ export default function Scrapbook({
   const [decryptionKeys, setDecryptionKeys] = useState<Record<string, string>>({}); // id -> key
   const [decryptedScraps, setDecryptedScraps] = useState<Record<string, string>>({}); // id -> text
   const [cryptoExplainOpen, setCryptoExplainOpen] = useState(false);
+  const [validationError, setValidationError] = useState<'html_js_injection' | 'flood_detected' | null>(null);
+
+  const validateText = (text: string): boolean => {
+    if (!text) {
+      setValidationError(null);
+      return true;
+    }
+
+    const lower = text.toLowerCase();
+    
+    // Detect HTML tags, script structures, embedded content, dynamic styling, iframe injections, onerror/onclick events
+    const tagRegex = /<\/?(script|iframe|style|object|embed|link|meta|div|span|img|font|p|a|h[1-6]|button|input|textarea|form|table|tr|td|thead|tbody|tfoot|frame|frameset|html|body|applet)\b/i;
+    const eventRegex = /\bon[a-zA-Z]+\s*=/i;
+    const cssRegex = /(font-family|position|display|z-index)\s*:/i;
+    const scriptLinkRegex = /href\s*=\s*['"]?javascript:/i;
+
+    if (
+      tagRegex.test(lower) ||
+      /<script/i.test(lower) ||
+      /<\/script>/i.test(lower) ||
+      /<iframe>/i.test(lower) ||
+      /<style/i.test(lower) ||
+      /<object/i.test(lower) ||
+      /<embed/i.test(lower) ||
+      eventRegex.test(lower) ||
+      cssRegex.test(lower) ||
+      scriptLinkRegex.test(lower)
+    ) {
+      setValidationError("html_js_injection");
+      return false;
+    }
+
+    // Detect excessive alphanumeric character repetition (flood / automatic repetition block, e.g. 35+ repeats)
+    // We exclude common repeating layouts like space ' ', newline '\n', block markers ('.', '-', '=', '*', '+', etc.) to allow healthy ASCII art.
+    const repRegex = /([^ \n\.\-_\=\*\+\/\\\|\(\)\[\]\{\}\<\>\:\;\`,~\^])\1{34,}/;
+    if (repRegex.test(text)) {
+      setValidationError("flood_detected");
+      return false;
+    }
+
+    setValidationError(null);
+    return true;
+  };
 
   // Dynamic filter scraps for this active profile
   const filteredScraps = scraps.filter(s => s.toId === activeProfile.id);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!scrapText.trim() || isProcessing) return;
+    if (!scrapText.trim() || isProcessing || !!validationError) return;
+    if (!validateText(scrapText)) return;
 
     setIsProcessing(true);
     try {
@@ -131,6 +177,27 @@ export default function Scrapbook({
         </div>
       )}
 
+      {/* Y2K Scrapbook Builder Invitation Banner */}
+      {onGoToBuilder && (
+        <div className="bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500 rounded p-3 mb-6 text-white font-sans shadow-md flex flex-col md:flex-row justify-between items-center gap-3 animate-pulse border-2 border-fuchsia-300">
+          <div className="flex items-center gap-3 text-center md:text-left">
+            <span className="text-3xl">✨🎨</span>
+            <div>
+              <h4 className="font-extrabold text-sm tracking-wide text-yellow-200">NOVIDADE DE 2008: SCRAPBOOK BUILDER!</h4>
+              <p className="text-[11px] leading-snug text-pink-50">
+                Chega de scraps sem graça! Desenhe recados animados com <strong>glow neon</strong>, <strong>glitter piscando</strong>, fontes retrô (Comic Sans, Cooper) e stickers do MSN!
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onGoToBuilder}
+            className="flex-shrink-0 bg-yellow-300 hover:bg-yellow-200 text-neutral-900 font-black text-xs px-4 py-2 rounded-full cursor-pointer transition-all uppercase tracking-wider border-2 border-white shadow-lg shadow-black/25 active:scale-95"
+          >
+            Criar Scrap com Glitter ⚡
+          </button>
+        </div>
+      )}
+
       {/* Write form */}
       {!isOwnProfile && (
         <form onSubmit={handleSubmit} className="bg-neutral-50 border border-neutral-200 rounded p-3 mb-6">
@@ -144,12 +211,35 @@ export default function Scrapbook({
             id="scrapbook-textarea"
             rows={3}
             value={scrapText}
-            onChange={(e) => setScrapText(e.target.value)}
+            onChange={(e) => {
+              const text = e.target.value.substring(0, 4000); // 4000 limit
+              setScrapText(text);
+              validateText(text);
+            }}
             placeholder={`Envie uma mensagem bacana para ${activeProfile.name}!`}
-            className="w-full px-3 py-2 text-xs border border-neutral-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+            className={`w-full px-3 py-2 text-xs border rounded focus:outline-none focus:ring-1 transition-all ${
+              validationError 
+                ? 'border-red-500 ring-2 ring-red-500/15 text-red-900 bg-red-50/10 focus:ring-red-500' 
+                : 'border-neutral-300 focus:ring-blue-500 bg-white'
+            }`}
             disabled={isProcessing}
             required
           />
+
+          {/* CENTRALIZED ALERT FOR VALIDATION FAILURE */}
+          {validationError && (
+            <div className="flex flex-col items-center justify-center p-5 border border-red-500 bg-red-500/5 text-red-500 rounded-lg text-center font-sans space-y-2 mt-2 select-none">
+              <span className="text-4xl filter drop-shadow">☠</span>
+              <div className="text-[11px] font-bold text-red-600 uppercase tracking-wider">
+                ⚠ Caracteres inválidos detectados.
+              </div>
+              <p className="text-[10px] leading-relaxed max-w-sm">
+                {validationError === 'flood_detected'
+                  ? "Por segurança contra flood e spam, sequências excessivas de caracteres repetidos não são permitidas."
+                  : "Por segurança, apenas texto, emojis, símbolos e ASCII Art são permitidos."}
+              </p>
+            </div>
+          )}
 
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 mt-3 pt-3 border-t border-dashed border-neutral-200">
             {/* Secure Switch controls */}
@@ -190,7 +280,7 @@ export default function Scrapbook({
             <button
               id="btn-send-scrap"
               type="submit"
-              disabled={isProcessing || !scrapText.trim()}
+              disabled={isProcessing || !scrapText.trim() || !!validationError}
               className="flex items-center gap-1.5 px-4 py-1.5 bg-[#dee7f4] hover:bg-[#c6d7ed] border border-[#adc3df] text-[#1d4ed8] font-bold text-xs rounded transition-all cursor-pointer shadow-sm disabled:opacity-50"
             >
               {isProcessing ? (
@@ -279,9 +369,29 @@ export default function Scrapbook({
                       </div>
                     </div>
                   ) : (
-                    <p className="text-neutral-700 whitespace-pre-wrap font-sans">
-                      {isDecrypted ? decryptedScraps[scrap.id] : scrap.rawContent}
-                    </p>
+                    <div className="flex flex-col gap-2">
+                      <p className="text-neutral-700 whitespace-pre-wrap font-sans">
+                        {isDecrypted ? decryptedScraps[scrap.id] : scrap.rawContent}
+                      </p>
+                      {scrap.imageUrl && (
+                        <div className="mt-2 text-center bg-neutral-950 border-2 border-dashed border-pink-400 p-2.5 rounded shadow-[0_0_15px_rgba(236,72,153,0.3)] inline-block max-w-full md:max-w-md self-start relative overflow-hidden group">
+                          {/* Y2K overlay watermark */}
+                          <div className="absolute right-1.5 top-1.5 bg-fuchsia-600/90 text-[7px] text-white font-bold px-1 rounded-sm uppercase tracking-wider select-none z-10 font-mono">
+                            Glitter v2008
+                          </div>
+                          <img 
+                            src={scrap.imageUrl} 
+                            alt="Retro Scrapbook Design" 
+                            className="max-w-full rounded object-contain max-h-[320px] border border-white/20 select-none bg-[#0a0a0c]"
+                            referrerPolicy="no-referrer"
+                          />
+                          <div className="mt-1.5 flex items-center justify-between text-[8px] text-pink-300 font-mono tracking-wider font-extrabold uppercase">
+                            <span>✨ Scrapbook Builder</span>
+                            <span className="text-[7px]">Secure Channel Signature</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   )}
 
                   {isDecrypted && (

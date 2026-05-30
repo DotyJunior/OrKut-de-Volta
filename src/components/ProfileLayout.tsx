@@ -1,4 +1,4 @@
-import { useState, FormEvent } from 'react';
+import { useState, FormEvent, useEffect } from 'react';
 import { Eye, Edit, Save, ShieldCheck, Heart, IceCream, Smile, Star, MapPin, Sparkles, KeyRound, Palette, RefreshCw, Send, MessageSquare } from 'lucide-react';
 import { Profile, Friend, Community, Album, Photo, SharedMemory } from '../types';
 import { getThemeStyles } from '../lib/theme';
@@ -7,6 +7,30 @@ import IdentityWizard from './IdentityWizard';
 import SocialActions from './SocialActions';
 import PresenceStatus from './PresenceStatus';
 import GlossyRetroButton from './GlossyRetroButton';
+
+const getFontStyleClass = (style?: string) => {
+  switch (style) {
+    case 'gothic':
+      return 'font-gothic';
+    case 'medieval':
+      return 'font-medieval';
+    case 'cursivo':
+      return 'font-cursivo';
+    case 'cyber':
+      return 'font-cyber tracking-wider';
+    case 'vaporwave':
+      return 'font-vaporwave tracking-widest';
+    case 'smallcaps':
+      return 'font-smallcaps tracking-tight font-extrabold';
+    default:
+      return 'font-sans';
+  }
+};
+
+const sanitizeTextInput = (text: string): string => {
+  if (!text) return '';
+  return text.replace(/<\/?[^>]+(>|$)/g, "").substring(0, 45);
+};
 
 interface ProfileLayoutProps {
   profile: Profile;
@@ -119,6 +143,38 @@ export default function ProfileLayout({
   // Theme support
   const themeStyles = getThemeStyles(profile.theme);
 
+  const [aboutMeError, setAboutMeError] = useState<string | null>(null);
+
+  const validateAboutMeField = (text: string): boolean => {
+    if (!text) {
+      setAboutMeError(null);
+      return true;
+    }
+
+    // Checking for HTML scripts, tags, iframes, events, style elements, or custom styles
+    const tagRegex = /<\/?(script|iframe|style|object|embed|link|meta|div|span|img|font|p|a|h[1-6]|button|input|textarea|form|table|tr|td|thead|tbody|tfoot|frame|frameset|html|body|applet)\b/i;
+    const eventRegex = /\bon[a-zA-Z]+\s*=/i;
+    const cssRegex = /(font-family|position|display|z-index)\s*:/i;
+
+    if (
+      tagRegex.test(text) ||
+      /<script/i.test(text) ||
+      /<\/script>/i.test(text) ||
+      /<iframe>/i.test(text) ||
+      /<style/i.test(text) ||
+      /<object/i.test(text) ||
+      /<embed/i.test(text) ||
+      eventRegex.test(text) ||
+      cssRegex.test(text)
+    ) {
+      setAboutMeError("Caracteres inválidos detectados. Por segurança, apenas texto, emojis, símbolos e ASCII Art são permitidos.");
+      return false;
+    }
+
+    setAboutMeError(null);
+    return true;
+  };
+
   const [editForm, setEditForm] = useState({
     name: profile.name,
     aboutMe: profile.aboutMe,
@@ -130,9 +186,35 @@ export default function ProfileLayout({
     username: profile.username || 'junior.sombra',
     statusOnline: profile.statusOnline || '● programando em Rust',
     theme: profile.theme || 'default',
+    nome_exibicao: profile.nome_exibicao || profile.name || '',
+    estilo_fonte: profile.estilo_fonte || 'normal',
+    preserve_formatting: profile.preserve_formatting !== false, // default to true to match user desire for preservation
   });
 
+  useEffect(() => {
+    setEditForm({
+      name: profile.name,
+      aboutMe: profile.aboutMe,
+      relationship: profile.relationship,
+      humor: profile.humor,
+      fashion: profile.fashion,
+      religion: profile.religion,
+      passions: profile.passions,
+      username: profile.username || 'junior.sombra',
+      statusOnline: profile.statusOnline || '● programando em Rust',
+      theme: profile.theme || 'default',
+      nome_exibicao: profile.nome_exibicao || profile.name || '',
+      estilo_fonte: profile.estilo_fonte || 'normal',
+      preserve_formatting: profile.preserve_formatting !== false,
+    });
+    // Reset error when profile changes
+    setAboutMeError(null);
+  }, [profile]);
+
   const handleSave = () => {
+    if (!validateAboutMeField(editForm.aboutMe)) {
+      return;
+    }
     onSaveProfile(editForm);
     setIsEditing(false);
   };
@@ -265,6 +347,9 @@ export default function ProfileLayout({
     });
   };
 
+  const displayNameText = profile.nome_exibicao && profile.nome_exibicao.trim() ? profile.nome_exibicao.trim() : profile.name;
+  const displayNameClass = profile.nome_exibicao && profile.nome_exibicao.trim() ? getFontStyleClass(profile.estilo_fonte) : 'font-sans';
+
   return (
     <div className={`grid grid-cols-1 lg:grid-cols-12 gap-5 p-1 transition-all rounded ${themeStyles.font}`}>
       {/* Identity Creator call to action banner for own profile */}
@@ -308,13 +393,13 @@ export default function ProfileLayout({
             )}
           </div>
 
-          <h2 className="text-sm font-bold mt-2 font-sans flex items-center justify-center gap-1">
-            {profile.name}
+          <h2 className={`text-sm font-bold mt-2 flex items-center justify-center gap-1 break-all ${displayNameClass}`}>
+            {displayNameText}
             {isOwnProfile && (
               <button 
                 onClick={() => setShowIdentityWizard(true)} 
                 title="Configurar Identidade"
-                className="p-1 text-pink-500 hover:text-pink-600 cursor-pointer"
+                className="p-1 text-pink-500 hover:text-pink-600 cursor-pointer shrink-0"
               >
                 <Palette size={13} />
               </button>
@@ -415,9 +500,9 @@ export default function ProfileLayout({
           <div className="flex justify-between items-start border-b border-dashed border-neutral-350 pb-2 mb-3">
             <div>
               <div className="flex flex-wrap items-baseline gap-2">
-                <h1 className="text-2xl font-bold font-sans flex items-center gap-2">
-                  {profile.name}
-                  <Sparkles className="text-pink-500" size={18} />
+                <h1 className={`text-2xl font-bold flex items-center gap-2 break-all ${displayNameClass}`}>
+                  {displayNameText}
+                  <Sparkles className="text-pink-500 shrink-0" size={18} />
                 </h1>
                 {profile.username && (
                   <span className="text-xs font-mono font-bold text-neutral-500 bg-neutral-200/50 px-1.5 rounded">
@@ -432,7 +517,7 @@ export default function ProfileLayout({
                   <PresenceStatus
                     profileId={profile.id}
                     isOwnProfile={isOwnProfile}
-                    profileName={profile.name}
+                    profileName={displayNameText}
                   />
 
                   <span className="text-[10px] text-neutral-400 font-mono">
@@ -697,6 +782,77 @@ export default function ProfileLayout({
           <div className="space-y-3 font-sans text-xs">
             {isEditing ? (
               <div className="space-y-3">
+                {/* 📌 SEÇÃO DE IDENTIDADE VISUAL RETRÔ DO PERFIL */}
+                <div className="border border-indigo-200 bg-indigo-50/50 p-3 rounded-lg space-y-3.5 mb-2">
+                  <div className="flex items-center gap-1.5 text-[11px] font-bold text-indigo-800 uppercase tracking-wider border-b border-indigo-100 pb-1.5">
+                    <Sparkles size={13} className="text-pink-500" />
+                    Estilo e Identidade Visual Retrô do Nome
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label htmlFor="edit-input-display-name" className="block text-[11px] font-bold text-neutral-600 uppercase mb-1">
+                        Nome de Exibição (Display Name):
+                      </label>
+                      <input
+                        id="edit-input-display-name"
+                        type="text"
+                        value={editForm.nome_exibicao}
+                        placeholder="Ex: Paulo Dark, Emo Gothic, Sombra"
+                        maxLength={45}
+                        onChange={(e) => {
+                          const sanitized = sanitizeTextInput(e.target.value);
+                          setEditForm({ ...editForm, nome_exibicao: sanitized });
+                        }}
+                        className="w-full px-2.5 py-1.5 border border-indigo-200 rounded font-sans text-xs bg-white text-neutral-800 focus:ring-1 focus:ring-indigo-400 focus:outline-none placeholder:text-neutral-400"
+                      />
+                      <span className="text-[10px] text-neutral-400 mt-1 block leading-tight">
+                        Tratado como texto puro (XSS-safe). Caracteres perigosos (<span className="font-mono text-[9px]">&lt;&gt;</span>) são filtrados automaticamente. Máx. 45 caracteres.
+                      </span>
+                    </div>
+
+                    <div>
+                      <span className="block text-[11px] font-bold text-neutral-600 uppercase mb-2">
+                        Estilo da Fonte do Nome:
+                      </span>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {[
+                          { key: 'normal', label: 'Normal' },
+                          { key: 'gothic', label: 'Gótico' },
+                          { key: 'medieval', label: 'Medieval' },
+                          { key: 'cursivo', label: 'Cursivo' },
+                          { key: 'cyber', label: 'Cyber' },
+                          { key: 'vaporwave', label: 'Vaporwave' },
+                          { key: 'smallcaps', label: 'Pequenas Capitais' },
+                        ].map((fontStyle) => (
+                          <label
+                            key={fontStyle.key}
+                            className={`flex items-center gap-2 p-1.5 px-2.5 rounded border cursor-pointer select-none transition-all text-[11px] ${
+                              editForm.estilo_fonte === fontStyle.key
+                                ? 'border-[#d946ef] bg-[#d946ef]/5 font-bold text-[#d946ef]'
+                                : 'border-neutral-200 hover:border-neutral-300 hover:bg-neutral-50 text-neutral-600'
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name="estilo_fonte"
+                              checked={editForm.estilo_fonte === fontStyle.key}
+                              onChange={() => setEditForm({ ...editForm, estilo_fonte: fontStyle.key })}
+                              className="accent-[#d946ef] sr-only"
+                            />
+                            <span className="w-2.5 h-2.5 rounded-full border border-neutral-300 flex items-center justify-center shrink-0">
+                              {editForm.estilo_fonte === fontStyle.key && (
+                                <span className="w-1.5 h-1.5 rounded-full bg-[#d946ef]" />
+                              )}
+                            </span>
+                            <span className="truncate">{fontStyle.label}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
                     <label className="block text-[11px] font-bold text-neutral-500 uppercase mb-1">Nome:</label>
@@ -769,14 +925,54 @@ export default function ProfileLayout({
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-bold text-neutral-500 uppercase mb-1">Quem sou eu (Bio):</label>
+                  <div className="flex justify-between items-baseline mb-1">
+                    <label className="block text-[11px] font-bold text-neutral-500 uppercase">Quem sou eu (Bio):</label>
+                    <span className="text-[10px] font-mono text-neutral-400">
+                      {editForm.aboutMe?.length || 0}/4000 caracteres
+                    </span>
+                  </div>
                   <textarea
                     id="edit-input-aboutme"
                     value={editForm.aboutMe}
-                    onChange={(e) => setEditForm({ ...editForm, aboutMe: e.target.value })}
-                    rows={4}
-                    className="w-full px-2 py-1.5 border border-neutral-300 rounded"
+                    onChange={(e) => {
+                      const text = e.target.value.substring(0, 4000); // 4000 char limit
+                      setEditForm({ ...editForm, aboutMe: text });
+                      validateAboutMeField(text);
+                    }}
+                    rows={7}
+                    placeholder="Digites frases, emojis, símbolos decorativos ou ASCII Art..."
+                    className={`w-full px-2.5 py-1.5 border rounded font-mono text-xs focus:outline-none transition-all ${
+                      aboutMeError 
+                        ? 'border-red-500 ring-2 ring-red-500/15 text-red-900 bg-red-50/10' 
+                        : 'border-neutral-300 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400'
+                    }`}
                   />
+                  
+                  {/* CENTRALIZED ALERT FOR VALIDATION FAILURE */}
+                  {aboutMeError && (
+                    <div className="flex flex-col items-center justify-center p-5 border border-red-500 bg-red-500/5 text-red-500 rounded-lg text-center font-sans space-y-2 mt-2 animate-fadeIn select-none">
+                      <span className="text-4xl filter drop-shadow">☠</span>
+                      <div className="text-[11px] font-bold text-red-600 uppercase tracking-wider">
+                        ⚠ Caracteres inválidos detectados.
+                      </div>
+                      <p className="text-[10px] leading-relaxed max-w-sm">
+                        Por segurança, apenas texto, emojis, símbolos e ASCII Art são permitidos.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* PRESERVE FORMATTING CHECKBOX */}
+                  <div className="flex items-center gap-2 mt-2 select-none border border-neutral-100 bg-neutral-50/50 p-2 rounded">
+                    <label className="flex items-center gap-2 text-[11.5px] text-neutral-600 font-semibold hover:text-neutral-800 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={editForm.preserve_formatting}
+                        onChange={(e) => setEditForm({ ...editForm, preserve_formatting: e.target.checked })}
+                        className="rounded border-neutral-300 text-pink-500 focus:ring-pink-400 h-4 w-4 accent-[#d946ef] cursor-pointer"
+                      />
+                      <span>☑ Preservar Formatação (Mantém alinhamentos, múltiplos espaços e ASCII Art)</span>
+                    </label>
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
@@ -825,7 +1021,16 @@ export default function ProfileLayout({
               <>
                 <div className="border-b border-neutral-200/50 pb-2">
                   <span className="font-bold text-neutral-500 uppercase text-[10px] block mb-0.5">Quem sou eu:</span>
-                  <p id="profile-aboutme-text" className="leading-relaxed font-sans whitespace-pre-wrap">{profile.aboutMe}</p>
+                  <p 
+                    id="profile-aboutme-text" 
+                    className={`leading-relaxed break-all ${
+                      profile.preserve_formatting !== false 
+                        ? 'font-mono text-[11px] whitespace-pre bg-neutral-950/5 border border-neutral-200/40 p-3 rounded overflow-x-auto shadow-inner' 
+                        : 'font-sans text-xs whitespace-pre-wrap'
+                    }`}
+                  >
+                    {profile.aboutMe}
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">

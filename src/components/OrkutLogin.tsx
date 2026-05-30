@@ -56,12 +56,12 @@ export default function OrkutLogin({ onLoginSuccess, defaultProfiles }: OrkutLog
   const [regAgreeTerms, setRegAgreeTerms] = useState(true);
   const [regAvatarIndex, setRegAvatarIndex] = useState(0);
 
-  // SMS Phone Verification states
-  const [showSmsModal, setShowSmsModal] = useState(false);
-  const [generatedSmsCode, setGeneratedSmsCode] = useState('');
-  const [userSmsInput, setUserSmsInput] = useState('');
-  const [smsError, setSmsError] = useState('');
-  const [smsSuccessNotification, setSmsSuccessNotification] = useState<string | null>(null);
+  // Email Verification states
+  const [showEmailVerifyModal, setShowEmailVerifyModal] = useState(false);
+  const [userEmailVerifyInput, setUserEmailVerifyInput] = useState('');
+  const [emailVerifyError, setEmailVerifyError] = useState('');
+  const [passwordVerificationPendingProfile, setPasswordVerificationPendingProfile] = useState<any | null>(null);
+  const [emailSuccessNotification, setEmailSuccessNotification] = useState<string | null>(null);
 
   // Form Fields - Recover
   const [recoverEmail, setRecoverEmail] = useState('');
@@ -167,6 +167,41 @@ export default function OrkutLogin({ onLoginSuccess, defaultProfiles }: OrkutLog
         await setDoc(docRef, loggedProfile);
       }
 
+      // Check Email Verification status
+      if (loggedProfile.isEmailVerified === false) {
+        const anyProfile = loggedProfile as any;
+        let code = anyProfile.emailCode;
+        let codeExpiresAt = anyProfile.emailCodeExpiresAt;
+
+        const isExpired = !codeExpiresAt || Date.now() > codeExpiresAt;
+        if (isExpired || !code) {
+          code = Math.floor(100000 + Math.random() * 900000).toString();
+          codeExpiresAt = Date.now() + 17 * 60 * 1000;
+
+          const updatedFields = {
+            emailCode: code,
+            emailCodeExpiresAt: codeExpiresAt,
+            emailCodeAttempts: 0,
+            emailCodeResendsCount: 1,
+            emailCodeLastSentAt: Date.now()
+          };
+
+          await setDoc(docRef, updatedFields, { merge: true });
+
+          anyProfile.emailCode = code;
+          anyProfile.emailCodeExpiresAt = codeExpiresAt;
+          anyProfile.emailCodeAttempts = 0;
+          anyProfile.emailCodeResendsCount = 1;
+          anyProfile.emailCodeLastSentAt = Date.now();
+        }
+
+        setPasswordVerificationPendingProfile(anyProfile);
+        setIsProcessing(false);
+        setShowEmailVerifyModal(true);
+        sendEmailSimulatedNotification(anyProfile.email || targetEmail, code);
+        return;
+      }
+
       // If remember me is checked, we can simulate an auth cookie / local state indicator
       if (rememberMe) {
         localStorage.setItem('orkut_remember_uid', uid);
@@ -221,6 +256,17 @@ export default function OrkutLogin({ onLoginSuccess, defaultProfiles }: OrkutLog
     await executeLogin();
   };
 
+  // Simulated Email Notification Toast
+  const sendEmailSimulatedNotification = (email: string, code: string) => {
+    setEmailSuccessNotification(`✉️ Novo E-mail recebido hoje:
+Para: ${email}
+Assunto: [Scrapzone Secure] Ativação de Conta
+
+Seu código de segurança único do Scrapzone é: ${code}
+
+Este código expira em 17 minutos. Não compartilhe com ninguém.`);
+  };
+
   // Refactored helper: Core Registration Executor
   const executeRegister = async () => {
     setIsProcessing(true);
@@ -255,7 +301,11 @@ export default function OrkutLogin({ onLoginSuccess, defaultProfiles }: OrkutLog
       const userCredential = await createUserWithEmailAndPassword(auth, cleanEmail, regPassword);
       const uid = userCredential.user.uid;
 
-      // Build User profile record
+      // Unique 6-digit verification code initialization
+      const code = Math.floor(100000 + Math.random() * 900000).toString();
+      const codeExpiresAt = Date.now() + 17 * 60 * 1000; // 17 minutes
+
+      // Build User profile record with pending state configuration
       const newUserProfile: any = {
         id: uid,
         name: cleanName,
@@ -280,7 +330,15 @@ export default function OrkutLogin({ onLoginSuccess, defaultProfiles }: OrkutLog
         sexy: 3,
         fans: 0,
         theme: 'default',
-        statusOnline: '● Online Agora'
+        statusOnline: '● Pendente de Verificação',
+
+        // EMAIL VERIFICATION METADATA
+        isEmailVerified: false,
+        emailCode: code,
+        emailCodeExpiresAt: codeExpiresAt,
+        emailCodeAttempts: 0,
+        emailCodeResendsCount: 1,
+        emailCodeLastSentAt: Date.now()
       };
 
       // Set profile doc in firestore
@@ -292,13 +350,17 @@ export default function OrkutLogin({ onLoginSuccess, defaultProfiles }: OrkutLog
         communityIds: ['1', '3'] // 'Eu odeio acordar cedo' and 'Eu amo chocolate preto'
       });
 
-      setSuccessMessage('Conta comunitária criada com absoluto sucesso! Bem-vindo.');
-      setIsProcessing(false);
+      // Prepare states for email confirmation step
+      setPasswordVerificationPendingProfile(newUserProfile);
+      setUserEmailVerifyInput('');
+      setEmailVerifyError('');
       
-      // Delay transition to auto login as them
-      setTimeout(() => {
-        onLoginSuccess(newUserProfile, false);
-      }, 1000);
+      // Dispatch simulated email notification toast on browser
+      sendEmailSimulatedNotification(cleanEmail, code);
+
+      setSuccessMessage('Dados de cadastro processados! Por favor, insira o código enviado para seu e-mail.');
+      setIsProcessing(false);
+      setShowEmailVerifyModal(true);
 
     } catch (err: any) {
       console.error('Registration Error: ', err);
@@ -316,32 +378,6 @@ export default function OrkutLogin({ onLoginSuccess, defaultProfiles }: OrkutLog
       setErrorMessage(clientMsg);
       setIsProcessing(false);
     }
-  };
-
-  // SMS simulation trigger
-  const sendSmsCode = (phone: string) => {
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    setGeneratedSmsCode(code);
-    setUserSmsInput('');
-    setSmsError('');
-    
-    // Show high-fidelity SMS notification toast on screen of the browser
-    setSmsSuccessNotification(`📱 Novo SMS recebido no número ${phone}:\n[Scrapzone Secure] codigo de seguranca: ${code}. Guarde com seguranca.`);
-  };
-
-  const handleVerifySmsAndRegister = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSmsError('');
-
-    if (userSmsInput.trim() !== generatedSmsCode) {
-      setSmsError('Código de verificação SMS inválido ou incorreto. Insira o código correto enviado.');
-      return;
-    }
-
-    // Correct! Proceed to execute standard registration
-    setShowSmsModal(false);
-    setSmsSuccessNotification(null);
-    await executeRegister();
   };
 
   // Register processing with 1.5s security debounce built-in
@@ -451,8 +487,7 @@ export default function OrkutLogin({ onLoginSuccess, defaultProfiles }: OrkutLog
     if (action === 'login') {
       await executeLogin();
     } else if (action === 'register') {
-      sendSmsCode(regPhone);
-      setShowSmsModal(true);
+      await executeRegister();
     }
   };
 
@@ -1059,9 +1094,9 @@ export default function OrkutLogin({ onLoginSuccess, defaultProfiles }: OrkutLog
         )}
       </AnimatePresence>
 
-      {/* SMS Phone Verification Retro Modal */}
+      {/* Email Verification Retro Modal */}
       <AnimatePresence>
-        {showSmsModal && (
+        {showEmailVerifyModal && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -1076,17 +1111,17 @@ export default function OrkutLogin({ onLoginSuccess, defaultProfiles }: OrkutLog
             >
               {/* Window Header */}
               <div className="bg-[#1b4372] px-4 py-2.5 flex items-center justify-between text-white select-none">
-                <span className="text-xs font-black uppercase tracking-wider flex items-center gap-1.5">
-                  <Phone size={13} className="text-pink-400" />
-                  Verificação Obrigatória de Celular
+                <span className="text-xs font-black uppercase tracking-wider flex items-center gap-1.5 font-sans">
+                  <Mail size={13} className="text-pink-400" />
+                  Ativação de Conta (E-mail Obrigatório)
                 </span>
                 <button
                   type="button"
                   onClick={() => {
-                    setShowSmsModal(false);
-                    setSmsSuccessNotification(null);
+                    setShowEmailVerifyModal(false);
+                    setEmailSuccessNotification(null);
                   }}
-                  className="text-neutral-300 hover:text-white font-bold text-xs bg-transparent border-none cursor-pointer"
+                  className="text-neutral-300 hover:text-white font-bold text-xs bg-transparent border-none cursor-pointer font-mono"
                 >
                   [ Fechar ]
                 </button>
@@ -1095,29 +1130,104 @@ export default function OrkutLogin({ onLoginSuccess, defaultProfiles }: OrkutLog
               {/* Content Panel */}
               <div className="p-5 space-y-4">
                 <div className="bg-blue-50 border border-blue-200 rounded p-3 text-xs text-[#1e3a8a] leading-relaxed">
-                  <span className="font-bold block mb-1">Passo Integridade e Segurança:</span>
-                  Enviamos um código de segurança SMS de 6 dígitos para o número <strong className="text-black font-semibold">{regPhone}</strong>. Insira-o abaixo para concluir seu cadastro na rede.
+                  <span className="font-bold block mb-1">Status da Conta: <span className="text-amber-600 uppercase font-sans font-black">PENDENTE DE VERIFICAÇÃO ⚠</span></span>
+                  Por integridade contra spam, bots e cadastros falsos, enviamos um código de segurança único de 6 dígitos para o e-mail: <strong className="text-black font-semibold">{passwordVerificationPendingProfile?.email}</strong>.
                 </div>
 
-                {smsError && (
-                  <div className="bg-rose-50 border border-rose-200 text-rose-800 p-2.5 rounded text-xs flex items-start gap-1.5 font-sans animate-fade-in">
-                    <AlertCircle size={15} className="flex-shrink-0 mt-0.5 text-rose-605" />
-                    <span>{smsError}</span>
+                {emailVerifyError && (
+                  <div className="bg-rose-50 border border-rose-200 text-rose-805 text-xs p-2.5 rounded flex items-start gap-1.5 font-sans animate-fade-in line-clamp-3">
+                    <AlertCircle size={15} className="flex-shrink-0 mt-0.5 text-rose-600" />
+                    <span className="font-semibold text-rose-850 text-[11px]">{emailVerifyError}</span>
                   </div>
                 )}
 
-                <form onSubmit={handleVerifySmsAndRegister} className="space-y-4">
+                <form onSubmit={async (e) => {
+                  e.preventDefault();
+                  setEmailVerifyError('');
+                  
+                  if (!passwordVerificationPendingProfile) return;
+
+                  try {
+                    const docRef = doc(db, 'profiles', passwordVerificationPendingProfile.id);
+                    const docSnap = await getDoc(docRef);
+                    if (!docSnap.exists()) {
+                      setEmailVerifyError('Perfil de usuário não encontrado.');
+                      return;
+                    }
+
+                    const profile = docSnap.data();
+
+                    // Brute force check
+                    const currentAttempts = profile.emailCodeAttempts || 0;
+                    if (currentAttempts >= 5) {
+                      setEmailVerifyError("⚠ Muitas tentativas inválidas. Solicite um novo código de verificação.");
+                      return;
+                    }
+
+                    // Expiry check - 17 minutes limit
+                    const expiresAt = profile.emailCodeExpiresAt || 0;
+                    if (Date.now() > expiresAt) {
+                      setEmailVerifyError("⚠ Código expirado. Solicite um novo código de verificação.");
+                      return;
+                    }
+
+                    const enteredCode = userEmailVerifyInput.trim();
+                    if (enteredCode !== profile.emailCode) {
+                      const newAttempts = currentAttempts + 1;
+                      const updateData: any = {
+                        emailCodeAttempts: newAttempts
+                      };
+
+                      if (newAttempts >= 5) {
+                        updateData.emailCode = null; // Discard invalid/reused code
+                      }
+
+                      await setDoc(docRef, updateData, { merge: true });
+
+                      if (newAttempts >= 5) {
+                        setEmailVerifyError("⚠ Muitas tentativas inválidas. Solicite um novo código de verificação.");
+                      } else {
+                        setEmailVerifyError(`Código incorreto. Tentativa ${newAttempts} de 5 incorretas. Insira novamente.`);
+                      }
+                      return;
+                    }
+
+                    // Success! Activate Account
+                    const activatedProfile = {
+                      ...profile,
+                      isEmailVerified: true,
+                      statusOnline: '● Online Agora',
+                      emailCode: null,
+                      emailCodeAttempts: 0,
+                      emailCodeResendsCount: 0
+                    };
+
+                    await setDoc(docRef, activatedProfile);
+
+                    setEmailSuccessNotification(null);
+                    setShowEmailVerifyModal(false);
+                    setUserEmailVerifyInput('');
+                    setPasswordVerificationPendingProfile(null);
+                    setSuccessMessage('E-mail verificado com sucesso! Bem-vindo ao Scrapzone!');
+
+                    onLoginSuccess(activatedProfile as Profile, false);
+
+                  } catch (err) {
+                    console.error(err);
+                    setEmailVerifyError('Falha ao validar código. Tente novamente.');
+                  }
+                }} className="space-y-4">
                   <div className="space-y-1">
                     <label className="block text-[11px] font-black text-neutral-600 uppercase tracking-wide text-center sm:text-left">
-                      Código de Verificação de SMS (6 dígitos):
+                      Digite o código enviado para seu e-mail:
                     </label>
                     <input
                       type="text"
                       maxLength={6}
-                      value={userSmsInput}
-                      onChange={(e) => setUserSmsInput(e.target.value.replace(/\D/g, ''))}
-                      placeholder="Ex: 123456"
-                      className="w-full text-center text-lg tracking-widest font-mono py-2 bg-white border-2 border-neutral-350 rounded focus:border-[#1b4372] focus:outline-none text-[#1b4372]"
+                      value={userEmailVerifyInput}
+                      onChange={(e) => setUserEmailVerifyInput(e.target.value.replace(/\D/g, ''))}
+                      placeholder="Ex: 582741"
+                      className="w-full text-center text-xl tracking-widest font-mono py-2 bg-white border-2 border-neutral-350 rounded focus:border-[#1b4372] focus:outline-none text-[#1b4372] font-semibold"
                       required
                     />
                   </div>
@@ -1127,72 +1237,127 @@ export default function OrkutLogin({ onLoginSuccess, defaultProfiles }: OrkutLog
                       type="submit"
                       className="w-full py-2 bg-[#ed3fa7] hover:bg-[#d6278f] active:bg-[#ba1e7a] text-white font-black text-xs uppercase tracking-wide rounded cursor-pointer transition-all flex items-center justify-center gap-1.5 border-none"
                     >
-                      <span>✓ Confirmar Código & Registrar</span>
+                      <span>✓ Confirmar Código & Ativar Conta</span>
                     </button>
 
                     <div className="flex justify-between items-center text-xs mt-1">
                       <button
                         type="button"
-                        onClick={() => sendSmsCode(regPhone)}
-                        className="text-[#103056] font-bold hover:underline bg-transparent border-none cursor-pointer"
+                        onClick={async () => {
+                          if (!passwordVerificationPendingProfile) return;
+                          
+                          try {
+                            const docRef = doc(db, 'profiles', passwordVerificationPendingProfile.id);
+                            const docSnap = await getDoc(docRef);
+                            if (!docSnap.exists()) return;
+
+                            const profile = docSnap.data();
+
+                            // Resend exhaustion limit check: max 5 resends!
+                            const currentResends = profile.emailCodeResendsCount || 0;
+                            if (currentResends >= 5) {
+                              setEmailVerifyError("⚠ Limite de reenvio de código excedido (máximo de 5 envios).");
+                              return;
+                            }
+
+                            // Anti-spam 1-minute interval limit
+                            const lastSent = profile.emailCodeLastSentAt || 0;
+                            const elapsed = Date.now() - lastSent;
+                            if (elapsed < 60000) {
+                              const waitSecs = Math.ceil((60000 - elapsed) / 1000);
+                              setEmailVerifyError(`⚠ Limite de requisições: Aguarde ${waitSecs} s para reenviar o e-mail.`);
+                              return;
+                            }
+
+                            const newCode = Math.floor(100000 + Math.random() * 900000).toString();
+                            const newExpires = Date.now() + 17 * 60 * 1000;
+
+                            const updated = {
+                              ...profile,
+                              emailCode: newCode,
+                              emailCodeExpiresAt: newExpires,
+                              emailCodeAttempts: 0,
+                              emailCodeResendsCount: currentResends + 1,
+                              emailCodeLastSentAt: Date.now()
+                            };
+
+                            await setDoc(docRef, updated);
+                            setPasswordVerificationPendingProfile(updated);
+
+                            sendEmailSimulatedNotification(passwordVerificationPendingProfile.email, newCode);
+                            setEmailVerifyError('');
+                            setUserEmailVerifyInput('');
+
+                          } catch (e) {
+                            console.error(e);
+                            setEmailVerifyError('Erro no reenvio do código.');
+                          }
+                        }}
+                        className="text-[#103056] font-bold hover:underline bg-transparent border-none cursor-pointer flex items-center gap-1"
                       >
-                        Reenviar SMS 🔄
+                        [ Reenviar Código ] 🔄
                       </button>
 
                       <button
                         type="button"
                         onClick={() => {
-                          setShowSmsModal(false);
-                          setSmsSuccessNotification(null);
+                          setShowEmailVerifyModal(false);
+                          setEmailSuccessNotification(null);
                         }}
                         className="text-neutral-500 hover:text-neutral-700 underline bg-transparent border-none cursor-pointer"
                       >
                         Cancelar
                       </button>
                     </div>
+
+                    {passwordVerificationPendingProfile && (
+                      <div className="text-[10px] text-neutral-500 font-sans text-center mt-1">
+                        Utilizações: Envios ({passwordVerificationPendingProfile.emailCodeResendsCount || 1}/5) • Código expira em 17 minutos
+                      </div>
+                    )}
                   </div>
                 </form>
               </div>
 
               {/* Bottom Decorative Status Area */}
               <div className="bg-[#dee7f4] border-t border-[#b7cbdc] px-4 py-2 flex items-center justify-between text-[10px] text-neutral-600 font-sans">
-                <span>Status: Aguardando Código</span>
-                <span className="font-semibold text-emerald-700">Conexão Criptografada SSL</span>
+                <span>Status: Validando Integridade do E-mail</span>
+                <span className="font-semibold text-emerald-700">Verificação Segura SHA-256</span>
               </div>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Simulated SMS Notification Toast */}
+      {/* Simulated Email Notification Toast */}
       <AnimatePresence>
-        {smsSuccessNotification && (
+        {emailSuccessNotification && (
           <motion.div
             initial={{ opacity: 0, y: 50, scale: 0.9 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9 }}
-            className="fixed bottom-4 right-4 z-[9999] max-w-sm w-full bg-[#1b233a] border-2 border-blue-500 rounded-lg shadow-2xl p-4 text-white font-sans flex items-start gap-3"
-            id="sms-simulation-toast"
+            className="fixed bottom-4 right-4 z-[9999] max-w-sm w-full bg-[#1e293b] border-2 border-emerald-500 rounded-lg shadow-2xl p-4 text-white font-sans flex items-start gap-3 select-none"
+            id="email-simulation-toast"
           >
-            <div className="bg-sky-500/20 p-2 rounded-full text-sky-400 mt-0.5 animate-pulse flex-shrink-0">
-              <Phone size={18} className="text-sky-400" />
+            <div className="bg-emerald-500/20 p-2 rounded-full text-emerald-400 mt-0.5 animate-pulse flex-shrink-0">
+              <Mail size={18} className="text-emerald-400" />
             </div>
             <div className="flex-1 text-left">
               <div className="flex justify-between items-center mb-1">
-                <span className="text-[10px] uppercase font-black tracking-wider text-sky-400">Mensagem Recebida (SMS)</span>
+                <span className="text-[10px] uppercase font-black tracking-wider text-emerald-400 font-sans">Caixa de Entrada (E-mail Simulado)</span>
                 <button 
-                  onClick={() => setSmsSuccessNotification(null)}
-                  className="text-neutral-400 hover:text-white font-bold text-xs bg-transparent border-none cursor-pointer p-0"
+                  onClick={() => setEmailSuccessNotification(null)}
+                  className="text-neutral-400 hover:text-white font-bold text-xs bg-transparent border-none cursor-pointer p-0 font-mono"
                 >
                   ×
                 </button>
               </div>
-              <p className="text-xs text-neutral-200 font-mono font-medium whitespace-pre-line leading-relaxed">
-                {smsSuccessNotification}
+              <p className="text-[11px] text-neutral-200 font-mono font-medium whitespace-pre-line leading-relaxed">
+                {emailSuccessNotification}
               </p>
               <div className="mt-2 text-[8px] text-neutral-400 font-mono flex justify-between items-center">
-                <span>Simulado • Rede Scrapzone Móvel</span>
-                <span className="text-neutral-500">Agora</span>
+                <span>Servidor de E-mail Integrado</span>
+                <span className="text-neutral-500 font-sans">Apenas Recebido</span>
               </div>
             </div>
           </motion.div>

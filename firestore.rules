@@ -7,46 +7,66 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Helper functions for safe rules evaluation
+    function isAuthenticated() {
+      return request.auth != null && request.auth.uid != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
     // Profiles Collection
     match /profiles/{profileId} {
       allow read: if true;
-      allow create, update: if profileId != null && profileId.size() <= 128;
+      allow create, update: if profileId != null && profileId.size() <= 128 && (isOwner(profileId) || (request.resource.data.id == profileId));
       allow delete: if false;
     }
 
     // Scraps Collection
     match /scraps/{scrapId} {
       allow read: if true;
-      allow create, update: if scrapId != null && scrapId.size() <= 128;
-      allow delete: if true;
+      allow create: if scrapId != null && scrapId.size() <= 128 && isAuthenticated() && request.resource.data.fromId == request.auth.uid;
+      allow update: if scrapId != null && scrapId.size() <= 128 && (
+        (request.resource.data.likes == resource.data.likes + 1) || 
+        (resource.data.fromId == request.auth.uid)
+      );
+      // Delete allowed by scrap creator (fromId) or recipient (toId)
+      allow delete: if isAuthenticated() && (resource.data.fromId == request.auth.uid || resource.data.toId == request.auth.uid);
     }
 
     // Testimonials Collection
     match /testimonials/{testimonialId} {
       allow read: if true;
-      allow create, update: if testimonialId != null && testimonialId.size() <= 128;
-      allow delete: if true;
+      allow create: if testimonialId != null && testimonialId.size() <= 128 && isAuthenticated() && request.resource.data.fromId == request.auth.uid;
+      allow update: if testimonialId != null && testimonialId.size() <= 128 && (
+        (request.resource.data.likes == resource.data.likes + 1) || 
+        (resource.data.fromId == request.auth.uid)
+      );
+      allow delete: if isAuthenticated() && (resource.data.fromId == request.auth.uid || resource.data.toId == request.auth.uid);
     }
 
     // Joined Communities Collection
     match /joined_communities/{userId} {
       allow read: if true;
-      allow create, update: if userId != null && userId.size() <= 128;
-      allow delete: if true;
+      allow create, update: if userId != null && userId.size() <= 128 && isOwner(userId);
+      allow delete: if isAuthenticated() && isOwner(userId);
     }
 
     // Albums Collection
     match /albums/{albumId} {
       allow read: if true;
-      allow create, update: if albumId != null && albumId.size() <= 128;
-      allow delete: if true;
+      allow create: if albumId != null && albumId.size() <= 128 && isAuthenticated() && request.resource.data.authorId == request.auth.uid;
+      allow update: if albumId != null && albumId.size() <= 128 && isAuthenticated() && resource.data.authorId == request.auth.uid;
+      allow delete: if isAuthenticated() && resource.data.authorId == request.auth.uid;
     }
 
     // Shared memories Collection
     match /shared_memories/{memoryId} {
       allow read: if true;
-      allow create, update: if memoryId != null && memoryId.size() <= 128;
-      allow delete: if true;
+      allow create: if memoryId != null && memoryId.size() <= 128 && isAuthenticated() && request.resource.data.fromId == request.auth.uid;
+      allow update: if memoryId != null && memoryId.size() <= 128 && isAuthenticated() && resource.data.fromId == request.auth.uid;
+      allow delete: if isAuthenticated() && resource.data.fromId == request.auth.uid;
     }
   }
 }

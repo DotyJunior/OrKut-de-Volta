@@ -22,6 +22,15 @@ export interface Profile {
   username?: string;
   theme?: string;
   statusOnline?: string;
+  nome_exibicao?: string;
+  estilo_fonte?: string;
+  preserve_formatting?: boolean;
+  isEmailVerified?: boolean;
+  emailCode?: string | null;
+  emailCodeExpiresAt?: number | null;
+  emailCodeAttempts?: number;
+  emailCodeResendsCount?: number;
+  emailCodeLastSentAt?: number;
 }
 
 export interface Scrap {
@@ -39,6 +48,7 @@ export interface Scrap {
   likes?: number;
   likedByMe?: boolean;
   sharesCount?: number;
+  imageUrl?: string;
 }
 
 export interface Testimonial {
@@ -96,6 +106,7 @@ export interface Photo {
   caption: string;
   song?: string;
   gifUrl?: string;
+  effect?: string;
   likes: number;
   likedByMe?: boolean;
   comments: PhotoComment[];

@@ -4,6 +4,7 @@ import OrkutHeader from './components/OrkutHeader';
 import OrkutFooter from './components/OrkutFooter';
 import ProfileLayout from './components/ProfileLayout';
 import Scrapbook from './components/Scrapbook';
+import ScrapbookBuilder from './components/ScrapbookBuilder';
 import Testimonials from './components/Testimonials';
 import Communities from './components/Communities';
 import SearchResults from './components/SearchResults';
@@ -256,7 +257,14 @@ export default function App() {
         const docRef = doc(db, 'profiles', firebaseUser.uid);
         const unsubscribeProfile = onSnapshot(docRef, (docSnap) => {
           if (docSnap.exists()) {
-            setCurrentUserProfile(docSnap.data() as Profile);
+            const data = docSnap.data();
+            if (data.isEmailVerified === false) {
+              // Deny sessions with unverified e-mails: force complete sign-out
+              auth.signOut();
+              setCurrentUserProfile(null);
+            } else {
+              setCurrentUserProfile(data as Profile);
+            }
           } else {
             // First time seeding
             const defaultMe = {
@@ -1088,6 +1096,16 @@ export default function App() {
             currentUser={{ id: profiles.me.id, name: profiles.me.name, avatar: profiles.me.avatar }}
             onLikeScrap={handleLikeScrap}
             onShareToFeed={handleAddNewShare}
+            onGoToBuilder={() => setCurrentTab('scrapbook-builder')}
+          />
+        )}
+
+        {currentTab === 'scrapbook-builder' && (
+          <ScrapbookBuilder
+            profiles={profiles}
+            currentUser={{ id: profiles.me.id, name: profiles.me.name, avatar: profiles.me.avatar }}
+            onPostScrap={handleAddScrap}
+            onNavigateToTab={(tab) => setCurrentTab(tab)}
           />
         )}
 

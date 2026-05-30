@@ -180,6 +180,21 @@ export default function SocialSidebar({
             <span>Comunidades</span>
           </button>
 
+          {/* 4.5. BUILDER DE SCRAPS */}
+          <button
+            id="sidebar-nav-scrapbook-builder"
+            onClick={() => setCurrentTab('scrapbook-builder')}
+            className={`px-3 py-2.5 transition-colors border-b border-dashed border-neutral-200/50 flex items-center justify-between cursor-pointer text-left ${
+              currentTab === 'scrapbook-builder' ? 'bg-neutral-100/30 font-bold text-[#d946ef]' : 'hover:bg-neutral-100/15'
+            }`}
+          >
+            <span className="flex items-center gap-2">
+              <Sparkles size={13} className="text-fuchsia-500 animate-pulse" />
+              <span>Builder de Scraps</span>
+            </span>
+            <span className="text-[9px] bg-pink-100 text-pink-700 px-1.5 py-0.2 rounded font-mono font-bold animate-bounce">Glitter</span>
+          </button>
+
           {/* 5. AMIGOS (MODAL TOGGLE) */}
           <button
             id="sidebar-nav-friends-popup"

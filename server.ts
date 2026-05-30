@@ -119,6 +119,238 @@ Crie a resposta do personagem de acordo com as diretrizes indicadas. Responda di
     }
   });
 
+  // API Route for AI Scrapbook Builder (using Gemini 3.5 Flash)
+  app.post("/api/scrapbook/generate", async (req, res) => {
+    const { prompt } = req.body;
+    
+    const systemPrompt = `Você é o "Designer Retro de Scraps do Orkut de 2008".
+Sua missão é gerar as especificações visuais de um scrap Y2K animado de acordo com o pedido do usuário (ex: "emo goth", "glitter rosa", "good morning", "borboleta").
+Você DEVE obrigatoriamente responder APENAS com um objeto JSON válido, sem markdown ou explicações.
+
+O JSON deve seguir esse modelo estrutural EXATO:
+{
+  "themeName": "Nome do Tema no estilo do Orkut (ex: Pink Emo Love, Cyber Gothic Matrix)",
+  "backgroundStyle": "Estilo de fundo ('solid', 'gradient-purple-pink', 'gradient-blue-teal', 'gradient-black-purple', 'checkerboard', 'stars-space', 'glitter-pink', 'matrix-green')",
+  "backgroundColor": "Uma cor hexadecimal para fundo sólido/borda (ex: #0f172a)",
+  "textColor": "Uma cor hexadecimal adequada para o texto (ex: #f472b6)",
+  "fontFamily": "Uma fonte do Orkut/MSN ('Comic Sans MS', 'Impact', 'Courier New', 'Georgia', 'Arial Black', 'Trebuchet MS')",
+  "textSize": 24,
+  "frameStyle": "Moldura ('neon-pink', 'neon-cyan', 'golden-glitter', 'emo-stitches', 'cyber-borders', 'double-dashed')",
+  "sparkleDensity": 75,
+  "sparkleColor": "Cor hexadecimal das partículas piscantes (ex: #fbbf24)",
+  "glitterEnabled": true,
+  "glowIntensity": "Estilo de glow ('medium', 'high', 'extreme')",
+  "messageText": "Um texto nostálgico escrito no estilo internetês do MSN/Orkut de 2008, abusando de abreviações amigáveis e emojis vintage. Máximo 150 caracteres. Exemplo: '✨ oLaAaAa s2!!! pAsSaNdO pRa dEiXaR uM bEqAdInHo kAwAaIi!! dEiXa sCrAp tBm bLj?! s2 s2 s2 ✨'",
+  "suggestedStickers": ["heart", "butterfly", "star", "skull", "hamster"] 
+}
+
+Não invente outras chaves no JSON. Forneça o JSON puro.`;
+
+    const hasApiKey = !!process.env.GEMINI_API_KEY;
+
+    if (!hasApiKey) {
+      // Offline fallback lists
+      const promptLower = (prompt || "").toLowerCase();
+      let themeSpec: any = {
+        themeName: "Offline Retro Shimmer 2008",
+        backgroundStyle: "gradient-purple-pink",
+        backgroundColor: "#1e1b4b",
+        textColor: "#f472b6",
+        fontFamily: "Comic Sans MS",
+        textSize: 24,
+        frameStyle: "neon-pink",
+        sparkleDensity: 80,
+        sparkleColor: "#ffffff",
+        glitterEnabled: true,
+        glowIntensity: "high",
+        messageText: "✨ [Offline v2008] oLaAa chapa! pAsSeI bEn qApYdUxO sÓ pRa pOxTaR eXxE sCrAp lYnDo s2 dEiXa sCrAp bUj?! ✨",
+        suggestedStickers: ["heart", "star"]
+      };
+
+      if (promptLower.includes("emo") || promptLower.includes("goth") || promptLower.includes("preto") || promptLower.includes("caveira")) {
+        themeSpec = {
+          themeName: "Poison Gothic Emo 2008",
+          backgroundStyle: "gradient-black-purple",
+          backgroundColor: "#0d0415",
+          textColor: "#cc66ff",
+          fontFamily: "Courier New",
+          textSize: 22,
+          frameStyle: "emo-stitches",
+          sparkleDensity: 90,
+          sparkleColor: "#bb33ff",
+          glitterEnabled: true,
+          glowIntensity: "extreme",
+          messageText: "⛓️✖️ sOmOs SqUaQuE pOsSuIdO pElA nOiTe... s2 lYnYx_eMo dEiXa rEcAdInHo nO mEu sCrAp lOuQuYnH_s2... mSn_OfFlYn_bLj ✖️⛓️",
+          suggestedStickers: ["skull", "heart"]
+        };
+      } else if (promptLower.includes("cyber") || promptLower.includes("matrix") || promptLower.includes("verde") || promptLower.includes("hacker")) {
+        themeSpec = {
+          themeName: "Green Cyber Matrix 1337",
+          backgroundStyle: "matrix-green",
+          backgroundColor: "#020617",
+          textColor: "#22c55e",
+          fontFamily: "Courier New",
+          textSize: 20,
+          frameStyle: "cyber-borders",
+          sparkleDensity: 85,
+          sparkleColor: "#4ade80",
+          glitterEnabled: false,
+          glowIntensity: "high",
+          messageText: "📟 [1337_hX_sEc_UrY] sYsTeM_oN_lYn... iNvAdInDo sUa tElA sÓ pRa pAsSaR uM gLiTtEr fEitO pArA sUa sEgUrAnÇa vLw 📟",
+          suggestedStickers: ["star", "hamster"]
+        };
+      } else if (promptLower.includes("azul") || promptLower.includes("celeste") || promptLower.includes("sky")) {
+        themeSpec = {
+          themeName: "Blue Ocean Hologram",
+          backgroundStyle: "gradient-blue-teal",
+          backgroundColor: "#082f49",
+          textColor: "#38bdf8",
+          fontFamily: "Georgia",
+          textSize: 25,
+          frameStyle: "neon-cyan",
+          sparkleDensity: 70,
+          sparkleColor: "#e0f2fe",
+          glitterEnabled: true,
+          glowIntensity: "medium",
+          messageText: "❄️ oLaAa! uM sCrAp cElEsTe sÓ pRa tE dEzEjAr uM dYa mUiTo iLuMyNaDo s2 fLaUeR_bLj fOlGa_aY ❄️",
+          suggestedStickers: ["butterfly", "star"]
+        };
+      } else if (promptLower.includes("sol") || promptLower.includes("dia") || promptLower.includes("dourado") || promptLower.includes("ouro")) {
+        themeSpec = {
+          themeName: "Golden Dawn Sunshine",
+          backgroundStyle: "solid",
+          backgroundColor: "#422006",
+          textColor: "#facc15",
+          fontFamily: "Arial Black",
+          textSize: 26,
+          frameStyle: "golden-glitter",
+          sparkleDensity: 95,
+          sparkleColor: "#fef08a",
+          glitterEnabled: true,
+          glowIntensity: "high",
+          messageText: "☀️ BoM dYyYyYaAaA fLoR dO dYa! q sUo dYa sEja tAo bRiLhAnTe qAnTo eXxE sCrAp cOm gLiTtEr dOuRaDo s2 ☀️",
+          suggestedStickers: ["star", "star"]
+        };
+      }
+
+      themeSpec.aiImageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent((prompt || "vintage") + ", nostalgic 2008 Y2K orkut scrapbook glittering background decorative ornament art illustration")}?width=500&height=350&nologo=true`;
+      return res.json(themeSpec);
+    }
+
+    try {
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        throw new Error("GEMINI_API_KEY is not defined");
+      }
+      
+      const stylePromise = fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              role: "user",
+              parts: [{ text: `Gere as especificações para o prompt: "${prompt}"` }]
+            }
+          ],
+          systemInstruction: {
+            parts: [{ text: systemPrompt }]
+          },
+          generationConfig: {
+            temperature: 0.9,
+            responseMimeType: "application/json"
+          }
+        })
+      });
+
+      const imagePromise = fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${apiKey}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                {
+                  text: `${prompt}. Nostalgic Y2K orkut scrapbook glitter art graphic, retro decorative ornament background. Cute vibrant sticker collage illustration.`
+                }
+              ]
+            }
+          ]
+        })
+      }).catch(err => {
+        console.error("Gemini image generation call failed, using fallback:", err);
+        return null;
+      });
+
+      const [styleResponse, imageResponse] = await Promise.all([stylePromise, imagePromise]);
+
+      if (!styleResponse.ok) {
+        const errText = await styleResponse.text();
+        throw new Error(`Gemini API HTTP ${styleResponse.status}: ${errText}`);
+      }
+
+      const styleData = await styleResponse.json() as any;
+      let text = styleData.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+      
+      text = text.trim();
+      if (text.startsWith("```json")) {
+        text = text.substring(7);
+      }
+      if (text.endsWith("```")) {
+        text = text.substring(0, text.length - 3);
+      }
+      text = text.trim();
+      
+      const parsedSpec = JSON.parse(text);
+
+      let aiImageUrl: string | null = null;
+      if (imageResponse && imageResponse.ok) {
+        try {
+          const imgData = await imageResponse.json() as any;
+          const parts = imgData?.candidates?.[0]?.content?.parts || [];
+          for (const part of parts) {
+            if (part.inlineData) {
+              aiImageUrl = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+              break;
+            }
+          }
+        } catch (imgParseErr) {
+          console.error("Error parsing generated image data:", imgParseErr);
+        }
+      }
+
+      if (!aiImageUrl) {
+        aiImageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent((prompt || "vintage") + ", nostalgic 2008 Y2K orkut scrapbook glittering background decorative ornament art illustration")}?width=500&height=350&nologo=true`;
+      }
+
+      parsedSpec.aiImageUrl = aiImageUrl;
+      return res.json(parsedSpec);
+    } catch (err) {
+      console.error("Gemini Error generating AI scrapbook:", err);
+      // Fallback
+      return res.json({
+        themeName: "Glitter Emo Cyber (Erro Fallback AI)",
+        backgroundStyle: "gradient-purple-pink",
+        backgroundColor: "#2e1065",
+        textColor: "#ff00ff",
+        fontFamily: "Comic Sans MS",
+        textSize: 24,
+        frameStyle: "neon-pink",
+        sparkleDensity: 80,
+        sparkleColor: "#ffffff",
+        glitterEnabled: true,
+        glowIntensity: "high",
+        messageText: "💔 oOh nAaAo, o sErVyDo r dE IA tYvO uM pRoBlEmA... mAx sCrApGoNe sEgUe sEnDo o bEsT fOrEvEr s2 vLw pArCa 💔",
+        suggestedStickers: ["heart"],
+        aiImageUrl: `https://image.pollinations.ai/prompt/${encodeURIComponent((prompt || "vintage") + ", nostalgic 2008 Y2K orkut scrapbook glittering background decorative ornament art illustration")}?width=500&height=350&nologo=true`
+      });
+    }
+  });
+
   // Serve static files / Vite middleware
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
