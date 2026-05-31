@@ -15,6 +15,8 @@ import {
   FileImage,
   Video
 } from 'lucide-react';
+// @ts-ignore
+import gifshot from 'gifshot';
 import { Profile, Scrap } from '../types';
 
 interface ScrapbookBuilderProps {
@@ -133,6 +135,7 @@ export default function ScrapbookBuilder({
   const [fontFamily, setFontFamily] = useState('Comic Sans MS');
   const [textSize, setTextSize] = useState(24);
   const [textColor, setTextColor] = useState('#ff00bb');
+  const [textYPercent, setTextYPercent] = useState(48);
   
   // Visual options
   const [backgroundStyle, setBackgroundStyle] = useState('gradient-purple-pink');
@@ -198,6 +201,8 @@ export default function ScrapbookBuilder({
   const [glowBonus, setGlowBonus] = useState(0); // Boosted by DEIXAR MAIS 2008!
   const [isRecording, setIsRecording] = useState(false);
   const [recordProgress, setRecordProgress] = useState(0);
+  const [isRecordingGif, setIsRecordingGif] = useState(false);
+  const [gifProgress, setGifProgress] = useState(0);
   const [playAudioChime, setPlayAudioChime] = useState(true);
   const [editorTab, setEditorTab] = useState<'text' | 'sparkles' | 'theme' | 'stickers'>('text');
 
@@ -774,7 +779,8 @@ export default function ScrapbookBuilder({
       };
 
       // Draw wrapped body text inside the neon box (leaving margin for borders)
-      wrapText(messageText, width / 2, height / 2 - 10, width - 80, textSize + 8);
+      const targetY = height * (textYPercent / 100);
+      wrapText(messageText, width / 2, targetY, width - 80, textSize + 8);
       
       // Cleanup shadows
       ctx.shadowBlur = 0;
@@ -938,6 +944,73 @@ export default function ScrapbookBuilder({
     document.body.removeChild(a);
   };
 
+  // Export animated GIF using gifshot (captures multiple frames keyframes over time)
+  const handleExportGIF = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    setIsRecordingGif(true);
+    setGifProgress(0);
+    triggerBeep(1000, 0.4, 'sawtooth');
+
+    const frames: string[] = [];
+    const totalDuration = 3000; // 3 seconds loop
+    const intervalTime = 120; // 120ms per frame (makes a smooth ~8 fps glitter animation)
+    const totalFramesNeeded = Math.ceil(totalDuration / intervalTime);
+    
+    let framesCaptured = 0;
+
+    const interval = setInterval(() => {
+      const currentCanvas = canvasRef.current;
+      if (!currentCanvas) {
+        clearInterval(interval);
+        setIsRecordingGif(false);
+        return;
+      }
+      
+      try {
+        const frameDataUrl = currentCanvas.toDataURL('image/png');
+        frames.push(frameDataUrl);
+      } catch (err) {
+        console.error("Frame capture error:", err);
+      }
+      
+      framesCaptured++;
+      setGifProgress(Math.min(95, Math.round((framesCaptured / totalFramesNeeded) * 95)));
+
+      if (framesCaptured >= totalFramesNeeded) {
+        clearInterval(interval);
+        
+        // Compile the GIF in the background using gifshot web workers
+        // @ts-ignore
+        gifshot.createGIF({
+          images: frames,
+          gifWidth: currentCanvas.width || 500,
+          gifHeight: currentCanvas.height || 350,
+          interval: intervalTime / 1000, // interval in seconds
+          numWorkers: 2,
+        }, function (obj: any) {
+          setIsRecordingGif(false);
+          setGifProgress(100);
+
+          if (obj && !obj.error) {
+            triggerBeep(1200, 0.35, 'triangle');
+            const animatedImage = obj.image;
+            const a = document.createElement('a');
+            a.href = animatedImage;
+            a.download = `${themeName.toLowerCase().replace(/\s+/g, '_')}_glitter.gif`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+          } else {
+            console.error("GIF creation failed:", obj?.error);
+            alert("Erro ao exportar GIF. Tente gravar em formato de vídeo WebM ou salve como imagem PNG.");
+          }
+        });
+      }
+    }, intervalTime);
+  };
+
   // Direct post action trigger
   const handlePostToScrapbook = async () => {
     const canvas = canvasRef.current;
@@ -1030,6 +1103,17 @@ export default function ScrapbookBuilder({
                   <span>Gerando Loop Animado: <strong>{recordProgress}%</strong></span>
                   <div className="w-[120px] bg-neutral-800 h-2.5 rounded-full overflow-hidden">
                     <div className="bg-gradient-to-r from-red-500 to-pink-500 h-full transition-all duration-100" style={{ width: `${recordProgress}%` }} />
+                  </div>
+                </div>
+              )}
+
+              {/* Dynamic Overlay when recording GIF */}
+              {isRecordingGif && (
+                <div className="absolute inset-x-0 bottom-0 bg-black/90 border-t border-pink-500 p-2 text-center text-xs text-white flex items-center justify-center gap-3 z-30">
+                  <div className="w-3 h-3 bg-pink-500 rounded-full animate-ping" />
+                  <span>Renderizando GIF Animado: <strong>{gifProgress}%</strong></span>
+                  <div className="w-[120px] bg-neutral-800 h-2.5 rounded-full overflow-hidden">
+                    <div className="bg-gradient-to-r from-pink-500 to-fuchsia-500 h-full transition-all duration-100" style={{ width: `${gifProgress}%` }} />
                   </div>
                 </div>
               )}
@@ -1309,6 +1393,67 @@ export default function ScrapbookBuilder({
                   </span>
                 </div>
               </div>
+
+              <div className="border-t border-dashed border-neutral-200 pt-3">
+                <label className="block text-[10.5px] font-black uppercase text-neutral-500 mb-1 flex justify-between items-center">
+                  <span>Posição Vertical do Texto:</span>
+                  <span className="text-[10px] font-mono text-pink-600 bg-pink-50 px-1.5 py-0.5 rounded font-bold">
+                    {textYPercent === 18 ? 'Topo (18%)' : textYPercent === 48 ? 'Centro (48%)' : textYPercent === 80 ? 'Inferior (80%)' : `${textYPercent}%`}
+                  </span>
+                </label>
+                
+                {/* Visual Preset Buttons */}
+                <div className="grid grid-cols-3 gap-2 mb-2">
+                  <button
+                    type="button"
+                    onClick={() => setTextYPercent(18)}
+                    className={`py-1 px-2 border rounded font-bold text-[9.5px] transition-all cursor-pointer ${
+                      textYPercent === 18 
+                        ? 'bg-pink-50 border-pink-400 text-pink-600 shadow-sm' 
+                        : 'bg-white border-neutral-300 text-neutral-600 hover:bg-neutral-50'
+                    }`}
+                  >
+                    ⬆️ Topo (18%)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTextYPercent(48)}
+                    className={`py-1 px-2 border rounded font-bold text-[9.5px] transition-all cursor-pointer ${
+                      textYPercent === 48 
+                        ? 'bg-pink-50 border-pink-400 text-pink-600 shadow-sm' 
+                        : 'bg-white border-neutral-300 text-neutral-600 hover:bg-neutral-50'
+                    }`}
+                  >
+                    ↔️ Centro (48%)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTextYPercent(80)}
+                    className={`py-1 px-2 border rounded font-bold text-[9.5px] transition-all cursor-pointer ${
+                      textYPercent === 80 
+                        ? 'bg-pink-50 border-pink-400 text-pink-600 shadow-sm' 
+                        : 'bg-white border-neutral-300 text-neutral-600 hover:bg-neutral-50'
+                    }`}
+                  >
+                    ⬇️ Inferior (80%)
+                  </button>
+                </div>
+
+                {/* Fine-tuning slider */}
+                <div className="flex gap-2 items-center">
+                  <span className="text-[9px] text-neutral-400 font-mono">Topo</span>
+                  <input
+                    id="builder-text-vertical-slider"
+                    type="range"
+                    min={10}
+                    max={90}
+                    value={textYPercent}
+                    onChange={(e) => setTextYPercent(parseInt(e.target.value))}
+                    className="flex-1 py-1.5 bg-transparent cursor-ew-resize accent-pink-500"
+                  />
+                  <span className="text-[9px] text-neutral-400 font-mono">Baixo</span>
+                </div>
+              </div>
             </div>
           )}
 
@@ -1554,7 +1699,7 @@ export default function ScrapbookBuilder({
               </div>
 
               {/* Action buttons list */}
-              <div className="flex gap-2 justify-end self-end">
+              <div className="flex gap-2 justify-end self-end flex-wrap">
                 <button
                   id="btn-export-png"
                   onClick={handleExportPNG}
@@ -1563,6 +1708,17 @@ export default function ScrapbookBuilder({
                 >
                   <FileImage size={12} />
                   Salvar PNG
+                </button>
+
+                <button
+                  id="btn-export-gif"
+                  onClick={handleExportGIF}
+                  disabled={isRecording || isRecordingGif}
+                  className="px-3 py-1.5 bg-gradient-to-r from-amber-400 via-pink-500 to-indigo-500 hover:from-amber-500 hover:via-pink-600 hover:to-indigo-600 text-white rounded font-black text-[10px] flex items-center gap-1 cursor-pointer transition-all shadow-xs border border-amber-300 disabled:opacity-55"
+                  title="Exportar Scrap com Glitter em GIF Animado"
+                >
+                  <Sparkles size={12} className="animate-spin duration-1000" />
+                  Salvar GIF 🌟
                 </button>
 
                 <button

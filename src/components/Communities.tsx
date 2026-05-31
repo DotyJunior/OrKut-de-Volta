@@ -1,179 +1,2492 @@
-import { useState } from 'react';
-import { ShieldCheck, Lock, Unlock, Users, PlusCircle, Search, HelpCircle } from 'lucide-react';
-import { Community } from '../types';
+import React, { useState, useEffect, useRef } from 'react';
+import { 
+  ShieldCheck, Lock, Unlock, Users, PlusCircle, Search, HelpCircle, 
+  MessageSquare, Plus, Minus, ChevronLeft, ChevronRight, Image, 
+  ThumbsUp, Trash2, Edit, Pin, Settings, AlertCircle, Calendar, 
+  Globe, Info, Camera, PinOff, LogOut, ArrowLeft, RefreshCw,
+  MapPin, Sparkles, Palette, KeyRound
+} from 'lucide-react';
+import GlossyRetroButton from './GlossyRetroButton';
+import { db, auth, handleFirestoreError, OperationType } from '../firebase';
+import { collection, doc, onSnapshot, setDoc, updateDoc, addDoc, deleteDoc, query, where, getDocs, writeBatch } from 'firebase/firestore';
+import { Profile, Community } from '../types';
 
 interface CommunitiesProps {
-  communities: Community[];
-  onJoinCommunity: (id: string) => void;
+  communities: Community[]; // unused except as reference/fallback
+  onJoinCommunity?: (id: string) => void; // fallback
   joinedIds: string[];
+  profiles: Record<string, Profile>;
+  currentUser?: { id: string; name: string; avatar: string };
+  onNavigateToFriend: (id: string) => void;
+  onNavigateToTab?: (tab: string, forceVisitor?: boolean, autoTriggerUpload?: boolean, communityId?: string) => void;
+  activeCommunityId?: string | null;
+  setActiveCommunityId?: (id: string | null) => void;
 }
 
-export default function Communities({ communities, onJoinCommunity, joinedIds }: CommunitiesProps) {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [showRiddleModal, setShowRiddleModal] = useState<string | null>(null); // communityId if open
-  const [riddleAnswer, setRiddleAnswer] = useState('');
-  const [newCommName, setNewCommName] = useState('');
-  const [isSecret, setIsSecret] = useState(false);
+interface Topic {
+  id: string;
+  communityId: string;
+  title: string;
+  content: string;
+  authorId: string;
+  authorName: string;
+  authorAvatar: string;
+  imageUrl?: string;
+  createdAt: string; // ISO string or readable
+  views: number;
+  repliesCount: number;
+  isPinned?: boolean;
+}
 
-  const filtered = communities.filter(c =>
-    c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    c.description.toLowerCase().includes(searchQuery.toLowerCase())
+interface Reply {
+  id: string;
+  topicId: string;
+  communityId: string;
+  content: string;
+  authorId: string;
+  authorName: string;
+  authorAvatar: string;
+  imageUrl?: string;
+  createdAt: string; // ISO string
+  likes: number;
+  likedBy: string[]; // List of user IDs who liked
+}
+
+interface Notification {
+  id: string;
+  type: string;
+  content: string;
+  createdAt: string;
+  read: boolean;
+}
+
+// 12 Nostalgic users to populate our communities realistically!
+const MOCK_OR_EXTRA_MEMBERS = [
+  { id: 'lucas', name: 'Lucas Santos', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150', location: 'São Paulo, SP' },
+  { id: 'alexandre', name: 'Alexandre Curi', avatar: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=150', location: 'Curitiba, PR' },
+  { id: 'orkut', name: 'Orkut Büyükkökten', avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150', location: 'San Francisco, CA' },
+  { id: 'hacker', name: 'H3_Elit3_Hacker', avatar: 'https://images.unsplash.com/photo-1544197150-b99a580bb7a8?w=150', location: 'Deep Web' },
+  { id: 'mariana', name: 'Mariana Goth99', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150', location: 'Belo Horizonte, MG' },
+  { id: 'thiago', name: 'Thiago Webmaster', avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150', location: 'Rio de Janeiro, RJ' },
+  { id: 'carla', name: 'Carla Coder', avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150', location: 'Porto Alegre, RS' },
+  { id: 'felipe', name: 'Felipe Retro', avatar: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=150', location: 'Recife, PE' },
+  { id: 'aline', name: 'Aline Glitter', avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150', location: 'Salvador, BA' },
+  { id: 'bruno', name: 'Bruno Pinhão', avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150', location: 'Ponta Grossa, PR' },
+  { id: 'gabriela', name: 'Gabi MSN', avatar: 'https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?w=150', location: 'Vitória, ES' },
+  { id: 'roberto', name: 'Roberto Sysadmin', avatar: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=150', location: 'Joinville, SC' }
+];
+
+const DEFAULT_COMMUNITIES_SEED: (Omit<Community, 'id'> & { id?: string; rules?: string, ownerId: string, language: string, type: string, createdAt: string, moderators: string[] })[] = [
+  { 
+    id: '1', 
+    name: 'Eu Odeio Acordar Cedo', 
+    description: 'Pra quem sabe o sofrimento de ouvir o despertador às 6h da manhã e querer jogar ele pela janela. Bem-vindo ao clube dos noturnos de coração.', 
+    members: 10543, 
+    avatar: '⏰', 
+    category: 'Nostalgia', 
+    secureMode: false,
+    language: 'Português',
+    type: 'Pública',
+    createdAt: 'Jan 2005',
+    ownerId: 'orkut',
+    moderators: ['orkut'],
+    rules: '1. Proibido agendar posts às 6h da manhã.\n2. É obrigatório confessar quanto café você bebeu para reviver.\n3. Sem discussões sérias antes das 11h.'
+  },
+  { 
+    id: 'mochileiros', 
+    name: 'Mochileiros', 
+    description: 'Histórias, rotas e aventuras pelo mundo.', 
+    members: 3638, 
+    avatar: '🎒', 
+    category: 'Viagem', 
+    secureMode: false,
+    language: 'Português',
+    type: 'Pública',
+    createdAt: 'Fev 2005',
+    ownerId: 'lucas',
+    moderators: ['lucas'],
+    rules: '1. Compartilhe fotos de suas viagens.\n2. Respeite os mochileiros locais de cada região.'
+  },
+  { 
+    id: 'survivalistas', 
+    name: 'Survivalistas', 
+    description: 'Preparação, sobrevivência, bushcraft e técnicas primitivas na mata.', 
+    members: 3638, 
+    avatar: '🌲', 
+    category: 'Estilo de Vida', 
+    secureMode: false,
+    language: 'Português',
+    type: 'Pública',
+    createdAt: 'Mar 2005',
+    ownerId: 'alexandre',
+    moderators: ['alexandre'],
+    rules: '1. Sem injeções maliciosas.\n2. Foco em sobrevivência real.'
+  },
+  { 
+    id: 'hackers_eticos', 
+    name: 'Hackers Éticos', 
+    description: 'Segurança, pentest e privacidade sob os olhos dos white-hats brasileiros.', 
+    members: 3638, 
+    avatar: '💻', 
+    category: 'Tecnologia', 
+    secureMode: false,
+    language: 'Português',
+    type: 'Pública',
+    createdAt: 'Nov 2004',
+    ownerId: 'hacker',
+    moderators: ['hacker'],
+    rules: '1. Sem atividades ilícitas.\n2. Respeite a ética hacker.'
+  },
+  { 
+    id: 'pendrive_perdido', 
+    name: 'Quem Nunca Perdeu o Pendrive?', 
+    description: 'Pra quem já sofreu perdendo arquivos importantes ou a chave de criptografia de bobeira.', 
+    members: 3638, 
+    avatar: '💾', 
+    category: 'Nostalgia', 
+    secureMode: false,
+    language: 'Português',
+    type: 'Pública',
+    createdAt: 'Dez 2004',
+    ownerId: 'thiago',
+    moderators: ['thiago'],
+    rules: '1. Faça backup constante.\n2. Compartilhe suas histórias de desastres com mídias removíveis.'
+  },
+  { 
+    id: 'devs_community', 
+    name: 'Devs', 
+    description: 'Programação, código e projetos.', 
+    members: 3638, 
+    avatar: '🤖', 
+    category: 'Tecnologia', 
+    secureMode: false,
+    language: 'Português',
+    type: 'Pública',
+    createdAt: 'Dez 2004',
+    ownerId: 'alexandre',
+    moderators: ['alexandre'],
+    rules: '1. Sem guerra de editores.\n2. Código limpo e autodocumentado.'
+  },
+  { 
+    id: 'gotico', 
+    name: 'Gótico', 
+    description: 'Música, arte e cultura alternativa.', 
+    members: 3638, 
+    avatar: '🖤', 
+    category: 'Música', 
+    secureMode: false,
+    language: 'Português',
+    type: 'Pública',
+    createdAt: 'Out 2004',
+    ownerId: 'mariana',
+    moderators: ['mariana'],
+    rules: '1. Clássicos do gothic rock, industrial e darkwave.\n2. Liberdade de autoexpressão.'
+  },
+  { 
+    id: 'rock_ramones', 
+    name: 'OUVINDO RAMONES Até Hoje', 
+    description: 'Hey ho, let\'s go! Puro punk rock clássico de Nova York dos anos 70.', 
+    members: 3638, 
+    avatar: '🎸', 
+    category: 'Música', 
+    secureMode: false,
+    language: 'Português',
+    type: 'Pública',
+    createdAt: 'Set 2004',
+    ownerId: 'bruno',
+    moderators: ['bruno'],
+    rules: '1. Hey ho, let\'s go!\n2. Jaqueta de couro obrigatória.'
+  },
+  { 
+    id: 'privacy_geeks', 
+    name: 'Privacy Geeks', 
+    description: 'Foco em privacidade digital na rede.', 
+    members: 3638, 
+    avatar: '🔒', 
+    category: 'Tecnologia', 
+    secureMode: true,
+    language: 'Português',
+    type: 'Pública',
+    createdAt: 'Jan 2005',
+    ownerId: 'me',
+    moderators: ['me'],
+    rules: '1. Chaves seguras.\n2. Criptografia ponta-a-ponta.'
+  },
+  { 
+    id: 'radio_amador', 
+    name: 'Rádio Amador', 
+    description: 'Transmissões e frequências clássicas brasileiras.', 
+    members: 3638, 
+    avatar: '📻', 
+    category: 'Hobbies', 
+    secureMode: false,
+    language: 'Português',
+    type: 'Pública',
+    createdAt: 'Mai 2004',
+    ownerId: 'felipe',
+    moderators: ['felipe'],
+    rules: '1. Respeite as bandas de frequência regulamentadas.\n2. Sem interferências propositais.'
+  }
+];
+
+export default function Communities({ 
+  onJoinCommunity, 
+  joinedIds = [], 
+  profiles, 
+  currentUser, 
+  onNavigateToFriend,
+  onNavigateToTab,
+  activeCommunityId,
+  setActiveCommunityId
+}: CommunitiesProps) {
+  // Real active user identifier
+  const activeUserId = currentUser?.id || 'me';
+  const activeUserName = currentUser?.name || 'Administrador';
+  const activeUserAvatar = currentUser?.avatar || '👤';
+
+  // Component States
+  const [dbCommunities, setDbCommunities] = useState<any[]>([]);
+  const [activeCommId, setActiveCommId] = useState<string | null>(
+    activeCommunityId !== undefined ? activeCommunityId : null
   );
 
-  const handleJoinClick = (comm: Community) => {
-    if (comm.secureMode && !joinedIds.includes(comm.id)) {
-      setShowRiddleModal(comm.id);
-      setRiddleAnswer('');
+  useEffect(() => {
+    if (activeCommunityId !== undefined) {
+      setActiveCommId(activeCommunityId);
+    }
+  }, [activeCommunityId]);
+
+  const handleSelectCommunity = (id: string | null) => {
+    setActiveCommId(id);
+    if (setActiveCommunityId) {
+      setActiveCommunityId(id);
+    }
+  };
+  const [activeComm, setActiveComm] = useState<any>(null);
+  const [activeTopic, setActiveTopic] = useState<Topic | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  
+  // Real-time forum posts
+  const [forumTopics, setForumTopics] = useState<Topic[]>([]);
+  const [topicReplies, setTopicReplies] = useState<Reply[]>([]);
+  const [repliesPage, setRepliesPage] = useState(1);
+  const repliesPerPage = 20;
+
+  // Modals Toggles
+  const [showRiddleModal, setShowRiddleModal] = useState<string | null>(null);
+  const [riddleAnswer, setRiddleAnswer] = useState('');
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showRulesModal, setShowRulesModal] = useState(false);
+  const [showEditCommModal, setShowEditCommModal] = useState(false);
+  const [showMembersModal, setShowMembersModal] = useState(false);
+  const [showRelatedCommsModal, setShowRelatedCommsModal] = useState(false);
+  
+  // Create / Edit Form states
+  const [newCommName, setNewCommName] = useState('');
+  const [newCommDesc, setNewCommDesc] = useState('');
+  const [newCommCat, setNewCommCat] = useState('Nostalgia');
+  const [newCommLang, setNewCommLang] = useState('Português');
+  const [newCommType, setNewCommType] = useState('Pública');
+  const [newCommSecureMode, setNewCommSecureMode] = useState(false);
+  const [newCommAvatar, setNewCommAvatar] = useState('💬');
+  const [newCommRules, setNewCommRules] = useState('');
+
+  // Post Thread Form states
+  const [postTitle, setPostTitle] = useState('');
+  const [postContent, setPostContent] = useState('');
+  const [postImg, setPostImg] = useState('');
+  const [isPostingTopic, setIsPostingTopic] = useState(false);
+
+  // Reply Form states
+  const [replyContent, setReplyContent] = useState('');
+  const [editingReplyId, setEditingReplyId] = useState<string | null>(null);
+  const [editingReplyText, setEditingReplyText] = useState('');
+
+  // Scroll references for assistant scrolling + / -
+  const membersScrollRef = useRef<HTMLDivElement>(null);
+  const relatedScrollRef = useRef<HTMLDivElement>(null);
+  const modalMembersScrollRef = useRef<HTMLDivElement>(null);
+  const modalRelatedScrollRef = useRef<HTMLDivElement>(null);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const editCommFileInputRef = useRef<HTMLInputElement>(null);
+  const topicFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Categories list
+  const CATEGORIES = [
+    'Nostalgia', 'Humor', 'Tecnologia', 'Jogos', 'Internet Anos 2000', 
+    'Escola', 'Filmes', 'Música', 'Memes', 'TV', 'Outros'
+  ];
+
+  // 1. Sync communities from Firestore in real-time
+  useEffect(() => {
+    const unsubscribe = onSnapshot(collection(db, 'communities'), (snapshot) => {
+      if (snapshot.empty) {
+        // Bootstrap/Seed default communities
+        const seedAll = async () => {
+          for (const comm of DEFAULT_COMMUNITIES_SEED) {
+            try {
+              await setDoc(doc(db, 'communities', comm.id!), comm);
+            } catch (err) {
+              handleFirestoreError(err, OperationType.WRITE, `communities/${comm.id}`);
+            }
+          }
+        };
+        seedAll();
+      } else {
+        const list: any[] = [];
+        const existingIds = new Set<string>();
+        snapshot.forEach((doc) => {
+          list.push({ ...doc.data(), id: doc.id });
+          existingIds.add(doc.id);
+        });
+        setDbCommunities(list);
+        
+        // Seed any missing classic required communities
+        const missing = DEFAULT_COMMUNITIES_SEED.filter(c => !existingIds.has(c.id!));
+        if (missing.length > 0) {
+          const seedMissing = async () => {
+            for (const comm of missing) {
+              try {
+                await setDoc(doc(db, 'communities', comm.id!), comm);
+              } catch (err) {
+                console.error("Error seeding missing community", comm.id, err);
+              }
+            }
+          };
+          seedMissing();
+        }
+
+        // Auto-select starting community if set but missing
+        if (activeCommId !== null && list.length > 0 && !list.find(c => c.id === activeCommId)) {
+          handleSelectCommunity(list[0].id);
+        }
+      }
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'communities');
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // 2. Set active community and sync its sub-resource topics
+  useEffect(() => {
+    if (dbCommunities.length > 0) {
+      const selected = dbCommunities.find(c => c.id === activeCommId);
+      if (selected) {
+        setActiveComm(selected);
+      } else {
+        setActiveComm(null);
+      }
     } else {
-      onJoinCommunity(comm.id);
+      setActiveComm(null);
+    }
+  }, [activeCommId, dbCommunities]);
+
+  // 3. Sync Topics for Active Community in real-time
+  useEffect(() => {
+    if (!activeCommId) return;
+
+    const q = query(
+      collection(db, 'community_topics'),
+      where('communityId', '==', activeCommId)
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      if (snapshot.empty) {
+        // Automatically seed/bootstrap nostalgic threads for default community to make it feel super alive!
+        const seedDefaultTopics = async () => {
+          const batchTopics: Omit<Topic, 'id'>[] = [];
+
+          if (activeCommId === '1') {
+            batchTopics.push({
+              communityId: '1',
+              title: "📌 Regras Oficiais - Leia Antes de Postar!",
+              content: "Sejam bem-vindos à oficial e maior comunidade do ScrapZone! Aqui odiamos o despertador de segunda a segunda. Regras básicas:\n1. Não poste o som do alarme padrão do telefone.\n2. Respeite o sono pós-programação de madrugada chapa!\n3. Não marque reuniões às 8:00 AM.",
+              authorId: 'orkut',
+              authorName: 'Orkut Büyükkökten',
+              authorAvatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150',
+              createdAt: new Date(Date.now() - 5 * 24 * 3600 * 1000).toISOString(),
+              views: 1245,
+              repliesCount: 3,
+              isPinned: true
+            });
+            batchTopics.push({
+              communityId: '1',
+              title: "Quem mais odeia acordar na segunda-feira?",
+              content: "O relógio nem bateu 7h e meu cérebro ainda está compilando as linhas de código que escrevi domingo à noite. Quem compartilha do sentimento e quer jogar o despertador pela janela?",
+              authorId: 'lucas',
+              authorName: 'Lucas Santos',
+              authorAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
+              createdAt: new Date(Date.now() - 2 * 24 * 3600 * 1000).toISOString(),
+              views: 890,
+              repliesCount: 2,
+              isPinned: false
+            });
+            batchTopics.push({
+              communityId: '1',
+              title: "Como lidar com programador que agenda daily às 8:00 AM?",
+              content: "Gente, na moral, isso devia ser proibido na convicção de Genebra. Daily 8 da manhã? É pra cometer um crime de segurança simétrica na rede!",
+              authorId: 'alexandre',
+              authorName: 'Alexandre Curi',
+              authorAvatar: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=150',
+              createdAt: new Date(Date.now() - 12 * 3600 * 1000).toISOString(),
+              views: 450,
+              repliesCount: 4,
+              isPinned: false
+            });
+          } else if (activeCommId === '2') {
+            batchTopics.push({
+              communityId: '2',
+              title: "📌 Linguagem de Verdade é Rust, o Resto é Interpretação",
+              content: "Regra básica da comunidade: se a compilação demorar 5 minutos, você aproveita pra tomar café. Não me chame pra 'fazer fofoca' sem antes validar os tipos da sua alma.",
+              authorId: 'alexandre',
+              authorName: 'Alexandre Curi',
+              authorAvatar: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=150',
+              createdAt: new Date(Date.now() - 10 * 24 * 3600 * 1000).toISOString(),
+              views: 1390,
+              repliesCount: 0,
+              isPinned: true
+            });
+            batchTopics.push({
+              communityId: '2',
+              title: "Disseram Oi hoje e continuei codando... kkkk",
+              content: "Minha tia veio falar comigo no MSN, eu mandei um bot responder 'Compiling...' com status offline no ScrapZone. Funciona demais!",
+              authorId: 'thiago',
+              authorName: 'Thiago Webmaster',
+              authorAvatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150',
+              createdAt: new Date().toISOString(),
+              views: 120,
+              repliesCount: 0,
+              isPinned: false
+            });
+          } else {
+            // Standard general fallback topic
+            batchTopics.push({
+              communityId: activeCommId,
+              title: "📌 Tópico Geral de Apresentação",
+              content: "Boas-vindas a todos! Usem este tópico fixado para se apresentarem e compartilharem suas paixões retro.",
+              authorId: 'orkut',
+              authorName: 'Orkut',
+              authorAvatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150',
+              createdAt: new Date().toISOString(),
+              views: 32,
+              repliesCount: 0,
+              isPinned: true
+            });
+          }
+
+          for (const top of batchTopics) {
+            try {
+              const docRef = doc(collection(db, 'community_topics'));
+              await setDoc(docRef, { ...top, id: docRef.id });
+            } catch (err) {
+              handleFirestoreError(err, OperationType.WRITE, 'community_topics');
+            }
+          }
+        };
+        seedDefaultTopics();
+      } else {
+        const list: Topic[] = [];
+        snapshot.forEach((doc) => {
+          list.push(doc.data() as Topic);
+        });
+        
+        // Sort topics (pinned at top, then by date descending)
+        list.sort((a, b) => {
+          if (a.isPinned && !b.isPinned) return -1;
+          if (!a.isPinned && b.isPinned) return 1;
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        });
+
+        setForumTopics(list);
+
+        // Keep active topic synchronized if open
+        if (activeTopic) {
+          const refreshed = list.find(t => t.id === activeTopic.id);
+          if (refreshed) {
+            setActiveTopic(refreshed);
+          }
+        }
+      }
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, `community_topics (where communityId == ${activeCommId})`);
+    });
+
+    return () => unsubscribe();
+  }, [activeCommId]);
+
+  // 4. Sync Replies for Active Topic in real-time
+  useEffect(() => {
+    if (!activeTopic) {
+      setTopicReplies([]);
+      return;
+    }
+
+    const q = query(
+      collection(db, 'community_replies'),
+      where('topicId', '==', activeTopic.id)
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const list: Reply[] = [];
+      snapshot.forEach((doc) => {
+        list.push({ ...doc.data(), id: doc.id } as Reply);
+      });
+
+      // Sort by message time ascending (classical forum chronological order)
+      list.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+      
+      // Auto-seed default replies if thread was seeded but blank
+      if (list.length === 0 && activeTopic.authorId !== activeUserId) {
+        const seedDefaultReplies = async () => {
+          let seeded: Omit<Reply, 'id'>[] = [];
+          if (activeTopic.id.includes('pinned') || activeTopic.title.includes('Regras')) {
+            seeded = [
+              {
+                topicId: activeTopic.id,
+                communityId: activeCommId,
+                content: "Muito bom saber as regras do clube! Vou respeitar o sono alheio com toda a seriedade.",
+                authorId: 'thiago',
+                authorName: 'Thiago Webmaster',
+                authorAvatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150',
+                createdAt: new Date(Date.now() - 4 * 24 * 3600 * 1000).toISOString(),
+                likes: 3,
+                likedBy: ['lucas', 'alexandre', 'orkut']
+              },
+              {
+                topicId: activeTopic.id,
+                communityId: activeCommId,
+                content: "Concordo plenamente! Marcadores de reunião antes das 10h devem ser reportados ao sindicato dos noturnos.",
+                authorId: 'mariana',
+                authorName: 'Mariana Goth99',
+                authorAvatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150',
+                createdAt: new Date(Date.now() - 2 * 24 * 3600 * 1000).toISOString(),
+                likes: 5,
+                likedBy: ['thiago', 'bruno', 'gabriela']
+              }
+            ];
+          } else if (activeTopic.title.includes('segunda-feira')) {
+            seeded = [
+              {
+                topicId: activeTopic.id,
+                communityId: activeCommId,
+                content: "Eu levanto, tomo meu café solúvel com lágrimas e volto pro terminal em silêncio. Um trauma semanal.",
+                authorId: 'aline',
+                authorName: 'Aline Glitter',
+                authorAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+                createdAt: new Date(Date.now() - 1.5 * 24 * 3600 * 1000).toISOString(),
+                likes: 7,
+                likedBy: ['lucas', 'thiago']
+              },
+              {
+                topicId: activeTopic.id,
+                communityId: activeCommId,
+                content: "Kkkkkkk as segundas são fodas! Eu só começo a produzir de verdade depois do almoço.",
+                authorId: 'roberto',
+                authorName: 'Roberto Sysadmin',
+                authorAvatar: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=150',
+                createdAt: new Date(Date.now() - 1 * 24 * 3600 * 1000).toISOString(),
+                likes: 2,
+                likedBy: ['aline']
+              }
+            ];
+          }
+
+          for (const rep of seeded) {
+            try {
+              const docRef = doc(collection(db, 'community_replies'));
+              await setDoc(docRef, { ...rep, id: docRef.id });
+            } catch (err) {
+              handleFirestoreError(err, OperationType.WRITE, 'community_replies');
+            }
+          }
+        };
+        seedDefaultReplies();
+      } else {
+        setTopicReplies(list);
+      }
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, `community_replies (where topicId == ${activeTopic.id})`);
+    });
+
+    return () => unsubscribe();
+  }, [activeTopic]);
+
+  // Handle Joining or Leaving active community
+  const handleToggleJoin = async () => {
+    if (!activeComm) return;
+
+    const isJoined = joinedIds.includes(activeComm.id);
+    let updated: string[];
+
+    if (isJoined) {
+      // Leave
+      updated = joinedIds.filter(id => id !== activeComm.id);
+      
+      // Update members counter dynamically in Firestore
+      try {
+        await updateDoc(doc(db, 'communities', activeComm.id), {
+          members: Math.max(0, (activeComm.members || 1) - 1)
+        });
+      } catch (err) {
+        handleFirestoreError(err, OperationType.WRITE, `communities/${activeComm.id}`);
+      }
+    } else {
+      // Join
+      if (activeComm.secureMode) {
+        // Trigger riddle proof gate
+        setShowRiddleModal(activeComm.id);
+        setRiddleAnswer('');
+        return;
+      }
+
+      updated = [...joinedIds, activeComm.id];
+      
+      try {
+        await updateDoc(doc(db, 'communities', activeComm.id), {
+          members: (activeComm.members || 0) + 1
+        });
+      } catch (err) {
+        handleFirestoreError(err, OperationType.WRITE, `communities/${activeComm.id}`);
+      }
+    }
+
+    // Call state update on parent App.tsx through the Firebase synchronization collection 'joined_communities'
+    try {
+      await setDoc(doc(db, 'joined_communities', activeUserId), { communityIds: updated });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, `joined_communities/${activeUserId}`);
     }
   };
 
-  const handleResolveRiddle = (comm: Community) => {
-    // Standard secure riddles based on community id
+  // Resolve private secure challenge proof
+  const handleSolveSecureRiddle = async () => {
+    if (!activeComm) return;
+
     const riddles: Record<string, string> = {
-      'sec_pr': 'rust', // Alexandre's secure community secret
-      'hacker_guild': 'xss', // Hacker secret
-      'orkut_devs': 'zero' // Orkut developers secret
+      'sec_pr': 'rust',
+      'hacker_guild': 'xss',
+      'orkut_devs': 'zero'
     };
 
-    const expected = riddles[comm.id] || 'orkut';
+    const expected = riddles[activeComm.id] || 'orkut';
     if (riddleAnswer.trim().toLowerCase() === expected) {
-      onJoinCommunity(comm.id);
-      setShowRiddleModal(null);
+      const updated = [...joinedIds, activeComm.id];
+      
+      // Save joined_communities to Firestore
+      try {
+        await setDoc(doc(db, 'joined_communities', activeUserId), { communityIds: updated });
+        await updateDoc(doc(db, 'communities', activeComm.id), {
+          members: (activeComm.members || 0) + 1
+        });
+        setShowRiddleModal(null);
+      } catch (err) {
+        handleFirestoreError(err, OperationType.WRITE, `joined_communities/${activeUserId}`);
+      }
     } else {
-      alert("⚠️ Assinatura de conhecimento rejeitada! Frase Secreta ou Chave de zero-conhecimento inválida.");
+      alert("⚠️ Desafio de Conhecimento Rejeitado! Frase Secreta de Zero-conhecimento incorreta para esta guilda.");
     }
   };
 
+  // Filter communities by search
+  const filteredCommunities = dbCommunities.filter(c =>
+    c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    c.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (c.category && c.category.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
+
+  // Active community similarity / related list (same category or similar)
+  const relatedCommunities = dbCommunities.filter(c => 
+    c.id !== activeCommId && 
+    (c.category === activeComm?.category || c.description.toLowerCase().includes('segur') || c.name.toLowerCase().includes('odeio') || Math.random() > 0.6)
+  ).slice(0, 5);
+
+  // Get current community members
+  const getCommunityMembers = () => {
+    // Generate simulated members + real joined identities
+    const baseList = [...MOCK_OR_EXTRA_MEMBERS];
+    
+    // Add logged user if joined
+    if (joinedIds.includes(activeCommId)) {
+      const isAlready = baseList.some(m => m.id === activeUserId);
+      if (!isAlready) {
+        baseList.unshift({
+          id: activeUserId,
+          name: activeUserName,
+          avatar: activeUserAvatar,
+          location: 'Meu computador'
+        });
+      }
+    }
+
+    // Always ensure Owner of that community is first
+    if (activeComm?.ownerId) {
+      const ownerIndex = baseList.findIndex(m => m.id === activeComm.ownerId);
+      if (ownerIndex > -1) {
+        const ownerObj = baseList.splice(ownerIndex, 1)[0];
+        baseList.unshift(ownerObj);
+      }
+    }
+
+    return baseList;
+  };
+
+  const communityMembers = getCommunityMembers();
+  const totalMembresiaExibicao = (activeComm?.members || 2847);
+
+  // Scroll assistant function for scrollable boxes
+  const handleSmoothScroll = (ref: React.RefObject<HTMLDivElement>, direction: 'up' | 'down') => {
+    if (ref.current) {
+      const scrollStep = 180;
+      ref.current.scrollBy({
+        top: direction === 'up' ? -scrollStep : scrollStep,
+        behavior: 'smooth'
+      });
+    }
+  };
+
+  // Base64 file format converter for dynamic community avatar/capa
+  const handleImageUploadReader = (e: React.ChangeEvent<HTMLInputElement>, target: 'avatar' | 'topicImage' | 'editAvatar') => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      alert('Apenas JPG, PNG, WEBP ou GIF são suportados chapa!');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      if (event.target?.result) {
+        const resultString = event.target.result as string;
+        if (target === 'avatar') {
+          setNewCommAvatar(resultString);
+        } else if (target === 'topicImage') {
+          setPostImg(resultString);
+        } else if (target === 'editAvatar') {
+          // Update immediately or save in state
+          updateDoc(doc(db, 'communities', activeCommId), { avatar: resultString }).catch(err => {
+            handleFirestoreError(err, OperationType.WRITE, `communities/${activeCommId}`);
+          });
+        }
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Action: Create New Community
+  const handleCreateCommunity = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCommName.trim()) return;
+
+    const newId = 'comm_' + Math.random().toString(36).substr(2, 9);
+    
+    const communityData = {
+      id: newId,
+      name: newCommName,
+      description: newCommDesc,
+      members: 1, // creator is member
+      avatar: newCommAvatar || '📁',
+      category: newCommCat,
+      language: newCommLang,
+      type: newCommType,
+      secureMode: newCommSecureMode,
+      ownerId: activeUserId,
+      moderators: [activeUserId],
+      createdAt: new Date().toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' }).replace('.', ''),
+      rules: newCommRules || '1. Respeite todos os membros.\n2. Sem spam.'
+    };
+
+    try {
+      await setDoc(doc(db, 'communities', newId), communityData);
+      
+      // Autojoin newly created community
+      const updated = [...joinedIds, newId];
+      await setDoc(doc(db, 'joined_communities', activeUserId), { communityIds: updated });
+
+      setShowCreateModal(false);
+      setActiveCommId(newId);
+
+      // Reset forms
+      setNewCommName('');
+      setNewCommDesc('');
+      setNewCommAvatar('💬');
+      setNewCommRules('');
+      setNewCommSecureMode(false);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, `communities/${newId}`);
+    }
+  };
+
+  // Action: Create New Topic Thread
+  const handleCreateTopic = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!postTitle.trim() || !postContent.trim()) return;
+
+    const topicId = 'top_' + Math.random().toString(36).substr(2, 9);
+    const newTopic: Topic = {
+      id: topicId,
+      communityId: activeCommId,
+      title: postTitle,
+      content: postContent,
+      authorId: activeUserId,
+      authorName: activeUserName,
+      authorAvatar: activeUserAvatar,
+      imageUrl: postImg || undefined,
+      createdAt: new Date().toISOString(),
+      views: 1,
+      repliesCount: 0,
+      isPinned: false
+    };
+
+    try {
+      await setDoc(doc(db, 'community_topics', topicId), newTopic);
+      setIsPostingTopic(false);
+      setPostTitle('');
+      setPostContent('');
+      setPostImg('');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, `community_topics/${topicId}`);
+    }
+  };
+
+  // Action: Add Reply to Thread
+  const handleAddReply = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!replyContent.trim() || !activeTopic) return;
+
+    const replyId = 'rep_' + Math.random().toString(36).substr(2, 9);
+    const newReply: Reply = {
+      id: replyId,
+      topicId: activeTopic.id,
+      communityId: activeCommId,
+      content: replyContent,
+      authorId: activeUserId,
+      authorName: activeUserName,
+      authorAvatar: activeUserAvatar,
+      createdAt: new Date().toISOString(),
+      likes: 0,
+      likedBy: []
+    };
+
+    try {
+      await setDoc(doc(db, 'community_replies', replyId), newReply);
+      
+      // Update replies count in main topic document
+      await updateDoc(doc(db, 'community_topics', activeTopic.id), {
+        repliesCount: (activeTopic.repliesCount || 0) + 1
+      });
+
+      // Save a retro notification into DB if author of the thread is online
+      if (activeTopic.authorId !== activeUserId) {
+        const notifId = 'not_' + Math.random().toString(36).substr(2, 9);
+        await setDoc(doc(db, 'community_notifications', notifId), {
+          id: notifId,
+          targetUserId: activeTopic.authorId,
+          type: 'reply',
+          content: `${activeUserName} respondeu seu tópico "${activeTopic.title}" na comunidade ${activeComm?.name}`,
+          createdAt: new Date().toISOString(),
+          read: false
+        });
+      }
+
+      setReplyContent('');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, `community_replies/${replyId}`);
+    }
+  };
+
+  // Action: Edit Reply
+  const handleSaveEditedReply = async (replyId: string) => {
+    if (!editingReplyText.trim()) return;
+
+    try {
+      await updateDoc(doc(db, 'community_replies', replyId), {
+        content: editingReplyText
+      });
+      setEditingReplyId(null);
+      setEditingReplyText('');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, `community_replies/${replyId}`);
+    }
+  };
+
+  // Action: Delete Reply
+  const handleDeleteReply = async (reply: Reply) => {
+    if (!window.confirm("Deseja realmente apagar esta resposta?")) return;
+
+    try {
+      await deleteDoc(doc(db, 'community_replies', reply.id));
+      
+      // Decrement replies Count in Topic
+      if (activeTopic) {
+        await updateDoc(doc(db, 'community_topics', activeTopic.id), {
+          repliesCount: Math.max(0, (activeTopic.repliesCount || 1) - 1)
+        });
+      }
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `community_replies/${reply.id}`);
+    }
+  };
+
+  // Action: Like Reply
+  const handleLikeReply = async (reply: Reply) => {
+    const isLiked = reply.likedBy?.includes(activeUserId) || false;
+    let newLikedBy = reply.likedBy || [];
+    
+    if (isLiked) {
+      newLikedBy = newLikedBy.filter(uid => uid !== activeUserId);
+    } else {
+      newLikedBy = [...newLikedBy, activeUserId];
+    }
+
+    try {
+      await updateDoc(doc(db, 'community_replies', reply.id), {
+        likedBy: newLikedBy,
+        likes: newLikedBy.length
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, `community_replies/${reply.id}`);
+    }
+  };
+
+  // Action: Toggle Pinned state of Topic (Moderators/Owners only)
+  const handleTogglePinTopic = async (topic: Topic) => {
+    try {
+      await updateDoc(doc(db, 'community_topics', topic.id), {
+        isPinned: !topic.isPinned
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, `community_topics/${topic.id}`);
+    }
+  };
+
+  // Action: Delete Topic (Moderators/Owners only)
+  const handleDeleteTopic = async (topicId: string) => {
+    if (!window.confirm("Atenção: Apagar o tópico também excluirá suas respostas. Confirmar exclusão?")) return;
+
+    try {
+      await deleteDoc(doc(db, 'community_topics', topicId));
+      
+      // Close active topic view if open
+      if (activeTopic?.id === topicId) {
+        setActiveTopic(null);
+      }
+
+      // Read replies and prune them
+      const q = query(collection(db, 'community_replies'), where('topicId', '==', topicId));
+      const snapshot = await getDocs(q);
+      snapshot.forEach(async (repDoc) => {
+        await deleteDoc(doc(db, 'community_replies', repDoc.id));
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `community_topics/${topicId}`);
+    }
+  };
+
+  // Action: Edit Community Rules
+  const handleSaveCommunityEdits = async () => {
+    if (!activeComm) return;
+    try {
+      await updateDoc(doc(db, 'communities', activeCommId), {
+        description: activeComm.description,
+        rules: activeComm.rules || ''
+      });
+      setShowEditCommModal(false);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, `communities/${activeCommId}`);
+    }
+  };
+
+  // Check if current logged user is owner or moderator
+  const isUserModerator = () => {
+    if (!activeComm) return false;
+    return activeComm.ownerId === activeUserId || 
+           (activeComm.moderators && activeComm.moderators.includes(activeUserId)) || 
+           activeUserId === 'me'; // Developer overall moderation bypass
+  };
+
+  // Find current user profile
+  const myProfile = profiles[activeUserId] || profiles['me'] || Object.values(profiles)[0] || {
+    name: activeUserName,
+    avatar: activeUserAvatar,
+    username: 'scrapzone_mender',
+    location: 'Curitiba, PR - Brasil'
+  };
+
+  // Render Pinned Star icon or pin logo
+  const isJoined = activeComm ? joinedIds.includes(activeComm.id) : false;
+
   return (
-    <div id="communities-view" className="bg-white border border-neutral-300 rounded p-4 shadow-sm text-left relative font-sans">
-      <div className="flex flex-col md:flex-row md:items-center justify-between border-b pb-3 mb-4 gap-3">
+    <div id="scrapzone-communities-main" className="flex flex-col gap-4 font-sans text-left max-w-7xl mx-auto w-full">
+      
+      {/* 1. TOP HEADER & SEARCH SEARCH BAR - Match Mockup styling */}
+      <div className="bg-[#dee7f4] border border-neutral-300 rounded p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
+        
+        {/* Page title and nostalgic brand tagline */}
         <div>
-          <h2 className="text-lg font-bold font-sans text-neutral-800 flex items-center gap-1.5">
-            👥 Comunidades do Scrapzone Criptografado
+          <h2 className="text-xl font-bold text-neutral-800 flex items-center gap-1.5 leading-none">
+            👥 Comunidades
           </h2>
-          <p className="text-xs text-neutral-500 font-sans">
-            Entre nas maiores e mais nostálgicas comunidades do Scrapzone, agora isoladas com algoritmos criptográficos.
+          <p className="text-[10px] text-neutral-500 font-sans mt-1">
+            Volte para a era MSN / Orkut das comunidades clássicas do Brasil.
           </p>
         </div>
 
-        {/* Search */}
-        <div className="flex shadow-sm rounded border border-neutral-300 bg-white">
-          <input
-            id="comm-search"
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Procurar comunidades..."
-            className="px-2 py-1 text-xs w-[180px] focus:outline-none"
-          />
-          <button className="bg-[#dee7f4] px-2 border-l border-neutral-300 text-neutral-600">
-            <Search size={12} />
+        {/* Global actions: Search input and Create button */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex rounded border border-neutral-300 bg-white shadow-inner overflow-hidden">
+            <input
+              id="comm-mockup-search"
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Pesquisar comunidade"
+              className="px-2.5 py-1 text-xs w-[240px] focus:outline-none placeholder-neutral-400 text-neutral-700"
+            />
+            <button className="bg-[#dee7f4] px-3 hover:bg-neutral-200 border-l border-neutral-300 text-neutral-600 transition-colors">
+              <Search size={14} className="stroke-[2.5]" />
+            </button>
+          </div>
+          
+          <button 
+            onClick={() => setShowCreateModal(true)}
+            className="bg-pink-600 text-white font-extrabold text-[11px] uppercase tracking-wide px-3 py-1.5 rounded-sm shadow border border-pink-700 hover:bg-pink-700 transition-colors flex items-center gap-1 cursor-pointer"
+          >
+            <PlusCircle size={13} className="stroke-[3]" />
+            Criar Comunidade
           </button>
         </div>
+
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {filtered.map((comm) => {
-          const isJoined = joinedIds.includes(comm.id);
-          const isSecretModalOpen = showRiddleModal === comm.id;
-
-          return (
-            <div
-              key={comm.id}
-              className={`border rounded p-3 flex gap-3 bg-neutral-50 hover:bg-white transition-all shadow-sm ${
-                isJoined ? 'border-green-300' : 'border-neutral-300'
-              }`}
-            >
-              {/* Avatar Icon */}
-              <div className="w-14 h-14 bg-[#fae8ff] text-[#d946ef] rounded border border-neutral-200 flex-shrink-0 flex items-center justify-center text-3xl select-none shadow-inner">
-                {comm.avatar}
-              </div>
-
-              {/* Body */}
-              <div className="flex-1 flex flex-col justify-between text-xs">
-                <div>
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <h3 className="font-bold text-neutral-800 text-xs hover:underline cursor-pointer">{comm.name}</h3>
-                    {comm.secureMode && (
-                      <span className="bg-pink-100 text-pink-800 border border-pink-200 px-1 py-0 rounded text-[9px] font-bold flex items-center gap-0.5 font-mono">
-                        <Lock size={8} /> SECURE GUILD
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-neutral-500 text-[11px] mt-0.5 leading-snug">{comm.description}</p>
-                </div>
-
-                <div className="flex items-center justify-between mt-3 pt-2 border-t border-dotted border-neutral-200 text-[10px]">
-                  <span className="text-neutral-500 font-mono flex items-center gap-1">
-                    <Users size={12} />
-                    {comm.members + (isJoined ? 1 : 0)} membros
-                  </span>
-
-                  {isJoined ? (
-                    <span className="text-green-700 font-bold flex items-center gap-1">
-                      <ShieldCheck size={12} className="text-green-600" />
-                      Membro Verificado
-                    </span>
+      {/* Grid of All matching or filtered communities if we are not looking at a detail profile, styled as a handy scroller before active */}
+      {searchQuery && (
+        <div className="bg-[#f0f4fa] border-2 border-dashed border-neutral-300 rounded p-3">
+          <h3 className="text-xs font-bold text-neutral-600 mb-2 uppercase tracking-tight">
+            Resultados de Busca ({filteredCommunities.length}):
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+            {filteredCommunities.map(comm => (
+              <div 
+                key={comm.id}
+                onClick={() => {
+                  setActiveCommId(comm.id);
+                  setActiveTopic(null);
+                  setSearchQuery('');
+                }}
+                className="bg-white border rounded p-2 flex items-center gap-3.5 hover:border-pink-400 cursor-pointer transition-all shadow-sm"
+              >
+                <div className="w-10 h-10 rounded bg-[#eff6ff] flex items-center justify-center text-xl shadow-inner border overflow-hidden">
+                  {comm.avatar && comm.avatar.startsWith('data:') ? (
+                    <img src={comm.avatar} alt={comm.name} className="w-full h-full object-cover" />
                   ) : (
-                    <button
-                      id={`btn-join-comm-${comm.id}`}
-                      onClick={() => handleJoinClick(comm)}
-                      className={`font-semibold rounded px-2.5 py-1 text-[10px] cursor-pointer shadow-sm transition-all text-neutral-700 border border-neutral-300 bg-white hover:bg-neutral-100`}
-                    >
-                      {comm.secureMode ? "Decifrar para Entrar" : "Entrar Já"}
-                    </button>
+                    <span>{comm.avatar || '👥'}</span>
                   )}
                 </div>
+                <div className="flex-1 min-w-0">
+                  <h4 className="text-xs font-bold text-indigo-900 truncate">{comm.name}</h4>
+                  <p className="text-[9.5px] text-neutral-400 truncate">{comm.description}</p>
+                  <span className="text-[8.5px] font-mono text-pink-600 font-bold bg-pink-50 px-1 rounded">
+                    {comm.category}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
-                {/* Secure riddle mini-modal inline */}
-                {isSecretModalOpen && (
-                  <div className="mt-3 p-3 bg-pink-50 border border-pink-200 rounded text-left anim-fade">
-                    <h4 className="font-bold text-pink-700 mb-1 flex items-center gap-1 p-0">
-                      <HelpCircle size={12} /> Desafio de Prova Criptográfica:
-                    </h4>
-                    
-                    {comm.id === 'sec_pr' && (
-                      <p className="text-[10px] text-neutral-600 mb-2 leading-relaxed">
-                        Qual linguagem de programação focada em segurança de memória e livre de null pointer o Paraná está usando nos sistemas estaduais? (Dica: começa com 'r' e termina com 't')
-                      </p>
-                    )}
-                    {comm.id === 'hacker_guild' && (
-                      <p className="text-[10px] text-neutral-600 mb-2 leading-relaxed">
-                        Qual o nome do exploit preferido do Orkut antigo que inseria scripts em depoimentos para ler cookies de sessão das vítimas? (Dica: sigla de 3 letras)
-                      </p>
-                    )}
-                    {comm.id === 'orkut_devs' && (
-                      <p className="text-[10px] text-neutral-600 mb-2 leading-relaxed">
-                        Complete o paradigma de segurança: Prova de Conhecimento ______ [Zero] (Insira a palavra em português ou inglês)
-                      </p>
-                    )}
+      {activeComm ? (
+        <div className="flex flex-col gap-3">
+          {/* Back button to Minhas Comunidades list */}
+          <div className="text-left select-none">
+            <button
+              onClick={() => handleSelectCommunity(null)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-neutral-100 hover:bg-neutral-200 border-2 border-neutral-300 rounded-lg text-xs font-extrabold text-neutral-700 tracking-tight transition-all cursor-pointer font-sans shadow-xs"
+            >
+              <ArrowLeft size={13} className="stroke-[3]" />
+              <span>◀ Voltar para Minhas Comunidades</span>
+            </button>
+          </div>
 
-                    <div className="flex gap-2.5">
-                      <input
-                        id={`riddle-answer-${comm.id}`}
-                        type="text"
-                        value={riddleAnswer}
-                        onChange={(e) => setRiddleAnswer(e.target.value)}
-                        placeholder="Insira a frase secreta..."
-                        className="flex-1 px-2 py-1 text-xs border border-neutral-300 rounded focus:outline-none"
-                      />
-                      <button
-                        id={`btn-solve-riddle-${comm.id}`}
-                        onClick={() => handleResolveRiddle(comm)}
-                        className="px-2.5 py-1 bg-pink-700 text-white rounded font-bold hover:bg-pink-800 cursor-pointer"
-                      >
-                        Validar Prova
-                      </button>
-                    </div>
+          {/* 2. THE THREE-COLUMN LAYOUT - Core Requirement */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+          
+          {/* ================= COLUMN 1 (LEFT): PHOTO AND META INFO ================= */}
+          <div className="lg:col-span-3 flex flex-col gap-4">
+
+            {/* A. PHOTO BOX */}
+            <div className="bg-white border-2 border-neutral-300 rounded p-2.5 shadow-sm text-center flex flex-col items-center">
+              
+              <div className="w-full aspect-square bg-[#dee7f4] rounded-sm border-2 border-dashed border-neutral-400 overflow-hidden relative flex items-center justify-center text-8xl shadow-inner group">
+                
+                {activeComm.avatar && activeComm.avatar.startsWith('data:') ? (
+                  <img src={activeComm.avatar} alt="Nostalgia" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                ) : activeComm.avatar && (activeComm.avatar.startsWith('http://') || activeComm.avatar.startsWith('https://')) ? (
+                  <img src={activeComm.avatar} alt="Community avatar" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                ) : (
+                  <span className="select-none filter drop-shadow font-sans pr-2">
+                    {activeComm.avatar || '⏰'}
+                  </span>
+                )}
+                
+                {/* Upload override trigger overlay if user has moderation role */}
+                {isUserModerator() && (
+                  <div 
+                    onClick={() => editCommFileInputRef.current?.click()}
+                    className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white text-[10px] uppercase font-black cursor-pointer gap-1.5"
+                  >
+                    <Camera size={20} className="text-pink-400" />
+                    Alterar Capa
                   </div>
                 )}
               </div>
+
+              {/* Hidden file selector tag */}
+              <input 
+                type="file"
+                ref={editCommFileInputRef}
+                className="hidden"
+                accept="image/*"
+                onChange={(e) => handleImageUploadReader(e, 'editAvatar')}
+              />
+
+              {isUserModerator() && (
+                <button 
+                  onClick={() => setShowEditCommModal(true)}
+                  className="mt-2 text-[9px] font-bold text-neutral-500 hover:text-black flex items-center gap-1 cursor-pointer bg-neutral-100 hover:bg-neutral-200 px-2.5 py-1 rounded"
+                >
+                  <Settings size={10} />
+                  Editar Dados da Comunidade
+                </button>
+              )}
+
             </div>
-          );
-        })}
+
+            {/* B. DETAILED INFORMACÕES INFO CARD (Light blue/purple retro table styling) */}
+            <div className="bg-white border-2 border-neutral-300 rounded p-3 shadow-sm flex flex-col gap-1 font-sans text-[11px]">
+              
+              <div className="grid grid-cols-2 gap-y-2 text-left">
+                
+                {/* Category */}
+                <div>
+                  <span className="block text-[9px] font-extrabold text-pink-600 uppercase">Categoria:</span>
+                  <span className="font-bold text-indigo-950 font-sans">{activeComm.category || 'Nostalgia'}</span>
+                </div>
+
+                {/* Total Members */}
+                <div>
+                  <span className="block text-[9px] font-extrabold text-pink-600 uppercase">Membros:</span>
+                  <span className="font-bold text-neutral-800 font-mono">{totalMembresiaExibicao}</span>
+                </div>
+
+                {/* Create/Launch Date */}
+                <div className="border-t border-neutral-100 pt-1.5">
+                  <span className="block text-[9px] font-extrabold text-pink-600 uppercase">Criada em:</span>
+                  <span className="font-bold text-neutral-600">{activeComm.createdAt || 'Jan 2025'}</span>
+                </div>
+
+                {/* Language */}
+                <div className="border-t border-neutral-100 pt-1.5">
+                  <span className="block text-[9px] font-extrabold text-pink-600 uppercase">Idioma:</span>
+                  <span className="font-bold text-neutral-600">{activeComm.language || 'Português'}</span>
+                </div>
+
+                {/* Type block */}
+                <div className="col-span-2 border-t border-dashed border-neutral-200 pt-1.5">
+                  <span className="block text-[9px] font-extrabold text-pink-600 uppercase">Tipo:</span>
+                  <span className="font-bold text-neutral-700 flex items-center gap-1 mt-0.5">
+                    {activeComm.secureMode ? (
+                      <span className="bg-fuchsia-100 text-fuchsia-800 border border-fuchsia-200 px-1.5 py-0.5 rounded text-[8.5px] font-black flex items-center gap-0.5">
+                        <Lock size={9} /> PRIVADA (CRIPTOGRAFADA)
+                      </span>
+                    ) : (
+                      <span className="bg-blue-50 text-blue-800 border border-blue-100 px-1.5 py-0.5 rounded text-[8.5px] font-black flex items-center gap-0.5">
+                        <Globe size={9} /> PÚBLICA
+                      </span>
+                    )}
+                  </span>
+                </div>
+
+              </div>
+
+            </div>
+
+          </div>
+
+          {/* ================= COLUMN 2 (CENTER): MAIN HEADER, ACTION BUTTONS & FORUM ================= */}
+          <div className="lg:col-span-6 flex flex-col gap-4">
+
+            {/* A. CABEÇALHO DA COMUNIDADE (Community Title & Description box) */}
+            <div className="bg-white border border-neutral-300 rounded p-4 shadow-sm flex flex-col gap-2 relative">
+              
+              <div className="flex justify-between items-start">
+                <h1 className="text-lg md:text-xl font-bold font-sans text-[#1d4ed8] uppercase tracking-wide">
+                  {activeComm.name}
+                </h1>
+              </div>
+
+              <p className="text-xs md:text-[13px] text-neutral-700 leading-relaxed font-sans pr-2">
+                {activeComm.description}
+              </p>
+
+              {/* B. ACTION BUTTONS ROW */}
+              <div className="flex items-center gap-2 mt-2 pt-3 border-t border-dashed border-neutral-200">
+                
+                <button 
+                  onClick={() => setShowRulesModal(true)}
+                  className="bg-[#cbd5e1] hover:bg-[#b8c9df] text-neutral-800 border border-neutral-400 rounded px-4 py-1 text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
+                >
+                  <Info size={13} />
+                  Regras
+                </button>
+
+                <button 
+                  onClick={handleToggleJoin}
+                  className={`border font-bold rounded px-4 py-1 text-xs transition-all shadow-sm flex items-center gap-1 cursor-pointer ${
+                    isJoined 
+                      ? 'bg-rose-50 border-rose-300 text-rose-700 hover:bg-rose-100' 
+                      : 'bg-green-600 border-green-700 text-white hover:bg-green-700'
+                  }`}
+                >
+                  {isJoined ? (
+                    <>
+                      <LogOut size={13} />
+                      Sair da Comunidade
+                    </>
+                  ) : (
+                    <>
+                      <Users size={13} />
+                      Participar
+                    </>
+                  )}
+                </button>
+
+                <button 
+                  disabled={!isJoined}
+                  onClick={() => {
+                    setIsPostingTopic(!isPostingTopic);
+                    setActiveTopic(null); // Close topic details
+                  }}
+                  className={`font-semibold rounded px-4 py-1 text-xs transition-all shadow-sm flex items-center gap-1 text-[#0f172a] border border-neutral-400 bg-white hover:bg-neutral-100 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed`}
+                >
+                  <PlusCircle size={13} className="text-[#10b981]" />
+                  Postar
+                </button>
+
+              </div>
+
+            </div>
+
+            {/* C. TOPIC CREATION FORM (COLLAPSED OR EXPANDED STATE) */}
+            {isPostingTopic && isJoined && (
+              <div className="bg-white border-2 border-pink-400 rounded p-4 shadow-md text-left anim-fade">
+                <h2 className="text-xs font-extrabold uppercase text-pink-600 border-b pb-1.5 mb-3.5 flex items-center justify-between">
+                  <span>📝 Novo Tópico no Fórum</span>
+                  <button 
+                    onClick={() => setIsPostingTopic(false)}
+                    className="hover:text-red-500 font-bold font-mono"
+                  >
+                    fechar (x)
+                  </button>
+                </h2>
+
+                <form onSubmit={handleCreateTopic} className="flex flex-col gap-3 text-xs">
+                  
+                  <div>
+                    <label className="block text-[10px] font-bold text-neutral-500 mb-1">TÍTULO DO TÓPICO:</label>
+                    <input
+                      id="forum-topic-title-input"
+                      type="text"
+                      required
+                      value={postTitle}
+                      onChange={(e) => setPostTitle(e.target.value)}
+                      placeholder="Ex: Quem mais odeia o barulho do despertador?"
+                      className="w-full px-2 py-1.5 border rounded focus:outline-none focus:ring-1 focus:ring-pink-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-neutral-500 mb-1">MENSAGEM:</label>
+                    <textarea
+                      id="forum-topic-content-input"
+                      required
+                      rows={4}
+                      value={postContent}
+                      onChange={(e) => setPostContent(e.target.value)}
+                      placeholder="Escreva seu ponto de vista para iniciar o debate..."
+                      className="w-full px-2 py-1.5 border rounded focus:outline-none focus:ring-1 focus:ring-pink-500 font-sans"
+                    />
+                  </div>
+
+                  {/* Optional Image uploaded manually via reader */}
+                  <div>
+                    <label className="block text-[10px] font-bold text-neutral-500 mb-1">IMAGEM OPCIONAL (ANEXO):</label>
+                    <div className="flex gap-2 items-center">
+                      <button
+                        type="button"
+                        onClick={() => topicFileInputRef.current?.click()}
+                        className="bg-neutral-100 hover:bg-neutral-200 border border-neutral-300 text-neutral-700 px-3 py-1.5 rounded font-extrabold text-[10px] uppercase flex items-center gap-1 cursor-pointer"
+                      >
+                        <Image size={11} />
+                        Escolher Arquivo
+                      </button>
+                      <input 
+                        type="file"
+                        ref={topicFileInputRef}
+                        className="hidden"
+                        accept="image/*"
+                        onChange={(e) => handleImageUploadReader(e, 'topicImage')}
+                      />
+                      {postImg ? (
+                        <div className="flex items-center gap-1.5 bg-green-50 text-green-700 border border-green-200 px-2 py-1 rounded text-[10px]">
+                          <span className="truncate max-w-[120px]">Imagem carregada (Base64)</span>
+                          <button type="button" onClick={() => setPostImg('')} className="text-red-500 font-extrabold">x</button>
+                        </div>
+                      ) : (
+                        <span className="text-neutral-400 text-[10px]">Nenhuma foto anexada</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="self-start mt-2 bg-pink-600 hover:bg-pink-700 text-white font-extrabold px-4 py-2 rounded shadow transition-all cursor-pointer"
+                  >
+                    Publicar Tópico
+                  </button>
+
+                </form>
+              </div>
+            )}
+
+            {/* D. THE FORUM SYSTEM: LIST VIEW OR DETAIL VIEW (THE MAIN VISUAL ENGINE) */}
+            {!activeTopic ? (
+              
+              /* ====== MODE D1: LIST OF TOPICS ====== */
+              <div className="bg-white border border-neutral-300 rounded overflow-hidden shadow-sm flex flex-col">
+                
+                {/* Forum banner stats */}
+                <div className="bg-[#eff6ff] px-4 py-2 border-b border-neutral-200 flex items-center justify-between font-sans">
+                  <h3 className="text-sm font-extrabold text-neutral-800">
+                    Fórum de Debates
+                  </h3>
+                  <div className="text-[10px] font-mono font-bold text-neutral-500 flex gap-2">
+                    <span>Tópicos: {forumTopics.length}</span>
+                    <span className="text-pink-600">Posts Hoje: {forumTopics.filter(t => new Date(t.createdAt).toDateString() === new Date().toDateString()).length}</span>
+                  </div>
+                </div>
+
+                {/* Topics Container */}
+                <div className="flex flex-col">
+                  {forumTopics.length === 0 ? (
+                    <div className="p-8 text-center text-neutral-400 text-xs flex flex-col items-center gap-1 font-mono">
+                      <AlertCircle size={24} className="text-neutral-300" />
+                      Nenhum tópico criado neste fórum ainda.
+                    </div>
+                  ) : (
+                    forumTopics.map((topic, index) => (
+                      <div key={topic.id} className="flex flex-col">
+                        
+                        {/* Dot separator line in-between rows (Mockup style) */}
+                        {index > 0 && (
+                          <div className="text-[#a1a1aa] overflow-hidden text-[9px] font-mono leading-none py-1 select-none flex justify-center tracking-widest bg-slate-50 border-t border-b border-dotted border-zinc-200">
+                            ••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
+                          </div>
+                        )}
+
+                        <div 
+                          onClick={() => {
+                            setActiveTopic(topic);
+                            setIsPostingTopic(false);
+                            setRepliesPage(1);
+                            // Increment views count in database
+                            updateDoc(doc(db, 'community_topics', topic.id), {
+                              views: (topic.views || 0) + 1
+                            }).catch(err => {
+                              handleFirestoreError(err, OperationType.WRITE, `community_topics/${topic.id}`);
+                            });
+                          }}
+                          className={`p-3 flex items-start gap-3 hover:bg-neutral-50 cursor-pointer transition-colors ${
+                            topic.isPinned ? 'bg-yellow-50/70 border-l-4 border-yellow-400' : ''
+                          }`}
+                        >
+                          {/* Folder Emoji/Icon */}
+                          <div className="w-8 h-8 rounded bg-indigo-50 border border-slate-200 text-slate-600 flex-shrink-0 flex items-center justify-center text-md shadow-inner select-none font-sans">
+                            {topic.isPinned ? '📌' : '💬'}
+                          </div>
+
+                          {/* Body details */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <h4 className="font-bold text-xs hover:underline text-neutral-800 font-sans tracking-tight leading-tight">
+                                {topic.title}
+                              </h4>
+                              {topic.isPinned && (
+                                <span className="bg-yellow-200 text-yellow-800 border border-yellow-300 font-black tracking-wide text-[8.5px] px-1 py-0.2 rounded font-sans uppercase">
+                                  FIXADO
+                                </span>
+                              )}
+                            </div>
+                            
+                            <p className="text-[10px] text-neutral-400 font-sans mt-0.5">
+                              Por: <span className="font-bold text-neutral-600">{topic.authorName}</span> • {new Date(topic.createdAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                            </p>
+                          </div>
+
+                          {/* Thread Stats block */}
+                          <div className="text-right text-[10px] font-mono text-neutral-400 min-w-[70px] self-center">
+                            <div className="font-bold text-[#1d4ed8]">{topic.repliesCount || 0} resps</div>
+                            <div className="text-[8.5px]">{topic.views || 0} visitas</div>
+                          </div>
+
+                          {/* Moderator Controls */}
+                          {isUserModerator() && (
+                            <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                              <button 
+                                onClick={() => handleTogglePinTopic(topic)}
+                                title={topic.isPinned ? "Desfixar Tópico" : "Fixar Tópico"}
+                                className={`p-1 rounded text-neutral-400 hover:text-black hover:bg-neutral-100`}
+                              >
+                                {topic.isPinned ? <PinOff size={11} /> : <Pin size={11} />}
+                              </button>
+                              <button 
+                                onClick={() => handleDeleteTopic(topic.id)}
+                                title="Deletar Tópico"
+                                className="p-1 rounded text-rose-400 hover:text-rose-600 hover:bg-rose-50"
+                              >
+                                <Trash2 size={11} />
+                              </button>
+                            </div>
+                          )}
+
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+              </div>
+
+            ) : (
+
+              /* ====== MODE D2: DETAILED TOPIC THREAD ====== */
+              <div className="bg-white border border-neutral-300 rounded p-4 shadow-sm flex flex-col gap-4 text-xs font-sans">
+                
+                {/* Back button */}
+                <button 
+                  onClick={() => setActiveTopic(null)}
+                  className="self-start text-[#1d4ed8] hover:underline font-bold text-[11px] flex items-center gap-1 cursor-pointer"
+                >
+                  <ArrowLeft size={12} className="stroke-[2.5]" />
+                  Voltar ao Fórum
+                </button>
+
+                {/* 1. ORIGINAL POST (Header card) */}
+                <div className="border border-neutral-200 bg-neutral-50/50 rounded-sm p-3.5 relative">
+                  
+                  <div className="flex items-start justify-between gap-2.5">
+                    
+                    {/* Author block */}
+                    <div className="flex items-center gap-2">
+                      <img 
+                        src={activeTopic.authorAvatar} 
+                        alt={activeTopic.authorName} 
+                        className="w-7 h-7 rounded border object-cover" 
+                        referrerPolicy="no-referrer"
+                      />
+                      <div>
+                        <span className="font-extrabold text-[11px] text-[#1d4ed8] hover:underline cursor-pointer" onClick={() => onNavigateToFriend(activeTopic.authorId)}>
+                          {activeTopic.authorName}
+                        </span>
+                        <span className="block text-[8.5px] text-neutral-400">
+                          {new Date(activeTopic.createdAt).toLocaleString('pt-BR', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' })}
+                        </span>
+                      </div>
+                    </div>
+
+                    {isUserModerator() && (
+                      <button 
+                        onClick={() => handleDeleteTopic(activeTopic.id)}
+                        className="bg-red-50 hover:bg-red-100 text-red-600 px-1.5 py-0.5 rounded text-[9px] font-bold flex items-center gap-0.5"
+                      >
+                        <Trash2 size={10} /> Deletar Tópico
+                      </button>
+                    )}
+
+                  </div>
+
+                  <h3 className="font-black text-sm text-indigo-900 mt-3 border-b-2 border-slate-200 pb-1.5 mb-2 leading-none uppercase tracking-wide">
+                    {activeTopic.title}
+                  </h3>
+
+                  <p className="text-neutral-700 leading-relaxed whitespace-pre-wrap font-sans text-xs">
+                    {activeTopic.content}
+                  </p>
+
+                  {/* Attachment drawing */}
+                  {activeTopic.imageUrl && (
+                    <div className="mt-2 text-center bg-black border border-dashed border-neutral-700 p-1 rounded inline-block max-w-sm">
+                      <img src={activeTopic.imageUrl} className="max-h-72 object-contain mx-auto border-2 border-white" alt="Thread attachment" referrerPolicy="no-referrer" />
+                    </div>
+                  )}
+
+                </div>
+
+                {/* 2. REPLIES LIST */}
+                <div className="flex flex-col gap-2">
+                  <h4 className="text-[10px] font-black uppercase text-pink-600 border-b pb-1 tracking-wider">
+                    Respostas ({topicReplies.length})
+                  </h4>
+
+                  {topicReplies.length === 0 ? (
+                    <div className="p-4 text-center text-neutral-400 font-mono text-[10px]">
+                      Seja o primeiro a responder a este tópico!
+                    </div>
+                  ) : (
+                    topicReplies.map((reply) => {
+                      const isLikedByMe = reply.likedBy?.includes(activeUserId) || false;
+                      const isMyReply = reply.authorId === activeUserId;
+
+                      return (
+                        <div 
+                          key={reply.id} 
+                          className="border border-neutral-150 p-2.5 rounded-sm flex gap-3 text-xs bg-white text-left font-sans hover:bg-slate-50 transition-colors"
+                        >
+                          {/* Avatar icon */}
+                          <div className="text-center font-sans">
+                            <img 
+                              onClick={() => onNavigateToFriend(reply.authorId)}
+                              src={reply.authorAvatar} 
+                              alt={reply.authorName} 
+                              className="w-10 h-10 rounded border object-cover cursor-pointer hover:opacity-85 shadow-sm mx-auto" 
+                              referrerPolicy="no-referrer"
+                            />
+                            <div className="max-w-[70px] truncate leading-tight mt-1 text-[9.5px]">
+                              <span className="font-extrabold text-[#1d4ed8] hover:underline cursor-pointer" onClick={() => onNavigateToFriend(reply.authorId)}>
+                                {reply.authorName}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Chat bubble body */}
+                          <div className="flex-1 min-w-0 flex flex-col justify-between">
+                            
+                            {/* Text section */}
+                            <div>
+                              
+                              <div className="text-[8px] text-neutral-400 flex items-center justify-between">
+                                <span>{new Date(reply.createdAt).toLocaleString('pt-BR')}</span>
+                                
+                                {/* Edit & Delete Operations for owner or author */}
+                                <div className="flex items-center gap-1.5 font-sans">
+                                  {isMyReply && (
+                                    <button 
+                                      onClick={() => {
+                                        setEditingReplyId(reply.id);
+                                        setEditingReplyText(reply.content);
+                                      }}
+                                      className="text-[#1d4ed8] hover:underline hover:text-blue-800 font-bold"
+                                    >
+                                      Editar
+                                    </button>
+                                  )}
+                                  {(isMyReply || isUserModerator()) && (
+                                    <button 
+                                      onClick={() => handleDeleteReply(reply)}
+                                      className="text-red-600 hover:underline hover:text-red-800 font-bold"
+                                    >
+                                      Excluir
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Content text */}
+                              {editingReplyId === reply.id ? (
+                                <div className="mt-1.5 flex flex-col gap-1.5 font-sans">
+                                  <textarea
+                                    id={`edit-reply-content-${reply.id}`}
+                                    className="w-full px-2 py-1 border rounded"
+                                    rows={3}
+                                    value={editingReplyText}
+                                    onChange={(e) => setEditingReplyText(e.target.value)}
+                                  />
+                                  <div className="flex gap-2">
+                                    <button 
+                                      onClick={() => handleSaveEditedReply(reply.id)}
+                                      className="bg-green-600 hover:bg-green-700 text-white rounded px-2.5 py-1 text-[10px] font-extrabold cursor-pointer"
+                                    >
+                                      Salvar
+                                    </button>
+                                    <button 
+                                      onClick={() => setEditingReplyId(null)}
+                                      className="bg-neutral-200 hover:bg-neutral-300 rounded px-2.5 py-1 text-[10px] text-neutral-700 font-bold cursor-pointer"
+                                    >
+                                      Cancelar
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <p className="text-neutral-700 text-[11px] whitespace-pre-wrap leading-relaxed mt-1 font-sans">
+                                  {reply.content}
+                                </p>
+                              )}
+
+                            </div>
+
+                            {/* Likes system */}
+                            <div className="flex items-center gap-3 border-t border-dotted border-neutral-100 pt-1.5 mt-2 text-[10px]">
+                              
+                              <button 
+                                onClick={() => handleLikeReply(reply)}
+                                className={`flex items-center gap-1 cursor-pointer font-extrabold transition-all ${
+                                  isLikedByMe ? 'text-pink-600 scale-105' : 'text-neutral-400 hover:text-neutral-600'
+                                }`}
+                              >
+                                <ThumbsUp size={11} />
+                                <span>{isLikedByMe ? 'Gostei!' : 'Curtir'}</span>
+                              </button>
+
+                              {reply.likes > 0 && (
+                                <span className="text-[#a1a1aa] font-mono text-[9px]">
+                                  👍 {reply.likes} pessoa(s) curtiram isso
+                                </span>
+                              )}
+
+                            </div>
+
+                          </div>
+
+                        </div>
+                      )
+                    })
+                  )}
+                </div>
+
+                {/* 3. PAGINATION BUTTONS FOR RESPONSES */}
+                {topicReplies.length > repliesPerPage && (
+                  <div className="flex items-center justify-between border-t border-neutral-200 pt-3">
+                    <button 
+                      disabled={repliesPage === 1}
+                      onClick={() => setRepliesPage(repliesPage - 1)}
+                      className="px-2 py-1 bg-neutral-100 text-[#0f172a] hover:bg-neutral-200 rounded text-[10px] font-black disabled:opacity-40"
+                    >
+                      <ChevronLeft size={12} className="inline mr-1" /> Anterior
+                    </button>
+                    <span className="text-[10px] text-neutral-400 font-mono">Página {repliesPage} de {Math.ceil(topicReplies.length / repliesPerPage)}</span>
+                    <button 
+                      disabled={repliesPage * repliesPerPage >= topicReplies.length}
+                      onClick={() => setRepliesPage(repliesPage + 1)}
+                      className="px-2 py-1 bg-neutral-100 text-[#0f172a] hover:bg-neutral-200 rounded text-[10px] font-black disabled:opacity-40"
+                    >
+                      Próxima <ChevronRight size={12} className="inline ml-1" />
+                    </button>
+                  </div>
+                )}
+
+                {/* 4. REPLY FORM FOOTER */}
+                {isJoined ? (
+                  <form onSubmit={handleAddReply} className="mt-2.5 border-t-2 border-neutral-100 pt-3 flex flex-col gap-2">
+                    <label className="block text-[10px] font-black text-neutral-600 uppercase">📝 Enviar Resposta como {activeUserName}:</label>
+                    <textarea
+                      id="forum-reply-textarea-input"
+                      required
+                      rows={3}
+                      value={replyContent}
+                      onChange={(e) => setReplyContent(e.target.value)}
+                      placeholder="Diga o que você pensa sobre este tópico..."
+                      className="w-full px-2.5 py-1.5 border rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 font-sans text-xs"
+                    />
+                    <button
+                      type="submit"
+                      className="self-start mt-1 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold px-3 py-1.5 rounded transition-all cursor-pointer"
+                    >
+                      Responder Tópico
+                    </button>
+                  </form>
+                ) : (
+                  <div className="text-center p-3.5 bg-neutral-50/70 border rounded border-dashed text-neutral-500 italic mt-2.5 font-mono">
+                    ⚠️ Você precisa participar desta comunidade para poder postar respostas.
+                  </div>
+                )}
+
+              </div>
+            )}
+
+          </div>
+
+          {/* ================= COLUMN 3 (RIGHT): MEMBERS & RELATED COMMUNITIES ================= */}
+          <div className="lg:col-span-3 flex flex-col gap-4">
+
+            {/* A. CARD MEMBROS */}
+            <div className="bg-white border-2 border-neutral-300 rounded shadow-sm text-left relative flex flex-col">
+              
+              {/* Header Grid area */}
+              <div 
+                className="p-3 border-b border-neutral-200 flex items-center justify-between bg-zinc-50 cursor-pointer hover:bg-neutral-100/70 transition-colors"
+                onClick={() => setShowMembersModal(true)}
+              >
+                <div className="flex flex-col font-sans">
+                  <span className="font-extrabold text-[13px] text-neutral-800">Membros</span>
+                  <span className="text-[10px] text-pink-600 font-black tracking-tight underline select-none">
+                    Ver todos ({totalMembresiaExibicao})
+                  </span>
+                </div>
+                
+                {/* Minus / Plus scroll actions directly embedded in layout */}
+                <div className="flex items-center gap-1 select-none" onClick={(e) => e.stopPropagation()}>
+                  <button 
+                    onClick={() => handleSmoothScroll(membersScrollRef, 'up')}
+                    className="w-5 h-5 bg-white border border-neutral-300 rounded hover:bg-slate-100 flex items-center justify-center font-bold text-neutral-500 text-xs shadow-sm"
+                    title="Subir"
+                  >
+                    <Minus size={10} className="stroke-[3]" />
+                  </button>
+                  <button 
+                    onClick={() => handleSmoothScroll(membersScrollRef, 'down')}
+                    className="w-5 h-5 bg-white border border-neutral-300 rounded hover:bg-slate-100 flex items-center justify-center font-bold text-neutral-500 text-xs shadow-sm"
+                    title="Descer"
+                  >
+                    <Plus size={10} className="stroke-[3]" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Members Grid with customizable scroll assistant */}
+              <div 
+                ref={membersScrollRef}
+                className="p-3 overflow-y-auto max-h-[290px] scroll-smooth relative"
+                style={{ scrollbarWidth: 'thin' }}
+              >
+                <div className="grid grid-cols-3 gap-2.5">
+                  {communityMembers.slice(0, 18).map((member) => (
+                    <div 
+                      key={member.id}
+                      onClick={() => onNavigateToFriend(member.id)}
+                      className="flex flex-col items-center cursor-pointer group"
+                      title={member.name}
+                    >
+                      <div className="w-12 h-12 rounded bg-neutral-100 border overflow-hidden shadow-inner group-hover:scale-105 group-hover:border-pink-400 transition-all">
+                        <img 
+                          src={member.avatar} 
+                          alt={member.name} 
+                          className="w-full h-full object-cover" 
+                          referrerPolicy="no-referrer"
+                        />
+                      </div>
+                      <span className="text-[9px] text-neutral-500 text-center truncate w-full mt-1 group-hover:text-blue-700 tracking-tight leading-none">
+                        {member.name.split(' ')[0]}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+            </div>
+
+            {/* B. RELATED COMMUNITIES (CPMUNIDDES RELACIONADAS AS WRITTEN IN MOCKUP) */}
+            <div className="bg-white border-2 border-neutral-300 rounded shadow-sm text-left relative flex flex-col">
+              
+              {/* Header CPMUNIDDES RELACIONADAS */}
+              <div 
+                className="p-3 border-b border-neutral-200 flex items-center justify-between bg-zinc-50 cursor-pointer hover:bg-neutral-100/70 transition-colors"
+                onClick={() => setShowRelatedCommsModal(true)}
+              >
+                <div className="flex flex-col font-sans">
+                  <span className="font-extrabold text-[12px] text-neutral-800 uppercase tracking-tight">Comunidades Relacionadas</span>
+                  <span className="text-[9.5px] text-pink-600 font-extrabold tracking-tight underline">Recomendações clássicas</span>
+                </div>
+
+                <div className="flex items-center gap-1 select-none" onClick={(e) => e.stopPropagation()}>
+                  <button 
+                    onClick={() => handleSmoothScroll(relatedScrollRef, 'up')}
+                    className="w-5 h-5 bg-white border border-neutral-300 rounded hover:bg-slate-100 flex items-center justify-center font-bold text-neutral-500 text-xs shadow-sm"
+                  >
+                    <Minus size={10} className="stroke-[3]" />
+                  </button>
+                  <button 
+                    onClick={() => handleSmoothScroll(relatedScrollRef, 'down')}
+                    className="w-5 h-5 bg-white border border-neutral-300 rounded hover:bg-slate-100 flex items-center justify-center font-bold text-neutral-500 text-xs shadow-sm"
+                  >
+                    <Plus size={10} className="stroke-[3]" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Related container list */}
+              <div 
+                ref={relatedScrollRef}
+                className="p-3 overflow-y-auto max-h-[300px] scroll-smooth flex flex-col gap-2.5"
+                style={{ scrollbarWidth: 'thin' }}
+              >
+                {relatedCommunities.map((comm) => (
+                  <div 
+                    key={comm.id}
+                    onClick={() => {
+                      setActiveCommId(comm.id);
+                      setActiveTopic(null);
+                    }}
+                    className="flex items-center gap-2.5 p-1.5 rounded hover:bg-neutral-50 border border-transparent hover:border-pink-300 cursor-pointer transition-all shadow-inner"
+                  >
+                    <div className="w-9 h-9 rounded bg-[#eff6ff] text-[#4f46e5] flex items-center justify-center text-lg border flex-shrink-0 select-none overflow-hidden">
+                      {comm.avatar && comm.avatar.startsWith('data:') ? (
+                        <img src={comm.avatar} alt={comm.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <span>{comm.avatar || '👥'}</span>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="text-[11.5px] font-bold text-neutral-800 leading-tight hover:underline truncate">{comm.name}</h4>
+                      <p className="text-[9.5px] text-neutral-400 truncate">{comm.description}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+            </div>
+
+          </div>
+        </div>
       </div>
+
+      ) : dbCommunities.length === 0 ? (
+        <div className="p-16 border rounded bg-white text-center font-mono flex flex-col items-center justify-center gap-2">
+          <RefreshCw size={24} className="text-pink-500 animate-spin" />
+          <span>Sincronizando banco de dados de comunidades clássicas do Orkut...</span>
+        </div>
+      ) : (
+        /* MINHAS COMUNIDADES LIST PORTAL - Matches Mockup perfectly */
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 text-left">
+          {/* ================= COLUMN 1 (LEFT): USER PROFILE PANEL ================= */}
+          <div className="lg:col-span-3 flex flex-col gap-4">
+            
+            {/* Profile Card */}
+            <div className="bg-white border-2 border-neutral-300 rounded p-3 text-center shadow-xs">
+              <div className="relative group mx-auto w-36 h-36 border border-neutral-300 overflow-hidden bg-neutral-100 rounded">
+                <img
+                  src={myProfile.avatar}
+                  alt={myProfile.name}
+                  className="w-full h-full object-cover"
+                  referrerPolicy="no-referrer"
+                />
+              </div>
+
+              <h2 className="text-sm font-bold mt-2 flex items-center justify-center gap-1 break-all font-sans text-neutral-800">
+                {(myProfile as any).nome_exibicao || myProfile.name}
+              </h2>
+              {myProfile.username && (
+                <p className="text-[10px] font-mono opacity-80 mt-0.5 text-neutral-500">
+                  @{myProfile.username}
+                </p>
+              )}
+              
+              <p className="text-[11px] font-sans flex items-center justify-center gap-1 mt-1 text-neutral-500">
+                <MapPin size={12} className="inline shrink-0 text-neutral-400" />
+                {myProfile.location || 'Curitiba, PR - Brasil'}
+              </p>
+
+              <div className="border-t border-dashed border-neutral-300 mt-3 pt-3 text-left">
+                <span className="text-[10px] font-bold uppercase tracking-widest block mb-1 text-neutral-400">Criptografia Local</span>
+                <div className="flex items-center gap-1.5 p-1 px-2 bg-green-500/10 border border-green-500/40 rounded text-[10px] text-green-700 font-semibold font-mono">
+                  <ShieldCheck size={14} className="text-green-650 flex-shrink-0" />
+                  Chave RSA Ativa
+                </div>
+                <div className="flex items-center gap-1.5 p-1 px-2 mt-1.5 bg-blue-500/15 border border-blue-500/30 rounded text-[9px] text-[#1d4ed8] font-semibold font-mono">
+                  🛡️ Protegido contra Exploit Antigo
+                </div>
+              </div>
+
+              {/* Gerenciar Imagens */}
+              <div className="border-t border-dashed border-neutral-300 mt-2.5 pt-2.5 text-center flex flex-col gap-1.5">
+                <div className="text-[10px] uppercase font-bold text-neutral-400 font-sans">
+                  Gerenciar Imagens
+                </div>
+                <GlossyRetroButton
+                  id="portal-btn-photos"
+                  onClick={() => {
+                    if (onNavigateToTab) onNavigateToTab('photos');
+                  }}
+                  variant="action"
+                  className="w-full text-[10px] h-9 py-0 uppercase"
+                >
+                  Add Fotos
+                </GlossyRetroButton>
+              </div>
+
+              {/* Conversa Secreta */}
+              <div className="border-t border-dashed border-neutral-300 mt-2.5 pt-2.5 text-center flex flex-col gap-1.5">
+                <div className="text-[10px] uppercase font-bold text-neutral-400 font-sans">
+                  Conversa Secreta (48h)
+                </div>
+                <GlossyRetroButton
+                  id="portal-btn-msg"
+                  onClick={() => {
+                    if (onNavigateToTab) {
+                      onNavigateToTab('profile');
+                    }
+                  }}
+                  variant="action"
+                  className="w-full text-[10px] h-9 py-0 uppercase bg-pink-600 hover:bg-pink-700 text-white"
+                >
+                  💬 Mensagem
+                </GlossyRetroButton>
+              </div>
+
+              {/* Menu Social */}
+              <div className="border bg-zinc-50 border-neutral-300 mt-4 rounded p-2 text-left text-[11px] font-sans">
+                <span className="text-[9.5px] uppercase font-black text-neutral-400 block mb-1">Menu Social</span>
+                <div className="flex flex-col gap-1 text-blue-700 font-semibold">
+                  <button onClick={() => onNavigateToTab?.('profile')} className="hover:underline text-left cursor-pointer">Meu Perfil</button>
+                  <button onClick={() => onNavigateToTab?.('scrapbook')} className="hover:underline text-left cursor-pointer">Recados</button>
+                  <button onClick={() => onNavigateToTab?.('testimonials')} className="hover:underline text-left cursor-pointer">Depoimentos</button>
+                  <button onClick={() => handleSelectCommunity(null)} className="hover:underline text-left text-pink-600 cursor-pointer">📚 Minhas Comunidades</button>
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+
+          {/* ================= COLUMN 2 (RIGHT): DETAILED GRID OF PARTICIPATING COMMUNITIES ================= */}
+          <div className="lg:col-span-9 flex flex-col gap-4">
+            
+            {/* Header / Sub-banner for list section */}
+            <div className="bg-[#dee7f4] border border-neutral-300 rounded p-3 text-left">
+              <span className="text-xs font-black text-neutral-800 font-sans tracking-tight">
+                📚 Você participa de {dbCommunities.length} comunidades clássicas
+              </span>
+            </div>
+
+            {/* Communities Grid in 2 Columns */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {dbCommunities
+                .filter(c =>
+                  c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                  c.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                  (c.category && c.category.toLowerCase().includes(searchQuery.toLowerCase()))
+                )
+                .map((comm) => {
+                  // Formatting of Short description limit (up to 2 lines, around 80 chars)
+                  let shortDesc = comm.description || '';
+                  if (shortDesc.length > 80) {
+                    shortDesc = shortDesc.substring(0, 77) + '...';
+                  }
+
+                  return (
+                    <div 
+                      key={comm.id}
+                      onClick={() => {
+                        handleSelectCommunity(comm.id);
+                        setActiveTopic(null);
+                      }}
+                      className="bg-white border-2 border-neutral-300 rounded-lg p-3 hover:border-pink-500 hover:shadow-md cursor-pointer transition-all flex gap-3 h-[115px] select-none relative group"
+                    >
+                      {/* Thumbnail: Left Side, brick color/brown rounded square ~90x90px */}
+                      <div className="w-[90px] h-[90px] bg-[#a88a79] rounded-sm border border-neutral-300 overflow-hidden flex-shrink-0 flex items-center justify-center text-4xl shadow-inner group-hover:scale-102 transition-transform select-none">
+                        {comm.avatar && comm.avatar.startsWith('data:') ? (
+                          <img src={comm.avatar} alt={comm.name} className="w-full h-full object-cover" />
+                        ) : comm.avatar && (comm.avatar.startsWith('http://') || comm.avatar.startsWith('https://')) ? (
+                          <img src={comm.avatar} alt={comm.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <span className="filter drop-shadow-sm select-none">{comm.avatar || '👥'}</span>
+                        )}
+                      </div>
+
+                      {/* Meta info: Right Side */}
+                      <div className="flex-1 min-w-0 flex flex-col justify-between text-left">
+                        <div className="space-y-0.5">
+                          <h3 className="text-sm font-black text-[#1d4ed8] group-hover:underline truncate uppercase tracking-tight">
+                            {comm.name}
+                          </h3>
+                          <p className="text-[11px] text-neutral-600 font-sans leading-snug line-clamp-2">
+                            {shortDesc}
+                          </p>
+                        </div>
+
+                        {/* Number of Members (Lowercase right align inside card) */}
+                        <div className="text-right">
+                          <span className="text-[10px] font-mono font-bold text-[#db2777] bg-pink-50/75 px-1.5 py-0.5 rounded border border-pink-200">
+                            {(comm.members || 3638).toLocaleString('pt-BR')}|Menders
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+
+              {dbCommunities.filter(c =>
+                c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                c.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                (c.category && c.category.toLowerCase().includes(searchQuery.toLowerCase()))
+              ).length === 0 && (
+                <div className="col-span-2 p-12 border-2 border-dashed border-neutral-300 rounded bg-white text-center text-neutral-500 font-sans text-xs">
+                  Nenhuma comunidade encontrada com os termos informados.
+                </div>
+              )}
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* =============================================================================================== */}
+      {/* ==================================== MODALS ENGINE CONSTELLATION ================================ */}
+      {/* =============================================================================================== */}
+
+      {/* 1. RIDDLE GATE MODAL FOR PRIVATE CRYPTOGRAPHIC COMMUNITIES */}
+      {showRiddleModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+          <div className="bg-white border-2 border-pink-400 rounded p-6 max-w-md w-full shadow-[0_0_25px_rgba(236,72,153,0.4)] anim-scale text-left font-sans text-xs">
+            
+            <h3 className="text-sm font-black text-pink-700 uppercase border-b pb-2 mb-3.5 flex items-center gap-1">
+              <Lock size={15} /> DESAFIO CRIPTOGRÁFICO DE ZERO CONHECIMENTO
+            </h3>
+
+            {showRiddleModal === 'sec_pr' && (
+              <p className="text-[11.5px] text-neutral-600 mb-4 leading-relaxed font-sans">
+                A Assembleia Segura do PR exige verificação: Qual linguagem de programação focada em segurança de memória, livre de null pointer, está sendo incentivada para cibersegurança do pinhão? (Começa com 'r' e termina com 't').
+              </p>
+            )}
+            {showRiddleModal === 'hacker_guild' && (
+              <p className="text-[11.5px] text-neutral-600 mb-4 leading-relaxed font-sans">
+                O Hacker Guild exige validação: Qual a sigla de 3 letras da falha preferida das redes antigas que inseria tags de script no scrapbook das vítimas?
+              </p>
+            )}
+            {showRiddleModal === 'orkut_devs' && (
+              <p className="text-[11.5px] text-neutral-600 mb-4 leading-relaxed font-sans">
+                Complete a chave conceitual: Atualmente estudamos segurança baseada em Provas de Conhecimento ______? (Insira a palavra para '0' em português ou inglês de forma literal).
+              </p>
+            )}
+
+            <div className="flex flex-col gap-3">
+              <input
+                id="riddle-modal-answer-input"
+                type="text"
+                autoFocus
+                placeholder="Insira a resposta aqui..."
+                value={riddleAnswer}
+                onChange={(e) => setRiddleAnswer(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleSolveSecureRiddle(); }}
+                className="w-full px-3 py-2 border border-neutral-300 rounded font-normal text-neutral-700 font-mono text-xs focus:ring-1 focus:ring-pink-500 focus:outline-none bg-[#fef2f2]"
+              />
+              
+              <div className="flex justify-end gap-2.5 mt-2.5">
+                <button 
+                  onClick={() => setShowRiddleModal(null)}
+                  className="px-3.5 py-1.5 bg-neutral-200 text-neutral-600 hover:bg-neutral-300 font-bold rounded cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  onClick={handleSolveSecureRiddle}
+                  className="px-4.5 py-1.5 bg-pink-600 hover:bg-pink-700 text-white font-extrabold rounded shadow-sm cursor-pointer"
+                >
+                  Verificar Chave
+                </button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* 2. REGULAMENTO / MANUAL RULES MODAL */}
+      {showRulesModal && activeComm && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+          <div className="bg-[#eff6ff] border-4 border-indigo-700/60 rounded p-6 max-w-lg w-full shadow-2xl anim-scale text-left">
+            
+            <h3 className="text-md font-bold text-indigo-900 border-b-2 border-indigo-200 pb-2.5 mb-4 uppercase flex items-center gap-1.5">
+              <ShieldCheck size={18} className="text-indigo-600" />
+              Diretrizes Oficiais de Convivência
+            </h3>
+
+            <div className="bg-white p-4 rounded border font-sans text-neutral-700 max-h-[300px] overflow-y-auto whitespace-pre-wrap leading-relaxed text-xs">
+              {activeComm.rules || "Nenhuma regra específica cadastrada pela moderação para esta comunidade.\n\nRegras Padrão:\n1. Mantenha o ecossistema livre de assédios e spams.\n2. É recomendável rir ou usar gírias retro (chapa, bacana, de gabarito)."}
+            </div>
+
+            <div className="flex justify-end mt-4">
+              <button 
+                onClick={() => setShowRulesModal(false)}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs px-4 py-2 rounded shadow cursor-pointer transition-colors"
+              >
+                Entendi, Fechar
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* 3. NEW COMMUNITY FORM MODAL */}
+      {showCreateModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-[#dee7f4] border-4 border-slate-300 rounded p-6 max-w-md w-full shadow-2xl anim-scale text-left flex flex-col my-8">
+            
+            <h3 className="text-md font-extrabold text-neutral-800 border-b border-neutral-300 pb-2 mb-4 uppercase flex items-center gap-1.5 leading-none">
+              <PlusCircle size={17} className="text-pink-600" />
+              Fundar Nova Comunidade
+            </h3>
+
+            <form onSubmit={handleCreateCommunity} className="flex flex-col gap-3 text-xs font-sans">
+              
+              <div>
+                <label className="block text-[9.5px] font-extrabold text-neutral-600 uppercase mb-0.5">Nome da Comunidade:</label>
+                <input
+                  id="create-comm-name"
+                  type="text"
+                  required
+                  value={newCommName}
+                  onChange={(e) => setNewCommName(e.target.value)}
+                  placeholder="Ex: Eu tenho um Hotmail até hoje!"
+                  className="w-full px-2.5 py-1.5 bg-white border border-neutral-300 rounded text-neutral-800 text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[9.5px] font-extrabold text-neutral-600 uppercase mb-0.5">Descrição Curta:</label>
+                <textarea
+                  id="create-comm-desc"
+                  required
+                  rows={3}
+                  value={newCommDesc}
+                  onChange={(e) => setNewCommDesc(e.target.value)}
+                  placeholder="Explique o espírito desta comunidade em poucas palavras..."
+                  className="w-full px-2.5 py-1.5 bg-white border border-neutral-300 rounded text-neutral-800 text-xs"
+                />
+              </div>
+
+              {/* Sub-grid of selections */}
+              <div className="grid grid-cols-2 gap-3">
+                
+                <div>
+                  <label className="block text-[9.5px] font-extrabold text-neutral-600 uppercase mb-0.5">Categoria:</label>
+                  <select
+                    id="create-comm-category"
+                    value={newCommCat}
+                    onChange={(e) => setNewCommCat(e.target.value)}
+                    className="w-full px-2.5 py-1.5 bg-white border border-neutral-300 rounded text-neutral-800"
+                  >
+                    {CATEGORIES.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[9.5px] font-extrabold text-neutral-600 uppercase mb-0.5">Idioma:</label>
+                  <select
+                    id="create-comm-language"
+                    value={newCommLang}
+                    onChange={(e) => setNewCommLang(e.target.value)}
+                    className="w-full px-2.5 py-1.5 bg-white border border-neutral-300 rounded text-neutral-800"
+                  >
+                    <option value="Português">Português</option>
+                    <option value="Inglês">Inglês</option>
+                    <option value="Espanhol">Espanhol</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[9.5px] font-extrabold text-neutral-600 uppercase mb-0.5">Capa Emoji (Representativa):</label>
+                  <input
+                    id="create-comm-avatar"
+                    type="text"
+                    maxLength={5}
+                    value={newCommAvatar}
+                    onChange={(e) => setNewCommAvatar(e.target.value)}
+                    placeholder="Altere o emoji!"
+                    className="w-full px-2.5 py-1.5 bg-white border border-neutral-300 rounded text-center text-md font-bold text-neutral-800"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[9.5px] font-extrabold text-neutral-600 uppercase mb-0.5">Upload Foto (Selecione):</label>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-full bg-[#cbd5e1] hover:bg-neutral-300 text-neutral-800 px-1 py-2 border rounded font-black text-[9.5px] uppercase cursor-pointer"
+                  >
+                    Foto de Disco
+                  </button>
+                  <input 
+                    type="file"
+                    ref={fileInputRef}
+                    className="hidden"
+                    accept="image/*"
+                    onChange={(e) => handleImageUploadReader(e, 'avatar')}
+                  />
+                </div>
+
+              </div>
+
+              {newCommAvatar && newCommAvatar.startsWith('data:') && (
+                <div className="text-[10px] text-green-700 bg-green-50 p-2.5 rounded border border-green-200 mt-1 flex items-center justify-between">
+                  <span>Foto carregada com sucesso do seu disco!</span>
+                  <button type="button" onClick={() => setNewCommAvatar('💬')} className="text-red-500 font-extrabold">Excluir</button>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-[9.5px] font-extrabold text-neutral-600 uppercase mb-0.5 font-sans flex items-center gap-1.5 select-none cursor-pointer">
+                  <input
+                    id="create-comm-secure-toggle"
+                    type="checkbox"
+                    checked={newCommSecureMode}
+                    onChange={(e) => setNewCommSecureMode(e.target.checked)}
+                    className="w-3.5 h-3.5 border text-pink-600 cursor-pointer"
+                  />
+                  <span>Chave Segura (Ativar Desafio Zero-Conhecimento)</span>
+                </label>
+              </div>
+
+              <div>
+                <label className="block text-[9.5px] font-extrabold text-neutral-600 uppercase mb-0.5">Manual de Regras da Comunidade:</label>
+                <textarea
+                  id="create-comm-rules"
+                  rows={2}
+                  value={newCommRules}
+                  onChange={(e) => setNewCommRules(e.target.value)}
+                  placeholder="Código de conduta para os membros..."
+                  className="w-full px-2.5 py-1.5 bg-white border border-neutral-300 rounded text-neutral-800 text-xs"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2.5 mt-4 border-t pt-3 border-neutral-300">
+                <button 
+                  type="button"
+                  onClick={() => setShowCreateModal(false)}
+                  className="bg-neutral-200 text-neutral-700 hover:bg-neutral-300 px-4 py-2 rounded text-xs font-bold cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  type="submit"
+                  className="bg-[#2563eb] text-white hover:bg-blue-700 px-5 py-2 rounded text-xs font-black shadow-md cursor-pointer transition-colors"
+                >
+                  Fundar Comunidade
+                </button>
+              </div>
+
+            </form>
+
+          </div>
+        </div>
+      )}
+
+      {/* 4. MODERATOR/OWNER COMMUNITY PROFILE EDITOR MODAL */}
+      {showEditCommModal && activeComm && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+          <div className="bg-[#dee7f4] border-4 border-slate-300 rounded p-6 max-w-md w-full shadow-2xl anim-scale text-left">
+            
+            <h3 className="text-sm font-black text-neutral-700 border-b border-neutral-300 pb-2 mb-4 uppercase flex items-center gap-1.5">
+              <Settings size={15} /> Ajustes da Moderação
+            </h3>
+
+            <div className="flex flex-col gap-3 font-sans text-xs">
+              
+              <div>
+                <label className="block text-[9px] font-extrabold text-neutral-500 mb-1">EDITAR DESCRIÇÃO:</label>
+                <textarea
+                  id="edit-comm-description"
+                  rows={3}
+                  value={activeComm.description}
+                  onChange={(e) => setActiveComm({ ...activeComm, description: e.target.value })}
+                  className="w-full px-3 py-1.5 bg-white border border-neutral-300 rounded focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[9px] font-extrabold text-neutral-500 mb-1">REGULAMENTO / REGRAS DE CONVIVÊNCIA:</label>
+                <textarea
+                  id="edit-comm-rules-text"
+                  rows={4}
+                  value={activeComm.rules || ''}
+                  onChange={(e) => setActiveComm({ ...activeComm, rules: e.target.value })}
+                  className="w-full px-3 py-1.5 bg-white border border-neutral-300 rounded focus:outline-none"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2.5 mt-4 border-t border-neutral-300 pt-3">
+                <button 
+                  onClick={() => setShowEditCommModal(false)}
+                  className="bg-neutral-200 text-neutral-700 hover:bg-neutral-300 px-4 py-2 rounded text-xs font-bold font-sans cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  onClick={handleSaveCommunityEdits}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded text-xs font-extrabold shadow-md cursor-pointer transition-colors"
+                >
+                  Salvar Alterações
+                </button>
+              </div>
+
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* 5. INDEPENDENT MEMBERS MODAL WITH THE +/- VERTICAL SCROLL ASSISTANCE INSTRUCTIONS */}
+      {showMembersModal && activeComm && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+          <div className="bg-[#dee7f4] border-4 border-neutral-300 rounded p-6 max-w-lg w-full shadow-2xl anim-scale text-left relative flex flex-col md:flex-row gap-4 h-[500px]">
+            
+            {/* Modal Middle Body */}
+            <div className="flex-1 flex flex-col h-full min-w-0">
+              
+              <h3 className="text-md font-extrabold text-[#1e3a8a] border-b border-indigo-200 pb-2 mb-3.5 uppercase flex items-center justify-between">
+                <span>👥 Membros da Comunidade ({totalMembresiaExibicao})</span>
+                <button 
+                  onClick={() => setShowMembersModal(false)} 
+                  className="hover:text-red-500 font-extrabold font-mono text-[10px]"
+                >
+                  FECHAR (x)
+                </button>
+              </h3>
+
+              {/* Scrollable Container with standard styling */}
+              <div 
+                ref={modalMembersScrollRef}
+                className="flex-1 overflow-y-auto pr-3 scroll-smooth text-neutral-800 bg-white border-2 border-dashed border-neutral-300 p-4 rounded-sm"
+                style={{ scrollbarWidth: 'thin' }}
+              >
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                  {communityMembers.map((member) => (
+                    <div 
+                      key={member.id}
+                      onClick={() => {
+                        onNavigateToFriend(member.id);
+                        setShowMembersModal(false);
+                      }}
+                      className="border rounded p-2.5 flex flex-col items-center gap-1 bg-neutral-50 hover:bg-pink-50/50 hover:border-pink-300 cursor-pointer group transition-all"
+                    >
+                      <img 
+                        src={member.avatar} 
+                        alt={member.name} 
+                        className="w-12 h-12 rounded-sm object-cover border group-hover:scale-105 transition-transform shadow" 
+                        referrerPolicy="no-referrer"
+                      />
+                      <span className="font-extrabold text-[10px] text-[#1d4ed8] group-hover:underline truncate w-full text-center mt-1">
+                        {member.name}
+                      </span>
+                      <span className="text-[8px] text-neutral-400 font-mono italic leading-none">{member.location}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+            </div>
+
+            {/* Float Scroll-assistant bar specifically requested by user to help navigate side modal using + and - icons */}
+            <div className="flex flex-col justify-center items-center gap-2 select-none border-l pl-2 border-neutral-300 self-center md:h-full">
+              <span className="text-[8px] uppercase tracking-wide font-black text-neutral-500 orientation-tb rotate-180 md:my-2 hidden md:block">ROLOGE</span>
+              <button 
+                onClick={() => handleSmoothScroll(modalMembersScrollRef, 'up')}
+                className="w-8 h-8 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold flex items-center justify-center shadow-lg transition-transform hover:scale-110"
+                title="Rolar para Cima (-)"
+              >
+                <Minus size={16} className="stroke-[3]" />
+              </button>
+              <button 
+                onClick={() => handleSmoothScroll(modalMembersScrollRef, 'down')}
+                className="w-8 h-8 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold flex items-center justify-center shadow-lg transition-transform hover:scale-110"
+                title="Rolar para Baixo (+)"
+              >
+                <Plus size={16} className="stroke-[3]" />
+              </button>
+              <span className="text-[10px] font-bold text-indigo-700 font-mono mt-1 hidden md:block">Scroll</span>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* 6. INDEPENDENT RELATED COMMUNITIES MODAL WITH THE +/- VERTICAL SCROLL ASSISTANCE */}
+      {showRelatedCommsModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+          <div className="bg-[#dee7f4] border-4 border-neutral-300 rounded p-6 max-w-lg w-full shadow-2xl anim-scale text-left relative flex flex-col md:flex-row gap-4 h-[500px]">
+            
+            {/* Modal Related content container */}
+            <div className="flex-1 flex flex-col h-full min-w-0">
+              
+              <h3 className="text-md font-extrabold text-[#1e3a8a] border-b border-indigo-200 pb-2 mb-3.5 uppercase flex items-center justify-between">
+                <span>📂 Comunidades Relacionadas</span>
+                <button 
+                  onClick={() => setShowRelatedCommsModal(false)}
+                  className="hover:text-red-500 font-extrabold font-mono text-[10px]"
+                >
+                  FECHAR (x)
+                </button>
+              </h3>
+
+              <div 
+                ref={modalRelatedScrollRef}
+                className="flex-1 overflow-y-auto pr-3 scroll-smooth bg-white border-2 border-dashed border-neutral-300 p-4 rounded-sm"
+                style={{ scrollbarWidth: 'thin' }}
+              >
+                <div className="flex flex-col gap-3">
+                  {dbCommunities.map((comm) => (
+                    <div 
+                      key={comm.id}
+                      onClick={() => {
+                        setActiveCommId(comm.id);
+                        setActiveTopic(null);
+                        setShowRelatedCommsModal(false);
+                      }}
+                      className="border rounded p-3 flex gap-3 bg-neutral-50 hover:bg-pink-100/35 hover:border-pink-300 cursor-pointer transition-all"
+                    >
+                      <div className="w-12 h-12 bg-indigo-50 border border-neutral-200 rounded flex-shrink-0 flex items-center justify-center text-2xl shadow-inner select-none overflow-hidden">
+                        {comm.avatar && comm.avatar.startsWith('data:') ? (
+                          <img src={comm.avatar} alt={comm.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <span>{comm.avatar || '👥'}</span>
+                        )}
+                      </div>
+                      
+                      <div className="flex-1 min-w-0 text-xs">
+                        <h4 className="font-bold text-neutral-800 text-xs hover:underline">{comm.name}</h4>
+                        <p className="text-neutral-500 text-[10.5px] mt-0.5 whitespace-pre-wrap truncate">{comm.description}</p>
+                        <div className="flex items-center gap-2 mt-2 pt-1 font-mono text-[9px] text-[#2563eb]">
+                          <span>📂 Categoria: {comm.category}</span>
+                          <span className="text-zinc-400">•</span>
+                          <span>👥 Membros: {comm.members || 2847}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+            </div>
+
+            {/* Float Scroll-assistant bar specifically requested by user using + and - icons */}
+            <div className="flex flex-col justify-center items-center gap-2 select-none border-l pl-2 border-neutral-300 self-center md:h-full">
+              <span className="text-[8px] uppercase tracking-wide font-black text-neutral-500 orientation-tb rotate-180 md:my-2 hidden md:block">ROLOGE</span>
+              <button 
+                onClick={() => handleSmoothScroll(modalRelatedScrollRef, 'up')}
+                className="w-8 h-8 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold flex items-center justify-center shadow-lg transition-transform hover:scale-110"
+                title="Rolar para Cima (-)"
+              >
+                <Minus size={16} className="stroke-[3]" />
+              </button>
+              <button 
+                onClick={() => handleSmoothScroll(modalRelatedScrollRef, 'down')}
+                className="w-8 h-8 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold flex items-center justify-center shadow-lg transition-transform hover:scale-110"
+                title="Rolar para Baixo (+)"
+              >
+                <Plus size={16} className="stroke-[3]" />
+              </button>
+              <span className="text-[10px] font-bold text-indigo-700 font-mono mt-1 hidden md:block">Scroll</span>
+            </div>
+
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

@@ -39,7 +39,7 @@ interface ProfileLayoutProps {
   isOwnProfile: boolean;
   onSaveProfile: (updatedProfile: Partial<Profile>) => void;
   onNavigateToFriend: (id: string) => void;
-  onNavigateToTab: (tab: string, forceVisitor?: boolean, autoTriggerUpload?: boolean) => void;
+  onNavigateToTab: (tab: string, forceVisitor?: boolean, autoTriggerUpload?: boolean, communityId?: string) => void;
   userPublicKey: string;
   currentTab: string;
   albums: Album[];
@@ -427,22 +427,24 @@ export default function ProfileLayout({
             </div>
           </div>
 
-          <div className="border-t border-dashed border-neutral-350 mt-2.5 pt-2.5 text-center">
-            <div className="text-[10px] uppercase font-bold text-neutral-500 mb-1.5 font-sans">
-              Gerenciar Imagens
+          {isOwnProfile && (
+            <div className="border-t border-dashed border-neutral-350 mt-2.5 pt-2.5 text-center">
+              <div className="text-[10px] uppercase font-bold text-neutral-500 mb-1.5 font-sans">
+                Gerenciar Imagens
+              </div>
+              <GlossyRetroButton
+                id="sidebar-btn-photos-owner"
+                onClick={() => {
+                  playShutterSound();
+                  onNavigateToTab('photos', false, true); // Owner Mode with auto photo upload panel trigger
+                }}
+                variant="action"
+                className="w-full h-11"
+              >
+                Add Fotos
+              </GlossyRetroButton>
             </div>
-            <GlossyRetroButton
-              id="sidebar-btn-photos-owner"
-              onClick={() => {
-                playShutterSound();
-                onNavigateToTab('photos', false, true); // Owner Mode with auto photo upload panel trigger
-              }}
-              variant="action"
-              className="w-full h-11"
-            >
-              Add Fotos
-            </GlossyRetroButton>
-          </div>
+          )}
 
           <div className="border-t border-dashed border-neutral-350 mt-2.5 pt-2.5 text-center">
             <div className="text-[10px] uppercase font-bold text-neutral-500 mb-1.5 font-sans">

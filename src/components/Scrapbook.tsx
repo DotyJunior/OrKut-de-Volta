@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ShieldAlert, ShieldCheck, Lock, Unlock, Key, RefreshCw, Send, HelpCircle } from 'lucide-react';
+import { ShieldAlert, ShieldCheck, Lock, Unlock, Key, RefreshCw, Send, HelpCircle, Download } from 'lucide-react';
 import { encryptAES, decryptAES, computeSHA256 } from '../utils/crypto';
 import { Scrap, Profile } from '../types';
 import SocialActions from './SocialActions';
@@ -379,6 +379,28 @@ export default function Scrapbook({
                           <div className="absolute right-1.5 top-1.5 bg-fuchsia-600/90 text-[7px] text-white font-bold px-1 rounded-sm uppercase tracking-wider select-none z-10 font-mono">
                             Glitter v2008
                           </div>
+
+                          {/* Hover Overlay Button to Download directly */}
+                          <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-10 pointer-events-none group-hover:pointer-events-auto">
+                            <a
+                              href={scrap.imageUrl}
+                              download={`scrap_glitter_${scrap.id}.png`}
+                              className="px-3 py-1.5 bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white rounded font-bold text-[10px] flex items-center gap-1 shadow-md transition-all scale-95 group-hover:scale-100 duration-200 no-underline cursor-pointer border border-pink-400"
+                              onClick={() => {
+                                try {
+                                  const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+                                  const osc = audioCtx.createOscillator();
+                                  osc.connect(audioCtx.destination);
+                                  osc.start();
+                                  osc.stop(0.12);
+                                } catch {}
+                              }}
+                            >
+                              <Download size={11} />
+                              Baixar Scrap 💾
+                            </a>
+                          </div>
+
                           <img 
                             src={scrap.imageUrl} 
                             alt="Retro Scrapbook Design" 

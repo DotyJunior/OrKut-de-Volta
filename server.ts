@@ -2,47 +2,39 @@ import express from "express";
 import path from "path";
 import dotenv from "dotenv";
 import { createServer as createViteServer } from "vite";
+import { GoogleGenAI, Type } from "@google/genai";
 
 // Load environment variables
 dotenv.config();
 
-// Helper to interact with Gemini API using native fetch
+// Initialize the official Google GenAI SDK with recommended settings
+const ai = new GoogleGenAI({
+  apiKey: process.env.GEMINI_API_KEY || "",
+  httpOptions: {
+    headers: {
+      "User-Agent": "aistudio-build",
+    },
+  },
+});
+
+// Helper to interact with Gemini API using the official SDK
 async function generateGeminiContent(systemInstruction: string, promptContext: string): Promise<string> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     throw new Error("GEMINI_API_KEY not defined");
   }
 
-  // Google AI Studio uses standard developer endpoints for Gemini 2.5 Flash
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      contents: [
-        {
-          role: "user",
-          parts: [{ text: promptContext }]
-        }
-      ],
-      systemInstruction: {
-        parts: [{ text: systemInstruction }]
-      },
-      generationConfig: {
-        temperature: 0.8,
-        maxOutputTokens: 500,
-      }
-    })
+  const response = await ai.models.generateContent({
+    model: "gemini-3.5-flash",
+    contents: promptContext,
+    config: {
+      systemInstruction,
+      temperature: 0.82,
+      maxOutputTokens: 500,
+    }
   });
 
-  if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`Gemini API HTTP ${response.status}: ${errText}`);
-  }
-
-  const data = await response.json() as any;
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  const text = response.text;
   if (!text) {
     throw new Error("No text returned in Gemini response candidates");
   }
@@ -124,27 +116,17 @@ Crie a resposta do personagem de acordo com as diretrizes indicadas. Responda di
     const { prompt } = req.body;
     
     const systemPrompt = `Você é o "Designer Retro de Scraps do Orkut de 2008".
-Sua missão é gerar as especificações visuais de um scrap Y2K animado de acordo com o pedido do usuário (ex: "emo goth", "glitter rosa", "good morning", "borboleta").
-Você DEVE obrigatoriamente responder APENAS com um objeto JSON válido, sem markdown ou explicações.
+Sua missão é gerar as especificações visuais de um scrap animado Y2K nostálgico e vibrante de acordo com o pedido do usuário (ex: "emo goth", "glitter rosa", "bom dia amor", "hacker matrix").
 
-O JSON deve seguir esse modelo estrutural EXATO:
-{
-  "themeName": "Nome do Tema no estilo do Orkut (ex: Pink Emo Love, Cyber Gothic Matrix)",
-  "backgroundStyle": "Estilo de fundo ('solid', 'gradient-purple-pink', 'gradient-blue-teal', 'gradient-black-purple', 'checkerboard', 'stars-space', 'glitter-pink', 'matrix-green')",
-  "backgroundColor": "Uma cor hexadecimal para fundo sólido/borda (ex: #0f172a)",
-  "textColor": "Uma cor hexadecimal adequada para o texto (ex: #f472b6)",
-  "fontFamily": "Uma fonte do Orkut/MSN ('Comic Sans MS', 'Impact', 'Courier New', 'Georgia', 'Arial Black', 'Trebuchet MS')",
-  "textSize": 24,
-  "frameStyle": "Moldura ('neon-pink', 'neon-cyan', 'golden-glitter', 'emo-stitches', 'cyber-borders', 'double-dashed')",
-  "sparkleDensity": 75,
-  "sparkleColor": "Cor hexadecimal das partículas piscantes (ex: #fbbf24)",
-  "glitterEnabled": true,
-  "glowIntensity": "Estilo de glow ('medium', 'high', 'extreme')",
-  "messageText": "Um texto nostálgico escrito no estilo internetês do MSN/Orkut de 2008, abusando de abreviações amigáveis e emojis vintage. Máximo 150 caracteres. Exemplo: '✨ oLaAaAa s2!!! pAsSaNdO pRa dEiXaR uM bEqAdInHo kAwAaIi!! dEiXa sCrAp tBm bLj?! s2 s2 s2 ✨'",
-  "suggestedStickers": ["heart", "butterfly", "star", "skull", "hamster"] 
-}
+Você DEVE produzir um texto nostálgico brasileiro escrito no estilo "miguxês/internetês" autêntico do MSN/Orkut de 2008 em "messageText", abusando de abreviações amigáveis (pq, tbm, mto, adc, vlw, blz, tImÓóÓ), emoticons retrô (s2, xD, :P, *_* , XP, =D) e escritas emotivas com letras maiúsculas e minúsculas misturadas. 
 
-Não invente outras chaves no JSON. Forneça o JSON puro.`;
+DIRETRIZES DE ESTILO DO PROMPT:
+1. Se for algo romântico ou fofo: abuse de corações (s2), rosa/vermelho, fontes como "Comic Sans MS", moldura "neon-pink" ou "golden-glitter", glitter ativado e texto doce (ex: "✨ s2 s2 MoZãOoO dI mAyS!!! pAsSaNdO pRa dEiXaR uM cArInHo fOfUxO nUx sErUs sCrApS... Ti AmUxXx fOrEvEr!!! s2 s2 ✨").
+2. Se for algo Emo, Gótico ou Rock / Escuro: use preto, roxo, fontes como "Courier New" ou "Impact", moldura "emo-stitches", muito brilho roxo/preto, sugerindo stickers de caveira ("skull"), e texto dramático / poético de rock/emo (ex: "⛓️✖️ sOmOs aNgElS dAs tReVaS... sEnTiNdO a nOiTe cAiR sEm vC... s2 dEiXa rEcAdInHo eMo!! mSn ofFlYn_bLj ✖️⛓️").
+3. Se for algo Hacker, Cyber ou Verde: use verde matriz, preto, fonte "Courier New", moldura "cyber-borders", stickers como "floppy" ou "neon_flash", e texto do estilo 1337speak hacker brincalhão (ex: "📟 [1337_sEcUrItY_oN] vYrUs dO aMoR dEtEcTaDo!! SyStEm iNjEcT sÓ pRa mAnDaR eXxE sCrAp cAnAl pRiVaDo vLw pArÇa! 📟").
+4. Se for algo de Sol, Dia ou Amizade: use amarelo, azul, fontes como "Arial Black" ou "Trebuchet MS", stickers de estrela ("star") ou borboleta ("butterfly"), moldura "golden-glitter" ou "double-dashed", e mensagem alegre e ensolarada (ex: "☀️ oLaAaAa dApAsOzInNhHAa!!! pAsSaNdO pRa dEiXaR uM bEqAdInHo qApYdUxO fOfOxO!! dEiXa sCrAp tBm kYlYk s2 ☀️").
+
+Escolha as cores hexadecimais de forma que fiquem harmoniosas e tenham excelente contraste para leitura.`;
 
     const hasApiKey = !!process.env.GEMINI_API_KEY;
 
@@ -238,49 +220,86 @@ Não invente outras chaves no JSON. Forneça o JSON puro.`;
     }
 
     try {
-      const apiKey = process.env.GEMINI_API_KEY;
-      if (!apiKey) {
-        throw new Error("GEMINI_API_KEY is not defined");
-      }
-      
-      const stylePromise = fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              role: "user",
-              parts: [{ text: `Gere as especificações para o prompt: "${prompt}"` }]
-            }
-          ],
-          systemInstruction: {
-            parts: [{ text: systemPrompt }]
-          },
-          generationConfig: {
-            temperature: 0.9,
-            responseMimeType: "application/json"
+      // Style Generation with strict JSON schemas on gemini-3.5-flash
+      const stylePromise = ai.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: `Gere as especificações estéticas e o texto de scrap no estilo retro/MSN/Orkut de 2008 para o prompt: "${prompt}"`,
+        config: {
+          systemInstruction: systemPrompt,
+          temperature: 0.95,
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              themeName: {
+                type: Type.STRING,
+                description: "Nome fictício divertido pro tema no estilo do Orkut (ex: Pink Emo Love, Cyber Gothic Matrix)"
+              },
+              backgroundStyle: {
+                type: Type.STRING,
+                description: "Estilo de fundo da lista permitida: 'solid', 'gradient-purple-pink', 'gradient-blue-teal', 'gradient-black-purple', 'checkerboard', 'stars-space', 'glitter-pink', 'matrix-green'"
+              },
+              backgroundColor: {
+                type: Type.STRING,
+                description: "Cor hexadecimal em formato #xxxxxx de fundo sólido ou borda secundária"
+              },
+              textColor: {
+                type: Type.STRING,
+                description: "Cor hexadecimal do texto principal com excelente contraste de leitura"
+              },
+              fontFamily: {
+                type: Type.STRING,
+                description: "Fonte do Orkut/MSN exata: 'Comic Sans MS', 'Impact', 'Courier New', 'Georgia', 'Arial Black', 'Trebuchet MS'"
+              },
+              textSize: {
+                type: Type.INTEGER,
+                description: "Número representando tamanho do texto em pixels (ex: 20 a 28)"
+              },
+              frameStyle: {
+                type: Type.STRING,
+                description: "Uma moldura da lista permitida: 'neon-pink', 'neon-cyan', 'golden-glitter', 'emo-stitches', 'cyber-borders', 'double-dashed'"
+              },
+              sparkleDensity: {
+                type: Type.INTEGER,
+                description: "Intensidade das partículas piscando de 20 a 100"
+              },
+              sparkleColor: {
+                type: Type.STRING,
+                description: "Cor hexadecimal das partículas piscantes (ex: #ffffff)"
+              },
+              glitterEnabled: {
+                type: Type.BOOLEAN,
+                description: "Indica se o efeito glitter/brilho está ativo"
+              },
+              glowIntensity: {
+                type: Type.STRING,
+                description: "Nível de brilho: 'medium', 'high', 'extreme'"
+              },
+              messageText: {
+                type: Type.STRING,
+                description: "Um texto divertido, nostálgico brasileiro escrito em miguxês dos anos 2008, representativo do prompt e limitado a 150 caracteres."
+              },
+              suggestedStickers: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.STRING
+                },
+                description: "Lista de 1 a 4 adesivos sugeridos do Orkut. Escolha estritamente entre: 'heart', 'hamster', 'star', 'butterfly', 'skull', 'msn_shrug', 'floppy', 'rainbow', 'flames', 'neon_flash', 'teddy_bear', 'kiss'."
+              }
+            },
+            required: [
+              "themeName", "backgroundStyle", "backgroundColor", "textColor", "fontFamily", 
+              "textSize", "frameStyle", "sparkleDensity", "sparkleColor", "glitterEnabled", 
+              "glowIntensity", "messageText", "suggestedStickers"
+            ]
           }
-        })
+        }
       });
 
-      const imagePromise = fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${apiKey}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                {
-                  text: `${prompt}. Nostalgic Y2K orkut scrapbook glitter art graphic, retro decorative ornament background. Cute vibrant sticker collage illustration.`
-                }
-              ]
-            }
-          ]
-        })
+      // Image generation with gemini-2.5-flash-image SDK call
+      const imagePromise = ai.models.generateContent({
+        model: "gemini-2.5-flash-image",
+        contents: `${prompt}. Nostalgic Y2K orkut scrapbook glitter art graphic, retro decorative ornament background. Cute vibrant sticker collage illustration.`
       }).catch(err => {
         console.error("Gemini image generation call failed, using fallback:", err);
         return null;
@@ -288,33 +307,22 @@ Não invente outras chaves no JSON. Forneça o JSON puro.`;
 
       const [styleResponse, imageResponse] = await Promise.all([stylePromise, imagePromise]);
 
-      if (!styleResponse.ok) {
-        const errText = await styleResponse.text();
-        throw new Error(`Gemini API HTTP ${styleResponse.status}: ${errText}`);
+      const text = styleResponse.text;
+      if (!text) {
+        throw new Error("Style response from Gemini returned empty contents.");
       }
 
-      const styleData = await styleResponse.json() as any;
-      let text = styleData.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
-      
-      text = text.trim();
-      if (text.startsWith("```json")) {
-        text = text.substring(7);
-      }
-      if (text.endsWith("```")) {
-        text = text.substring(0, text.length - 3);
-      }
-      text = text.trim();
-      
-      const parsedSpec = JSON.parse(text);
+      const parsedSpec = JSON.parse(text.trim());
 
       let aiImageUrl: string | null = null;
-      if (imageResponse && imageResponse.ok) {
+      if (imageResponse) {
         try {
-          const imgData = await imageResponse.json() as any;
-          const parts = imgData?.candidates?.[0]?.content?.parts || [];
+          const parts = imageResponse.candidates?.[0]?.content?.parts || [];
           for (const part of parts) {
-            if (part.inlineData) {
-              aiImageUrl = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+            if (part.inlineData?.data) {
+              const base64Data = part.inlineData.data;
+              const mimeType = part.inlineData.mimeType || 'image/png';
+              aiImageUrl = `data:${mimeType};base64,${base64Data}`;
               break;
             }
           }

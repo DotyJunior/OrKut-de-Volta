@@ -229,6 +229,7 @@ const DEFAULT_SHARED_MEMORIES: SharedMemory[] = [
 
 export default function App() {
   const [currentTab, setCurrentTab] = useState<string>('profile');
+  const [selectedCommunityId, setSelectedCommunityId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [activeProfileId, setActiveProfileId] = useState<string>('me');
   const [joinedCommunities, setJoinedCommunities] = useState<string[]>(['1', '3']);
@@ -513,30 +514,40 @@ export default function App() {
       handleFirestoreError(error, OperationType.LIST, 'shared_memories');
     });
 
-    const unsubscribeJoinedCommunities = onSnapshot(doc(db, 'joined_communities', 'me'), (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        if (data && Array.isArray(data.communityIds)) {
-          setJoinedCommunities(data.communityIds);
-        }
-      } else {
-        setDoc(doc(db, 'joined_communities', 'me'), { communityIds: ['1', '3'] }).catch(err => {
-          handleFirestoreError(err, OperationType.WRITE, 'joined_communities/me');
-        });
-      }
-    }, (error) => {
-      handleFirestoreError(error, OperationType.GET, 'joined_communities/me');
-    });
-
     return () => {
       unsubscribeProfiles();
       unsubscribeScraps();
       unsubscribeTestimonials();
       unsubscribeAlbums();
       unsubscribeSharedMemories();
-      unsubscribeJoinedCommunities();
     };
   }, []);
+
+  // Dynamic subscription to Joined Communities depending on current logged-in identity
+  useEffect(() => {
+    const activeId = currentUserProfile?.id || 'me';
+    const docRef = doc(db, 'joined_communities', activeId);
+    
+    const unsubscribeJoinedCommunities = onSnapshot(docRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data && Array.isArray(data.communityIds)) {
+          setJoinedCommunities(data.communityIds);
+        }
+      } else {
+        // Fallback or seed default communities
+        setDoc(docRef, { communityIds: ['1', '3'] }).catch(err => {
+          handleFirestoreError(err, OperationType.WRITE, `joined_communities/${activeId}`);
+        });
+      }
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, `joined_communities/${activeId}`);
+    });
+
+    return () => {
+      unsubscribeJoinedCommunities();
+    };
+  }, [currentUserProfile?.id]);
 
   const handleLikeScrap = async (id: string, liked: boolean, count: number) => {
     const item = scraps.find(s => s.id === id);
@@ -819,9 +830,10 @@ export default function App() {
       me: updatedMe
     }));
     try {
-      await setDoc(doc(db, 'profiles', 'me'), updatedMe);
+      const realId = profiles.me?.id || currentUserProfile?.id || 'me';
+      await setDoc(doc(db, 'profiles', realId), updatedMe);
     } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, 'profiles/me');
+      handleFirestoreError(err, OperationType.WRITE, `profiles/${profiles.me?.id || currentUserProfile?.id || 'me'}`);
     }
   };
 
@@ -968,9 +980,10 @@ export default function App() {
       const updated = [...joinedCommunities, id];
       setJoinedCommunities(updated);
       try {
-        await setDoc(doc(db, 'joined_communities', 'me'), { communityIds: updated });
+        const activeId = currentUserProfile?.id || 'me';
+        await setDoc(doc(db, 'joined_communities', activeId), { communityIds: updated });
       } catch (err) {
-        handleFirestoreError(err, OperationType.WRITE, 'joined_communities/me');
+        handleFirestoreError(err, OperationType.WRITE, `joined_communities/${currentUserProfile?.id || 'me'}`);
       }
     }
   };
@@ -1015,7 +1028,12 @@ export default function App() {
       {/* 1. Header */}
       <OrkutHeader
         currentTab={currentTab}
-        setCurrentTab={setCurrentTab}
+        setCurrentTab={(tab) => {
+          if (tab === 'communities') {
+            setSelectedCommunityId(null);
+          }
+          setCurrentTab(tab);
+        }}
         userName={profiles.me?.name || currentUserProfile.name}
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
@@ -1049,10 +1067,13 @@ export default function App() {
             isOwnProfile={activeProfileId === 'me'}
             onSaveProfile={handleSaveProfile}
             onNavigateToFriend={handleNavigateToFriend}
-            onNavigateToTab={(tab, forceVisitor = false, autoTriggerUpload = false) => {
+            onNavigateToTab={(tab, forceVisitor = false, autoTriggerUpload = false, communityId) => {
               setCurrentTab(tab);
               setIsVisitorMode(forceVisitor);
               setAutoOpenUpload(autoTriggerUpload);
+              if (tab === 'communities') {
+                setSelectedCommunityId(communityId || null);
+              }
             }}
             userPublicKey={userPublicKey}
             currentTab={currentTab}
@@ -1097,7 +1118,7 @@ export default function App() {
             onAddScrap={handleAddScrap}
             activeProfile={currentViewedProfile}
             isOwnProfile={activeProfileId === 'me'}
-            currentUser={{ id: profiles.me.id, name: profiles.me.name, avatar: profiles.me.avatar }}
+            currentUser={{ id: currentUserProfile?.id || profiles.me.id || 'me', name: profiles.me.name, avatar: profiles.me.avatar }}
             onLikeScrap={handleLikeScrap}
             onShareToFeed={handleAddNewShare}
             onGoToBuilder={() => setCurrentTab('scrapbook-builder')}
@@ -1107,7 +1128,7 @@ export default function App() {
         {currentTab === 'scrapbook-builder' && (
           <ScrapbookBuilder
             profiles={profiles}
-            currentUser={{ id: profiles.me.id, name: profiles.me.name, avatar: profiles.me.avatar }}
+            currentUser={{ id: currentUserProfile?.id || profiles.me.id || 'me', name: profiles.me.name, avatar: profiles.me.avatar }}
             onPostScrap={handleAddScrap}
             onNavigateToTab={(tab) => setCurrentTab(tab)}
           />
@@ -1119,7 +1140,7 @@ export default function App() {
             onAddTestimonial={handleAddTestimonial}
             activeProfile={currentViewedProfile}
             isOwnProfile={activeProfileId === 'me'}
-            currentUser={{ id: profiles.me.id, name: profiles.me.name, avatar: profiles.me.avatar }}
+            currentUser={{ id: currentUserProfile?.id || profiles.me.id || 'me', name: profiles.me.name, avatar: profiles.me.avatar }}
             onLikeTestimonial={handleLikeTestimonial}
             onShareToFeed={handleAddNewShare}
           />
@@ -1130,6 +1151,19 @@ export default function App() {
             communities={communities}
             onJoinCommunity={handleJoinCommunity}
             joinedIds={joinedCommunities}
+            profiles={profiles}
+            currentUser={{ id: currentUserProfile?.id || profiles.me.id || 'me', name: profiles.me.name, avatar: profiles.me.avatar }}
+            onNavigateToFriend={handleNavigateToFriend}
+            onNavigateToTab={(tab, forceVisitor = false, autoTriggerUpload = false, communityId) => {
+              setCurrentTab(tab);
+              setIsVisitorMode(forceVisitor);
+              setAutoOpenUpload(autoTriggerUpload);
+              if (tab === 'communities') {
+                setSelectedCommunityId(communityId || null);
+              }
+            }}
+            activeCommunityId={selectedCommunityId}
+            setActiveCommunityId={setSelectedCommunityId}
           />
         )}
 
@@ -1166,7 +1200,7 @@ export default function App() {
         isOpen={isSecretChatOpen}
         onClose={() => setIsSecretChatOpen(false)}
         currentUser={{
-          id: profiles.me.id,
+          id: currentUserProfile?.id || profiles.me.id || 'me',
           name: profiles.me.name,
           avatar: profiles.me.avatar,
           username: profiles.me.username || 'junior.sombra'

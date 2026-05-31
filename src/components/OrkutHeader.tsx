@@ -125,14 +125,30 @@ export default function OrkutHeader({
                   setCurrentTab(item.id);
                 }}
                 className={`px-4 py-2 text-[11px] font-black uppercase tracking-wide rounded-sm font-sans transition-all cursor-pointer ${
-                  currentTab === item.id 
+                  item.id === 'communities' && currentTab === 'communities'
+                    ? 'bg-white text-[#9d174d] shadow-sm border-2 border-[#1b4372] font-black rounded-lg scale-105'
+                    : currentTab === item.id 
                     ? 'bg-[#1b4372] text-white shadow-xs border border-[#1b4372]' 
                     : 'bg-[#406a94] hover:bg-[#34597d] text-white border border-[#406a94]'
                 }`}
               >
-                {item.label}
+                {item.id === 'communities' ? 'COMUNIDADE' : item.label}
               </button>
             ))}
+
+            {/* Special MINHAS COMUNIDADES Tab button matching mockup - hidden on Profile page */}
+            {currentTab !== 'profile' && (
+              <button
+                id="tab-btn-my-communities"
+                onClick={() => {
+                  setSearchQuery('');
+                  setCurrentTab('communities');
+                }}
+                className="px-4 py-2 text-[11px] font-black uppercase tracking-wide border-2 border-pink-600 bg-white hover:bg-pink-50 text-pink-600 rounded-lg shadow-sm transition-all cursor-pointer shrink-0 ml-1.5 hover:scale-102 font-sans"
+              >
+                MINHAS COMUNIDADES
+              </button>
+            )}
           </div>
 
         </div>
