@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { ShieldCheck, Calendar, Lock, BookOpen, RefreshCw } from 'lucide-react';
 import OrkutHeader from './components/OrkutHeader';
 import OrkutFooter from './components/OrkutFooter';
+import PrivacyModal from './components/PrivacyModal';
 import ProfileLayout from './components/ProfileLayout';
 import Scrapbook from './components/Scrapbook';
 import ScrapbookBuilder from './components/ScrapbookBuilder';
@@ -35,14 +36,14 @@ const DEFAULT_PROFILES: Record<string, Profile> = {
     ethnicity: 'Latino Criptográfico',
     languages: 'Português, Rust, TypeScript, Assembly',
     hometown: 'Curitiba',
-    webpage: 'https://github.com/scrapzone-secure',
+    webpage: 'http://orky.net/scrapzone_galera2008',
     passions: 'Cibersegurança, pinhão cozido, criptografia AES e herança zero-custo',
     aboutMe: 'Eae galera! Sou um entusiasta de segurança da informação e Rust de Curitiba. Estou reescrevendo todo o Scrapzone de forma robusta e livre de buffer overflow para consertar os erros que ajudaram a quebrar esse gigante de 2004. Sejam muito bem-vindos ao meu perfil criptografado, deixem um scrap ou depoimento seguro!',
     trusty: 3,
     cool: 3,
     sexy: 2,
     fans: 18,
-    username: 'junior.sombra',
+    username: 'scrapzone_galera2008',
     statusOnline: '● programando em Rust',
     theme: 'default'
   },
@@ -233,11 +234,13 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [activeProfileId, setActiveProfileId] = useState<string>('me');
   const [joinedCommunities, setJoinedCommunities] = useState<string[]>(['1', '3']);
+  const [visitedProfileJoinedCommIds, setVisitedProfileJoinedCommIds] = useState<string[]>([]);
   const [userPublicKey, setUserPublicKey] = useState<string>('04f9810b14c3e2182fe91da938b82dfc394ca0e2193bde1a5928d1ac297b47e2b1029c');
 
   // Secret Chat modal state
   const [isSecretChatOpen, setIsSecretChatOpen] = useState<boolean>(false);
   const [secretChatFriendId, setSecretChatFriendId] = useState<string>('lucas');
+  const [showPrivacyModal, setShowPrivacyModal] = useState<boolean>(false);
 
   // Photo Albums Nostalgic state engine
   const [albums, setAlbums] = useState<Album[]>(() => getInitialAlbums());
@@ -425,6 +428,21 @@ export default function App() {
           fetched['me'] = currentUserProfile;
         }
 
+        // Auto-update standard user/me profile loaded from DB to have scrapzone_galera2008/webpage
+        const targetMe = fetched['me'];
+        if (targetMe && (targetMe.username !== 'scrapzone_galera2008' || targetMe.webpage !== 'http://orky.net/scrapzone_galera2008')) {
+          const updatedMe = {
+            ...targetMe,
+            username: 'scrapzone_galera2008',
+            webpage: 'http://orky.net/scrapzone_galera2008'
+          };
+          fetched['me'] = updatedMe;
+          const writeId = currentUid || 'me';
+          setDoc(doc(db, 'profiles', writeId), updatedMe).catch(err => {
+            console.error("Error backing up profile updates: ", err);
+          });
+        }
+
         setProfiles(fetched);
       }
     }, (error) => {
@@ -549,6 +567,90 @@ export default function App() {
     };
   }, [currentUserProfile?.id]);
 
+  // Subscription to Visited Profile's Joined Communities List
+  useEffect(() => {
+    if (!activeProfileId) return;
+    const docRef = doc(db, 'joined_communities', activeProfileId);
+    
+    const unsubscribeVisitedJoinedCommunities = onSnapshot(docRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data && Array.isArray(data.communityIds)) {
+          setVisitedProfileJoinedCommIds(data.communityIds);
+        }
+      } else {
+        // Seed standard classic defaults when missing
+        let defs = ['1', '3'];
+        if (activeProfileId === 'me') defs = ['1', '3', 'pendrive_perdido'];
+        else if (activeProfileId === 'orkut') defs = ['1', '3', 'orkut_devs', '2']; 
+        else if (activeProfileId === 'alexandre') defs = ['1', '2', 'sec_pr'];
+        else if (activeProfileId === 'hacker') defs = ['1', 'hacker_guild'];
+        setVisitedProfileJoinedCommIds(defs);
+      }
+    }, (error) => {
+      console.error("Error loading visited profile joined communities:", error);
+      let defs = ['1', '3'];
+      if (activeProfileId === 'me') defs = ['1', '3', 'pendrive_perdido'];
+      else if (activeProfileId === 'orkut') defs = ['1', '3', 'orkut_devs', '2']; 
+      else if (activeProfileId === 'alexandre') defs = ['1', '2', 'sec_pr'];
+      else if (activeProfileId === 'hacker') defs = ['1', 'hacker_guild'];
+      setVisitedProfileJoinedCommIds(defs);
+    });
+
+    return () => {
+      unsubscribeVisitedJoinedCommunities();
+    };
+  }, [activeProfileId]);
+
+  // Synchronize browser Hash URL with React States (Simulating router navigation cleanly)
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash;
+      if (!hash) return;
+
+      if (hash.startsWith('#/profile/')) {
+        const parts = hash.substring('#/profile/'.length).split('/');
+        const profileId = parts[0];
+        const subTab = parts[1]; // e.g. 'communities'
+
+        if (profileId) {
+          setActiveProfileId(profileId);
+          if (subTab === 'communities') {
+            setCurrentTab('communities');
+          } else {
+            setCurrentTab('profile');
+          }
+        }
+      } else if (hash.startsWith('#/communities')) {
+        setCurrentTab('communities');
+      } else if (hash.startsWith('#/scrapbook')) {
+        setCurrentTab('scrapbook');
+      } else if (hash.startsWith('#/testimonials')) {
+        setCurrentTab('testimonials');
+      } else if (hash.startsWith('#/privacy') || hash.startsWith('#privacy')) {
+        setShowPrivacyModal(true);
+      }
+    };
+
+    window.addEventListener('hashchange', handleHashChange);
+    handleHashChange(); // Trigger on mount
+
+    return () => {
+      window.removeEventListener('hashchange', handleHashChange);
+    };
+  }, []);
+
+  // Update hash when states change
+  useEffect(() => {
+    if (currentTab === 'profile') {
+      window.location.hash = `#/profile/${activeProfileId}`;
+    } else if (currentTab === 'communities') {
+      window.location.hash = `#/profile/${activeProfileId}/communities`;
+    } else {
+      window.location.hash = `#/${currentTab}`;
+    }
+  }, [currentTab, activeProfileId]);
+
   const handleLikeScrap = async (id: string, liked: boolean, count: number) => {
     const item = scraps.find(s => s.id === id);
     if (item) {
@@ -640,14 +742,14 @@ export default function App() {
       ethnicity: 'Latino Criptográfico',
       languages: 'Português, Rust, TypeScript, Assembly',
       hometown: 'Curitiba',
-      webpage: 'https://github.com/scrapzone-secure',
+      webpage: 'http://orky.net/scrapzone_galera2008',
       passions: 'Cibersegurança, pinhão cozido, criptografia AES e herança zero-custo',
       aboutMe: 'Eae galera! Sou um entusiasta de segurança da informação e Rust de Curitiba. Estou reescrevendo todo o Scrapzone de forma robusta e livre de buffer overflow para consertar os erros que ajudaram a quebrar esse gigante de 2004. Sejam muito bem-vindos ao meu perfil criptografado, deixem um scrap ou depoimento seguro!',
       trusty: 3,
       cool: 3,
       sexy: 2,
       fans: 18,
-      username: 'junior.sombra',
+      username: 'scrapzone_galera2008',
       statusOnline: '● programando em Rust',
       theme: 'default'
     },
@@ -988,6 +1090,23 @@ export default function App() {
     }
   };
 
+  const handleToggleJoinCommunity = async (id: string, join: boolean) => {
+    let updated: string[];
+    if (join) {
+      if (joinedCommunities.includes(id)) return;
+      updated = [...joinedCommunities, id];
+    } else {
+      updated = joinedCommunities.filter(cid => cid !== id);
+    }
+    setJoinedCommunities(updated);
+    try {
+      const activeId = currentUserProfile?.id || 'me';
+      await setDoc(doc(db, 'joined_communities', activeId), { communityIds: updated });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, `joined_communities/${currentUserProfile?.id || 'me'}`);
+    }
+  };
+
   // Loading state during session check
   if (isAuthLoading) {
     return (
@@ -1023,6 +1142,24 @@ export default function App() {
   const currentViewedProfile = profiles[activeProfileId] || profiles.me || DEFAULT_PROFILES.me;
   const themeStyles = getThemeStyles(currentViewedProfile.theme);
 
+  // Filter communities joined by the visited profile applying privacy rules
+  const visitorId = currentUserProfile?.id || 'me';
+  const isOwner = visitorId === activeProfileId;
+  const friendsPool = ["me", "lucas", "alexandre", "orkut", "hacker"];
+  const isFriend = friendsPool.includes(visitorId) && friendsPool.includes(activeProfileId);
+
+  const filteredVisitedCommunities = communities.filter(comm => {
+    const isJoinedByVisited = visitedProfileJoinedCommIds.includes(comm.id);
+    if (!isJoinedByVisited) return false;
+    
+    if (isOwner || isFriend) {
+      return true; // Return all joined communities for owner and friend
+    } else {
+      // Guest / Non-friend sees only public communities (secureMode is false/undefined)
+      return !comm.secureMode;
+    }
+  });
+
   return (
     <div className={`min-h-screen ${themeStyles.bg} flex flex-col justify-between transition-colors duration-300 selection:bg-pink-100 antialiased`}>
       {/* 1. Header */}
@@ -1032,6 +1169,7 @@ export default function App() {
           if (tab === 'communities') {
             setSelectedCommunityId(null);
           }
+          setActiveProfileId('me');
           setCurrentTab(tab);
         }}
         userName={profiles.me?.name || currentUserProfile.name}
@@ -1063,7 +1201,7 @@ export default function App() {
           <ProfileLayout
             profile={currentViewedProfile}
             friends={friends}
-            communities={communities}
+            communities={filteredVisitedCommunities}
             isOwnProfile={activeProfileId === 'me'}
             onSaveProfile={handleSaveProfile}
             onNavigateToFriend={handleNavigateToFriend}
@@ -1073,6 +1211,9 @@ export default function App() {
               setAutoOpenUpload(autoTriggerUpload);
               if (tab === 'communities') {
                 setSelectedCommunityId(communityId || null);
+              }
+              if (!forceVisitor) {
+                setActiveProfileId('me');
               }
             }}
             userPublicKey={userPublicKey}
@@ -1150,9 +1291,11 @@ export default function App() {
           <Communities
             communities={communities}
             onJoinCommunity={handleJoinCommunity}
+            onToggleJoinCommunity={handleToggleJoinCommunity}
             joinedIds={joinedCommunities}
             profiles={profiles}
             currentUser={{ id: currentUserProfile?.id || profiles.me.id || 'me', name: profiles.me.name, avatar: profiles.me.avatar }}
+            visitedProfileId={activeProfileId}
             onNavigateToFriend={handleNavigateToFriend}
             onNavigateToTab={(tab, forceVisitor = false, autoTriggerUpload = false, communityId) => {
               setCurrentTab(tab);
@@ -1160,6 +1303,9 @@ export default function App() {
               setAutoOpenUpload(autoTriggerUpload);
               if (tab === 'communities') {
                 setSelectedCommunityId(communityId || null);
+              }
+              if (!forceVisitor) {
+                setActiveProfileId('me');
               }
             }}
             activeCommunityId={selectedCommunityId}
@@ -1190,7 +1336,23 @@ export default function App() {
       </main>
 
       {/* 3. Footer */}
-      <OrkutFooter />
+      <OrkutFooter onPrivacyClick={() => setShowPrivacyModal(true)} />
+
+      {/* Privacy modal */}
+      <PrivacyModal
+        isOpen={showPrivacyModal}
+        onClose={() => {
+          setShowPrivacyModal(false);
+          if (window.location.hash.startsWith('#/privacy') || window.location.hash.startsWith('#privacy')) {
+            window.location.hash = `#/profile/${activeProfileId}`;
+          }
+        }}
+        onGoToProfile={() => {
+          setShowPrivacyModal(false);
+          setActiveProfileId('me');
+          setCurrentTab('profile');
+        }}
+      />
 
       {/* MSN Alert Toast Notification System */}
       <MsnToastSystem />

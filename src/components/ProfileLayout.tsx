@@ -1,5 +1,5 @@
-import { useState, FormEvent, useEffect } from 'react';
-import { Eye, Edit, Save, ShieldCheck, Heart, IceCream, Smile, Star, MapPin, Sparkles, KeyRound, Palette, RefreshCw, Send, MessageSquare } from 'lucide-react';
+import React, { useState, FormEvent, useEffect, useRef, ChangeEvent, MouseEvent } from 'react';
+import { Eye, Edit, Save, ShieldCheck, Heart, IceCream, Smile, Star, MapPin, Sparkles, KeyRound, Palette, RefreshCw, Send, MessageSquare, Camera, Trash2 } from 'lucide-react';
 import { Profile, Friend, Community, Album, Photo, SharedMemory } from '../types';
 import { getThemeStyles } from '../lib/theme';
 import SocialSidebar from './SocialSidebar';
@@ -71,6 +71,34 @@ export default function ProfileLayout({
 }: ProfileLayoutProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [showIdentityWizard, setShowIdentityWizard] = useState(false);
+
+  const userAvatarInputRef = useRef<HTMLInputElement>(null);
+
+  const handleProfileImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      alert('Apenas imagens JPG, PNG, WEBP ou GIF são suportadas!');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      if (event.target?.result) {
+        const resultString = event.target.result as string;
+        onSaveProfile({ avatar: resultString });
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveProfilePhoto = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (window.confirm('Deseja realmente remover sua foto de perfil?')) {
+      onSaveProfile({ avatar: '👤' });
+    }
+  };
 
   // Status and thought feed parameters
   const [newStatusText, setNewStatusText] = useState('');
@@ -374,50 +402,96 @@ export default function ProfileLayout({
 
       {/* 1. Left Side: Photo, Interactive Sidebar and Key Fingerprint */}
       <div className="lg:col-span-3 flex flex-col gap-4">
-        {/* Profile Card */}
+        {/* Profile Card Only - Photo Container (Enlarged) */}
         <div className={`border rounded p-3 text-center transition-all ${themeStyles.cardBg} ${themeStyles.glow} ${themeStyles.borderClass}`}>
-          <div className="relative group mx-auto w-36 h-36 border border-neutral-300 overflow-hidden bg-neutral-100 rounded">
-            <img
-              src={profile.avatar}
-              alt={profile.name}
-              className="w-full h-full object-cover"
-              referrerPolicy="no-referrer"
-            />
-            {isOwnProfile && (
-              <div 
-                onClick={() => setShowIdentityWizard(true)}
-                className="absolute inset-0 bg-black/45 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
-              >
-                <span className="text-white text-xs font-semibold">Editar Foto</span>
+          <div className="relative group mx-auto w-full aspect-square border-2 border-neutral-300 overflow-hidden bg-neutral-100 rounded-lg flex items-center justify-center shadow-xs">
+            {profile.avatar && profile.avatar !== '👤' && profile.avatar.trim() !== '' ? (
+              <img
+                src={profile.avatar}
+                alt={profile.name}
+                className="w-full h-full object-cover"
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <div className="w-full h-full bg-[#dee7f4] flex flex-col items-center justify-center text-neutral-400 gap-2 select-none">
+                <span className="text-6xl">👤</span>
+                <span className="text-xs font-bold tracking-widest uppercase text-neutral-500">Sem Foto</span>
               </div>
+            )}
+
+            {isOwnProfile && (
+              profile.avatar && profile.avatar !== '👤' && profile.avatar.trim() !== '' ? (
+                /* COM FOTO: Floating menu, semi-transparent, only shows on hover */
+                <div 
+                  className="absolute bottom-2 left-2 right-2 h-7.5 bg-black/25 backdrop-blur-xs border border-white/10 rounded-full flex items-center justify-between px-2.5 text-white opacity-0 group-hover:opacity-100 transition-all duration-200 select-none font-sans"
+                >
+                  <button 
+                    type="button"
+                    onClick={() => userAvatarInputRef.current?.click()}
+                    className="text-[9px] font-black uppercase tracking-wider text-left hover:text-pink-300 flex items-center gap-1 cursor-pointer bg-transparent border-none text-white p-0"
+                  >
+                    Alterar Foto <Camera size={10} />
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={handleRemoveProfilePhoto}
+                    title="Remover Foto"
+                    className="text-red-400 hover:text-red-300 bg-transparent border-none cursor-pointer p-0.5 flex items-center justify-center"
+                  >
+                    <Trash2 size={10} />
+                  </button>
+                </div>
+              ) : (
+                /* SEM FOTO: Menu visible by default, semi-transparent */
+                <div 
+                  onClick={() => userAvatarInputRef.current?.click()}
+                  className="absolute bottom-2.5 left-2.5 right-2.5 h-8 bg-black/25 backdrop-blur-xs border border-white/10 rounded-full flex items-center justify-between px-3 text-white cursor-pointer select-none font-sans hover:bg-black/45 active:scale-[0.98] transition-all"
+                >
+                  <span className="text-[9.5px] font-black uppercase tracking-wide flex items-center gap-1.5">📷 Adicionar Foto</span>
+                </div>
+              )
             )}
           </div>
 
-          <h2 className={`text-sm font-bold mt-2 flex items-center justify-center gap-1 break-all ${displayNameClass}`}>
-            {displayNameText}
-            {isOwnProfile && (
-              <button 
-                onClick={() => setShowIdentityWizard(true)} 
-                title="Configurar Identidade"
-                className="p-1 text-pink-500 hover:text-pink-600 cursor-pointer shrink-0"
-              >
-                <Palette size={13} />
-              </button>
-            )}
-          </h2>
-          {profile.username && (
-            <p className="text-[10px] font-mono opacity-80 mt-0.5">
-              @{profile.username}
-            </p>
-          )}
-          
-          <p className="text-[11px] font-sans flex items-center justify-center gap-1 mt-1 opacity-75">
-            <MapPin size={12} />
-            {profile.location}
-          </p>
+          {/* Hidden file input for Profile avatar upload */}
+          <input 
+            type="file"
+            ref={userAvatarInputRef}
+            className="hidden"
+            accept="image/*"
+            onChange={handleProfileImageUpload}
+          />
+        </div>
 
-          <div className="border-t border-dashed border-neutral-350 mt-3 pt-3 text-left">
-            <span className="text-[10px] font-bold uppercase tracking-widest block mb-1 opacity-70">Criptografia Local</span>
+        {/* Profile Details Container Below Photo */}
+        <div className={`border rounded p-4 text-center transition-all ${themeStyles.cardBg} ${themeStyles.glow} ${themeStyles.borderClass} space-y-3.5`}>
+          <div className="py-1">
+            <h2 className={`text-base md:text-lg font-bold flex items-center justify-center gap-1.5 break-all tracking-wide text-neutral-800 ${displayNameClass}`}>
+              {displayNameText}
+              {isOwnProfile && (
+                <button 
+                  onClick={() => setShowIdentityWizard(true)} 
+                  title="Configurar Identidade"
+                  className="p-1 text-pink-500 hover:text-pink-600 cursor-pointer shrink-0 transition-transform active:scale-95"
+                >
+                  <Palette size={14} />
+                </button>
+              )}
+            </h2>
+            {profile.username && (
+              <p className="text-xs font-mono text-neutral-500 opacity-95 mt-1 tracking-normal">
+                @{profile.username}
+              </p>
+            )}
+            
+            <p className="text-[12px] md:text-[13px] font-medium font-sans flex items-center justify-center gap-1.5 mt-2.5 text-neutral-700 tracking-wider uppercase">
+              <MapPin size={14} className="text-pink-600 shrink-0" />
+              {profile.location}
+            </p>
+          </div>
+
+          <div className="border-t border-dashed border-neutral-350 pt-3.5 text-left">
+            <span className="text-[10px] font-bold uppercase tracking-widest block mb-2 opacity-70">Criptografia Local</span>
             <div className="flex items-center gap-1.5 p-1 px-2 bg-green-500/10 border border-green-500/40 rounded text-[10px] text-green-700 font-semibold font-mono">
               <ShieldCheck size={14} className="text-green-650 flex-shrink-0" />
               Chave RSA Ativa
@@ -428,8 +502,8 @@ export default function ProfileLayout({
           </div>
 
           {isOwnProfile && (
-            <div className="border-t border-dashed border-neutral-350 mt-2.5 pt-2.5 text-center">
-              <div className="text-[10px] uppercase font-bold text-neutral-500 mb-1.5 font-sans">
+            <div className="border-t border-dashed border-neutral-350 pt-3 text-center">
+              <div className="text-[10px] uppercase font-bold text-neutral-500 mb-2 font-sans tracking-wider">
                 Gerenciar Imagens
               </div>
               <GlossyRetroButton
@@ -446,8 +520,8 @@ export default function ProfileLayout({
             </div>
           )}
 
-          <div className="border-t border-dashed border-neutral-350 mt-2.5 pt-2.5 text-center">
-            <div className="text-[10px] uppercase font-bold text-neutral-500 mb-1.5 font-sans">
+          <div className="border-t border-dashed border-neutral-350 pt-3 text-center">
+            <div className="text-[10px] uppercase font-bold text-neutral-500 mb-2 font-sans tracking-wider">
               Conversa Secreta (48h)
             </div>
             <GlossyRetroButton
@@ -1247,18 +1321,27 @@ export default function ProfileLayout({
         <div className={`border rounded shadow-sm overflow-hidden text-left transition-all ${themeStyles.cardBg} ${themeStyles.glow} ${themeStyles.borderClass}`}>
           <div className={`px-3 py-1.5 flex justify-between items-center ${themeStyles.accent}`}>
             <span className="text-[11px] font-bold uppercase">Comunidades ({communities.length})</span>
-            <button onClick={() => onNavigateToTab('communities')} className="text-[10px] hover:underline font-bold">ver todas</button>
+            <button onClick={() => onNavigateToTab('communities', !isOwnProfile)} className="text-[10px] hover:underline font-bold">ver todas</button>
           </div>
 
           <div className="p-3 grid grid-cols-3 gap-2 bg-transparent">
             {communities.slice(0, 9).map((comm) => (
               <div
                 key={comm.id}
-                onClick={() => onNavigateToTab('communities')}
+                onClick={() => onNavigateToTab('communities', !isOwnProfile, false, comm.id)}
                 className="flex flex-col items-center justify-center cursor-pointer p-1.5 rounded transition-all group hover:bg-neutral-100/10"
               >
                 <div className="w-12 h-12 border border-neutral-300 flex items-center justify-center text-xl overflow-hidden rounded bg-pink-100 text-pink-600 group-hover:border-[#1d4ed8]">
-                  <span>{comm.avatar}</span>
+                  {comm.avatar && (
+                    comm.avatar.startsWith('data:') ||
+                    comm.avatar.startsWith('http://') ||
+                    comm.avatar.startsWith('https://') ||
+                    comm.avatar.startsWith('/')
+                  ) ? (
+                    <img src={comm.avatar} alt={comm.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <span>{comm.avatar || '👥'}</span>
+                  )}
                 </div>
                 <span className="text-[9px] font-bold text-center mt-1 truncate w-full group-hover:underline leading-tight font-sans">
                   {comm.name}

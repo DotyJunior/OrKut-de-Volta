@@ -1,5 +1,6 @@
 import express from "express";
 import path from "path";
+import fs from "fs";
 import dotenv from "dotenv";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
@@ -358,6 +359,129 @@ Escolha as cores hexadecimais de forma que fiquem harmoniosas e tenham excelente
       });
     }
   });
+
+  // ==========================================
+  // PROFILE COMMUNITIES ENDPOINT AND HELPERS
+  // ==========================================
+  let projectId = "gen-lang-client-0189072897";
+  try {
+    const firebaseConfigFile = path.join(process.cwd(), "firebase-applet-config.json");
+    if (fs.existsSync(firebaseConfigFile)) {
+      const firebaseConfig = JSON.parse(fs.readFileSync(firebaseConfigFile, "utf8"));
+      if (firebaseConfig.projectId) {
+        projectId = firebaseConfig.projectId;
+      }
+    }
+  } catch (e) {
+    console.error("Could not load firebase config in server", e);
+  }
+
+  const SEEDED_COMMUNITIES = [
+    { id: '1', name: 'Eu odeio acordar cedo', description: 'Porque o sono pós-compilação em Rust é sagrado.', members: 42152, avatar: '⏰', category: 'Lazer', secureMode: false },
+    { id: '2', name: 'Digo "Oi" e continuo programando', description: 'Ative sua chave simétrica e não interrompa meu raciocínio.', members: 12510, avatar: '💻', category: 'Tecnologia', secureMode: false },
+    { id: '3', name: 'Eu amo chocolate preto', description: 'Combina muito bem com café preto e revisões estritas de código.', members: 8920, avatar: '🍫', category: 'Culinária', secureMode: false },
+    { id: 'sec_pr', name: 'Assembleia Segura PR (Rust)', description: 'Fórum da Assembleia Legislativa do Paraná para debater leis de cibersegurança do pinhão.', members: 1337, avatar: '🌲', category: 'Governo', secureMode: true },
+    { id: 'hacker_guild', name: 'Hacker Elite - Anti-XSS Guild', description: 'Debates puros sobre buffer safety e como aniquilar XSS com isolamento de WebAssembly linear-memory.', members: 777, avatar: '🕵️', category: 'Segurança', secureMode: true },
+    { id: 'orkut_devs', name: 'Scrapzone Devs & Zero-Knowledge', description: 'Simulações de zk-SNARKs e criptossistemas de alto gabarito sob governança descentralizada.', members: 502, avatar: '🔑', category: 'Cripto', secureMode: true },
+    { id: 'pendrive_perdido', name: 'QUEM NUNCA PERDEU O PENDRIVE?', description: 'Pra quem já sofreu perdendo arquivos importantes ou a chave de criptografia do pendrive de backup.', members: 3638, avatar: '💾', category: 'Nostalgia', secureMode: false }
+  ];
+
+  async function getJoinedCommunityIds(userId: string): Promise<string[]> {
+    try {
+      const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/joined_communities/${userId}`;
+      const res = await fetch(url);
+      if (!res.ok) {
+        if (res.status === 404) {
+          if (userId === 'me') return ['1', '3', 'pendrive_perdido'];
+          if (userId === 'orkut') return ['1', '3', 'orkut_devs', '2'];
+          if (userId === 'alexandre') return ['1', '2', 'sec_pr'];
+          if (userId === 'hacker') return ['1', 'hacker_guild'];
+          return ['1', '3'];
+        }
+        throw new Error(`Failed to fetch joined communities: ${res.statusText}`);
+      }
+      const data: any = await res.json();
+      const fields = data.fields;
+      if (fields && fields.communityIds && fields.communityIds.arrayValue && fields.communityIds.arrayValue.values) {
+        return fields.communityIds.arrayValue.values.map((v: any) => v.stringValue).filter(Boolean);
+      }
+      return ['1', '3'];
+    } catch (error) {
+      console.error(`Error in getJoinedCommunityIds for ${userId}:`, error);
+      if (userId === 'me') return ['1', '3', 'pendrive_perdido'];
+      if (userId === 'orkut') return ['1', '3', 'orkut_devs', '2'];
+      if (userId === 'alexandre') return ['1', '2', 'sec_pr'];
+      if (userId === 'hacker') return ['1', 'hacker_guild'];
+      return ['1', '3'];
+    }
+  }
+
+  async function fetchAllCommunities(): Promise<any[]> {
+    try {
+      const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/communities?pageSize=100`;
+      const res = await fetch(url);
+      if (!res.ok) {
+        return SEEDED_COMMUNITIES;
+      }
+      const data: any = await res.json();
+      if (data && data.documents) {
+        const dbComms = data.documents.map((docItem: any) => {
+          const fields = docItem.fields || {};
+          const id = docItem.name.split("/").pop();
+          return {
+            id: id,
+            name: fields.name?.stringValue || "",
+            description: fields.description?.stringValue || "",
+            avatar: fields.avatar?.stringValue || "👥",
+            category: fields.category?.stringValue || "Nostalgia",
+            secureMode: fields.secureMode?.booleanValue ?? false,
+            members: fields.members?.integerValue ? parseInt(fields.members.integerValue) : 3638
+          };
+        });
+        const merged = [...dbComms];
+        SEEDED_COMMUNITIES.forEach(sc => {
+          if (!merged.find(mc => mc.id === sc.id)) {
+            merged.push(sc);
+          }
+        });
+        return merged;
+      }
+      return SEEDED_COMMUNITIES;
+    } catch (err) {
+      console.error("Error in fetchAllCommunities:", err);
+      return SEEDED_COMMUNITIES;
+    }
+  }
+
+  const communitiesRouteHandler = async (req: express.Request, res: express.Response) => {
+    const { profileId } = req.params;
+    const visitorId = (req.query.visitorId as string) || "me";
+
+    try {
+      const allComms = await fetchAllCommunities();
+      const joinedIds = await getJoinedCommunityIds(profileId);
+      let joinedComms = allComms.filter(c => joinedIds.includes(c.id));
+
+      const isOwner = visitorId === profileId;
+      const friendsPool = ["me", "lucas", "alexandre", "orkut", "hacker"];
+      const isFriend = friendsPool.includes(visitorId) && friendsPool.includes(profileId);
+
+      if (isOwner) {
+        return res.json({ communities: joinedComms });
+      } else if (isFriend) {
+        return res.json({ communities: joinedComms });
+      } else {
+        const publicComms = joinedComms.filter(c => !c.secureMode);
+        return res.json({ communities: publicComms });
+      }
+    } catch (err) {
+      console.error("Error in profile communities endpoint:", err);
+      return res.status(500).json({ error: "Failed to retrieve profile communities." });
+    }
+  };
+
+  app.get("/api/profile/:profileId/communities", communitiesRouteHandler);
+  app.get("/profile/:profileId/communities", communitiesRouteHandler);
 
   // Serve static files / Vite middleware
   if (process.env.NODE_ENV !== "production") {

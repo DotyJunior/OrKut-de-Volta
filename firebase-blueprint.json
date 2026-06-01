@@ -307,6 +307,70 @@
         "timestamp",
         "likes"
       ]
+    },
+    "Community": {
+      "title": "Community",
+      "description": "A classic Orkut-style community",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "members": { "type": "integer" },
+        "avatar": { "type": "string" },
+        "category": { "type": "string" },
+        "language": { "type": "string" },
+        "type": { "type": "string" },
+        "secureMode": { "type": "boolean" },
+        "ownerId": { "type": "string" },
+        "moderators": { "type": "array" },
+        "bannedMembers": { "type": "array" },
+        "createdAt": { "type": "string" },
+        "rules": { "type": "string" }
+      },
+      "required": ["id", "name", "ownerId"]
+    },
+    "CommunityTopic": {
+      "title": "CommunityTopic",
+      "description": "A discussion topic thread inside a community",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "communityId": { "type": "string" },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "authorId": { "type": "string" },
+        "authorName": { "type": "string" },
+        "authorAvatar": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "views": { "type": "integer" },
+        "repliesCount": { "type": "integer" },
+        "isPinned": { "type": "boolean" },
+        "isLocked": { "type": "boolean" },
+        "isApproved": { "type": "boolean" }
+      },
+      "required": ["id", "communityId", "title", "content", "authorId"]
+    },
+    "CommunityReply": {
+      "title": "CommunityReply",
+      "description": "A response posted to a topic discussion thread",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "topicId": { "type": "string" },
+        "communityId": { "type": "string" },
+        "content": { "type": "string" },
+        "authorId": { "type": "string" },
+        "authorName": { "type": "string" },
+        "authorAvatar": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "likes": { "type": "integer" },
+        "likedBy": { "type": "array" },
+        "isApproved": { "type": "boolean" }
+      },
+      "required": ["id", "topicId", "communityId", "content", "authorId"]
     }
   },
   "firestore": {
@@ -337,6 +401,18 @@
     "/shared_memories/{memoryId}": {
       "schema": "SharedMemory",
       "description": "Feeds of shared memories"
+    },
+    "/communities/{communityId}": {
+      "schema": "Community",
+      "description": "The community details block"
+    },
+    "/community_topics/{topicId}": {
+      "schema": "CommunityTopic",
+      "description": "Discussion threads within communities"
+    },
+    "/community_replies/{replyId}": {
+      "schema": "CommunityReply",
+      "description": "Comments in response to threads"
     }
   }
 }

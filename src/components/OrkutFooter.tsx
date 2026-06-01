@@ -1,6 +1,11 @@
+import React from 'react';
 import { ShieldAlert, Fingerprint, LockKeyhole } from "lucide-react";
 
-export default function OrkutFooter() {
+interface OrkutFooterProps {
+  onPrivacyClick?: (e: React.MouseEvent) => void;
+}
+
+export default function OrkutFooter({ onPrivacyClick }: OrkutFooterProps) {
   return (
     <footer className="bg-[#dee7f4] border-t border-[#b2cbeb] py-6 select-none mt-8">
       <div className="max-w-6xl mx-auto px-4 text-center">
@@ -8,9 +13,18 @@ export default function OrkutFooter() {
         <div className="flex flex-wrap justify-center gap-x-4 gap-y-2 text-xs font-sans text-[#1d4ed8] font-semibold mb-4">
           <a href="#about" className="hover:underline">Sobre o Scrapzone</a>
           <span className="text-neutral-400">·</span>
-          <a href="#rust-sec-console" className="hover:underline flex items-center gap-0.5">
+          <a 
+            href="#/privacy" 
+            onClick={(e) => {
+              if (onPrivacyClick) {
+                e.preventDefault();
+                onPrivacyClick(e);
+              }
+            }}
+            className="hover:underline flex items-center gap-0.5"
+          >
             <Fingerprint size={12} />
-            Privacidade de Pilha WASM
+            [ POLITICA DE PRIVACIDADES ]
           </a>
           <span className="text-neutral-400">·</span>
           <a href="#security-center" className="hover:underline flex items-center gap-0.5 text-pink-600">

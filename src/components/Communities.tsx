@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { 
   ShieldCheck, Lock, Unlock, Users, PlusCircle, Search, HelpCircle, 
   MessageSquare, Plus, Minus, ChevronLeft, ChevronRight, Image, 
   ThumbsUp, Trash2, Edit, Pin, Settings, AlertCircle, Calendar, 
   Globe, Info, Camera, PinOff, LogOut, ArrowLeft, RefreshCw,
-  MapPin, Sparkles, Palette, KeyRound
+  MapPin, Sparkles, Palette, KeyRound, ShieldAlert, Check, UserMinus, 
+  UserCheck, UserX, X
 } from 'lucide-react';
 import GlossyRetroButton from './GlossyRetroButton';
 import { db, auth, handleFirestoreError, OperationType } from '../firebase';
@@ -14,9 +16,11 @@ import { Profile, Community } from '../types';
 interface CommunitiesProps {
   communities: Community[]; // unused except as reference/fallback
   onJoinCommunity?: (id: string) => void; // fallback
+  onToggleJoinCommunity?: (id: string, join: boolean) => void;
   joinedIds: string[];
   profiles: Record<string, Profile>;
   currentUser?: { id: string; name: string; avatar: string };
+  visitedProfileId?: string;
   onNavigateToFriend: (id: string) => void;
   onNavigateToTab?: (tab: string, forceVisitor?: boolean, autoTriggerUpload?: boolean, communityId?: string) => void;
   activeCommunityId?: string | null;
@@ -36,6 +40,8 @@ interface Topic {
   views: number;
   repliesCount: number;
   isPinned?: boolean;
+  isLocked?: boolean;
+  isApproved?: boolean;
 }
 
 interface Reply {
@@ -148,8 +154,8 @@ const DEFAULT_COMMUNITIES_SEED: (Omit<Community, 'id'> & { id?: string; rules?: 
     language: 'Português',
     type: 'Pública',
     createdAt: 'Dez 2004',
-    ownerId: 'thiago',
-    moderators: ['thiago'],
+    ownerId: 'me',
+    moderators: ['me'],
     rules: '1. Faça backup constante.\n2. Compartilhe suas histórias de desastres com mídias removíveis.'
   },
   { 
@@ -231,9 +237,11 @@ const DEFAULT_COMMUNITIES_SEED: (Omit<Community, 'id'> & { id?: string; rules?: 
 
 export default function Communities({ 
   onJoinCommunity, 
+  onToggleJoinCommunity,
   joinedIds = [], 
   profiles, 
   currentUser, 
+  visitedProfileId,
   onNavigateToFriend,
   onNavigateToTab,
   activeCommunityId,
@@ -246,6 +254,56 @@ export default function Communities({
 
   // Component States
   const [dbCommunities, setDbCommunities] = useState<any[]>([]);
+  const targetProfileId = visitedProfileId || activeUserId;
+  const [displayedCommunities, setDisplayedCommunities] = useState<any[]>([]);
+  const [isLoadingProfileComms, setIsLoadingProfileComms] = useState<boolean>(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchProfileComms = async () => {
+      if (dbCommunities.length === 0) return; // Wait for initial bootstrap to avoid empty queries
+      setIsLoadingProfileComms(true);
+      try {
+        const response = await fetch(`/api/profile/${targetProfileId}/communities?visitorId=${activeUserId}`);
+        if (response.ok && isMounted) {
+          const data = await response.json();
+          if (data && Array.isArray(data.communities)) {
+            setDisplayedCommunities(data.communities);
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching profile communities:", err);
+        if (isMounted) {
+          const isOwner = activeUserId === targetProfileId;
+          const friendsPool = ["me", "lucas", "alexandre", "orkut", "hacker"];
+          const isFriend = friendsPool.includes(activeUserId) && friendsPool.includes(targetProfileId);
+          
+          let userCommIds: string[] = ['1', '3'];
+          if (targetProfileId === 'me') userCommIds = ['1', '3', 'pendrive_perdido'];
+          else if (targetProfileId === 'orkut') userCommIds = ['1', '3', 'orkut_devs', '2'];
+          else if (targetProfileId === 'alexandre') userCommIds = ['1', '2', 'sec_pr'];
+          else if (targetProfileId === 'hacker') userCommIds = ['1', 'hacker_guild'];
+
+          const localFiltered = dbCommunities.filter(c => {
+            if (!userCommIds.includes(c.id)) return false;
+            if (isOwner || isFriend) return true;
+            return !c.secureMode;
+          });
+          setDisplayedCommunities(localFiltered);
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoadingProfileComms(false);
+        }
+      }
+    };
+
+    fetchProfileComms();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [targetProfileId, activeUserId, dbCommunities]);
   const [activeCommId, setActiveCommId] = useState<string | null>(
     activeCommunityId !== undefined ? activeCommunityId : null
   );
@@ -276,10 +334,14 @@ export default function Communities({
   const [showRiddleModal, setShowRiddleModal] = useState<string | null>(null);
   const [riddleAnswer, setRiddleAnswer] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [isClosingCreateModal, setIsClosingCreateModal] = useState(false);
+  const [showConfirmDelete, setShowConfirmDelete] = useState(false);
   const [showRulesModal, setShowRulesModal] = useState(false);
   const [showEditCommModal, setShowEditCommModal] = useState(false);
   const [showMembersModal, setShowMembersModal] = useState(false);
   const [showRelatedCommsModal, setShowRelatedCommsModal] = useState(false);
+  const [showModsPanel, setShowModsPanel] = useState(false);
+  const [modAddSelectId, setModAddSelectId] = useState('');
   
   // Create / Edit Form states
   const [newCommName, setNewCommName] = useState('');
@@ -341,6 +403,29 @@ export default function Communities({
           existingIds.add(doc.id);
         });
         setDbCommunities(list);
+        
+        // Auto-update owner of the 'pendrive_perdido' community to the active user's ID
+        const currentUserId = currentUser?.id || 'me';
+        const pendriveComm = list.find(c => c.id === 'pendrive_perdido');
+        if (pendriveComm && (pendriveComm.ownerId !== currentUserId || !pendriveComm.moderators?.includes(currentUserId))) {
+          updateDoc(doc(db, 'communities', 'pendrive_perdido'), {
+            ownerId: currentUserId,
+            moderators: [currentUserId]
+          }).catch(err => {
+            console.error("Error setting community owner for pendrive_perdido:", err);
+          });
+        }
+
+        // Auto-update owner of the '1' (Eu Odeio Acordar Cedo) community to the active user's ID
+        const hateMorningsComm = list.find(c => c.id === '1');
+        if (hateMorningsComm && (hateMorningsComm.ownerId !== currentUserId || !hateMorningsComm.moderators?.includes(currentUserId))) {
+          updateDoc(doc(db, 'communities', '1'), {
+            ownerId: currentUserId,
+            moderators: [currentUserId]
+          }).catch(err => {
+            console.error("Error setting community owner for Eu Odeio Acordar Cedo:", err);
+          });
+        }
         
         // Seed any missing classic required communities
         const missing = DEFAULT_COMMUNITIES_SEED.filter(c => !existingIds.has(c.id!));
@@ -623,6 +708,9 @@ export default function Communities({
     if (isJoined) {
       // Leave
       updated = joinedIds.filter(id => id !== activeComm.id);
+      if (onToggleJoinCommunity) {
+        onToggleJoinCommunity(activeComm.id, false);
+      }
       
       // Update members counter dynamically in Firestore
       try {
@@ -642,6 +730,9 @@ export default function Communities({
       }
 
       updated = [...joinedIds, activeComm.id];
+      if (onToggleJoinCommunity) {
+        onToggleJoinCommunity(activeComm.id, true);
+      }
       
       try {
         await updateDoc(doc(db, 'communities', activeComm.id), {
@@ -673,6 +764,9 @@ export default function Communities({
     const expected = riddles[activeComm.id] || 'orkut';
     if (riddleAnswer.trim().toLowerCase() === expected) {
       const updated = [...joinedIds, activeComm.id];
+      if (onToggleJoinCommunity) {
+        onToggleJoinCommunity(activeComm.id, true);
+      }
       
       // Save joined_communities to Firestore
       try {
@@ -780,6 +874,9 @@ export default function Communities({
     e.preventDefault();
     if (!newCommName.trim()) return;
 
+    // Start 1.5s transition immediately
+    setIsClosingCreateModal(true);
+
     const newId = 'comm_' + Math.random().toString(36).substr(2, 9);
     
     const communityData = {
@@ -805,16 +902,21 @@ export default function Communities({
       const updated = [...joinedIds, newId];
       await setDoc(doc(db, 'joined_communities', activeUserId), { communityIds: updated });
 
-      setShowCreateModal(false);
-      setActiveCommId(newId);
+      // Reset forms (hold the modal close until transition completes)
+      setTimeout(() => {
+        setIsClosingCreateModal(false);
+        setShowCreateModal(false);
+        setActiveCommId(newId);
+        
+        setNewCommName('');
+        setNewCommDesc('');
+        setNewCommAvatar('💬');
+        setNewCommRules('');
+        setNewCommSecureMode(false);
+      }, 1500);
 
-      // Reset forms
-      setNewCommName('');
-      setNewCommDesc('');
-      setNewCommAvatar('💬');
-      setNewCommRules('');
-      setNewCommSecureMode(false);
     } catch (err) {
+      setIsClosingCreateModal(false);
       handleFirestoreError(err, OperationType.WRITE, `communities/${newId}`);
     }
   };
@@ -985,18 +1087,10 @@ export default function Communities({
     }
   };
 
-  // Action: Edit Community Rules
-  const handleSaveCommunityEdits = async () => {
-    if (!activeComm) return;
-    try {
-      await updateDoc(doc(db, 'communities', activeCommId), {
-        description: activeComm.description,
-        rules: activeComm.rules || ''
-      });
-      setShowEditCommModal(false);
-    } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, `communities/${activeCommId}`);
-    }
+  // Check if current user is owner
+  const isUserOwner = () => {
+    if (!activeComm) return false;
+    return activeComm.ownerId === activeUserId || activeUserId === 'me';
   };
 
   // Check if current logged user is owner or moderator
@@ -1007,8 +1101,240 @@ export default function Communities({
            activeUserId === 'me'; // Developer overall moderation bypass
   };
 
+  // Action: Edit Community Details
+  const handleSaveCommunityEdits = async () => {
+    if (!activeComm) return;
+    try {
+      await updateDoc(doc(db, 'communities', activeCommId), {
+        description: activeComm.description,
+        rules: activeComm.rules || '',
+        name: activeComm.name,
+        avatar: activeComm.avatar || '💬',
+        category: activeComm.category || 'Nostalgia'
+      });
+      setShowConfirmDelete(false);
+      setShowEditCommModal(false);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, `communities/${activeCommId}`);
+    }
+  };
+
+  // Resolve complete information for moderators list
+  const getModeratorsList = () => {
+    if (!activeComm) return [];
+    const list: any[] = [];
+    
+    // 1. Resolve Owner info
+    const ownerId = activeComm.ownerId;
+    if (ownerId) {
+      const foundInProfiles = profiles[ownerId];
+      if (foundInProfiles) {
+        list.push({
+          id: ownerId,
+          name: foundInProfiles.name,
+          avatar: foundInProfiles.avatar,
+          type: 'Proprietário',
+          joinedAt: activeComm.createdAt || 'Maio de 2004'
+        });
+      } else {
+        const foundInMembers = communityMembers.find(m => m.id === ownerId);
+        list.push({
+          id: ownerId,
+          name: foundInMembers?.name || (ownerId === 'me' ? activeUserName : 'Proprietário'),
+          avatar: foundInMembers?.avatar || (ownerId === 'me' ? activeUserAvatar : 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150'),
+          type: 'Proprietário',
+          joinedAt: activeComm.createdAt || 'Maio de 2004'
+        });
+      }
+    }
+    
+    // 2. Resolve additional moderators from activeComm.moderators
+    const extraModIds = (activeComm.moderators || []).filter((id: string) => id !== ownerId);
+    
+    extraModIds.forEach((id: string) => {
+      const foundInProfiles = profiles[id];
+      if (foundInProfiles) {
+        list.push({
+          id,
+          name: foundInProfiles.name,
+          avatar: foundInProfiles.avatar,
+          type: 'Moderador',
+          joinedAt: 'Junho de 2004'
+        });
+      } else {
+        const foundInMembers = communityMembers.find(m => m.id === id);
+        list.push({
+          id,
+          name: foundInMembers?.name || (id === 'me' ? activeUserName : `Moderador Retro (${id})`),
+          avatar: foundInMembers?.avatar || (id === 'me' ? activeUserAvatar : 'https://images.unsplash.com/photo-1544197150-b99a580bb7a8?w=150'),
+          type: 'Moderador',
+          joinedAt: 'Junho de 2004'
+        });
+      }
+    });
+
+    return list;
+  };
+
+  // Promote member to moderator (Limit 5 extra moderators)
+  const handleAddModerator = async (memberId: string) => {
+    if (!activeComm) return;
+    if (!memberId) return;
+
+    // Filter out active community owner from additional moderators count
+    const extraMods = (activeComm.moderators || []).filter((id: string) => id !== activeComm.ownerId);
+    if (extraMods.length >= 5) {
+      alert("Limite máximo de moderadores atingido (máximo de 5).");
+      return;
+    }
+
+    try {
+      const currentMods = activeComm.moderators || [];
+      if (currentMods.includes(memberId)) {
+        alert("Este usuário já é um moderador.");
+        return;
+      }
+
+      const newMods = [...currentMods, memberId];
+      await updateDoc(doc(db, 'communities', activeComm.id), {
+        moderators: newMods
+      });
+      setModAddSelectId(''); // Reset select field
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, `communities/${activeComm.id}`);
+    }
+  };
+
+  // Revoke moderator permissions
+  const handleRemoveModerator = async (memberId: string) => {
+    if (!activeComm) return;
+    if (memberId === activeComm.ownerId) {
+      alert("Não é possível remover privilégios de moderação do proprietário.");
+      return;
+    }
+    const memberName = communityMembers.find(m => m.id === memberId)?.name || memberId;
+    if (!window.confirm(`Deseja remover as permissões de moderador de ${memberName}?`)) return;
+
+    try {
+      const currentMods = activeComm.moderators || [];
+      const newMods = currentMods.filter((id: string) => id !== memberId);
+      await updateDoc(doc(db, 'communities', activeComm.id), {
+        moderators: newMods
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, `communities/${activeComm.id}`);
+    }
+  };
+
+  // Ban community member (Removes from community and mods, blocks rejoining)
+  const handleBanMember = async (memberId: string) => {
+    if (!activeComm) return;
+    if (memberId === activeComm.ownerId) {
+      alert("Você não pode banir o proprietário da comunidade!");
+      return;
+    }
+    const memberName = communityMembers.find(m => m.id === memberId)?.name || memberId;
+    if (!window.confirm(`Tem certeza de que deseja banir ${memberName} desta comunidade?`)) return;
+
+    try {
+      const currentBanned = activeComm.bannedMembers || [];
+      if (currentBanned.includes(memberId)) return;
+      const newBanned = [...currentBanned, memberId];
+      
+      const newMods = (activeComm.moderators || []).filter((id: string) => id !== memberId);
+      
+      // Force exit community join list if active user is being banned
+      if (memberId === activeUserId && onToggleJoinCommunity) {
+        onToggleJoinCommunity(activeComm.id, false);
+      }
+
+      await updateDoc(doc(db, 'communities', activeComm.id), {
+        bannedMembers: newBanned,
+        moderators: newMods,
+        members: Math.max(1, (activeComm.members || 1) - 1)
+      });
+      
+      alert(`${memberName} foi banido com sucesso.`);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, `communities/${activeComm.id}`);
+    }
+  };
+
+  // Unban community member
+  const handleUnbanMember = async (memberId: string) => {
+    if (!activeComm) return;
+    try {
+      const currentBanned = activeComm.bannedMembers || [];
+      const newBanned = currentBanned.filter((id: string) => id !== memberId);
+      
+      await updateDoc(doc(db, 'communities', activeComm.id), {
+        bannedMembers: newBanned
+      });
+      alert("Usuário desbanido.");
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, `communities/${activeComm.id}`);
+    }
+  };
+
+  // Close / Delete Community permanently
+  const handleCloseCommunity = async () => {
+    if (!activeComm) return;
+
+    try {
+      const commIdToDelete = activeCommId;
+      // 1. Delete associated topics and replies
+      const topicsQuery = query(collection(db, 'community_topics'), where('communityId', '==', commIdToDelete));
+      const topicsSnapshot = await getDocs(topicsQuery);
+      
+      for (const tDoc of topicsSnapshot.docs) {
+        await deleteDoc(doc(db, 'community_topics', tDoc.id));
+        const repliesQuery = query(collection(db, 'community_replies'), where('topicId', '==', tDoc.id));
+        const repliesSnapshot = await getDocs(repliesQuery);
+        for (const rDoc of repliesSnapshot.docs) {
+          await deleteDoc(doc(db, 'community_replies', rDoc.id));
+        }
+      }
+
+      // 2. Delete the parent community document
+      await deleteDoc(doc(db, 'communities', commIdToDelete!));
+      
+      // 3. Clear states
+      setShowConfirmDelete(false);
+      setShowEditCommModal(false);
+      setActiveCommId(null);
+      if (setActiveCommunityId) {
+        setActiveCommunityId(null);
+      }
+      setActiveTopic(null);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `communities/${activeCommId}`);
+    }
+  };
+
+  // Lock Topic status
+  const handleToggleLockTopic = async (topic: Topic) => {
+    try {
+      await updateDoc(doc(db, 'community_topics', topic.id), {
+        isLocked: !topic.isLocked
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, `community_topics/${topic.id}`);
+    }
+  };
+
+  // Toggle Approved Status on Topic
+  const handleToggleApproveTopic = async (topic: Topic) => {
+    try {
+      await updateDoc(doc(db, 'community_topics', topic.id), {
+        isApproved: !topic.isApproved
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, `community_topics/${topic.id}`);
+    }
+  };
+
   // Find current user profile
-  const myProfile = profiles[activeUserId] || profiles['me'] || Object.values(profiles)[0] || {
+  const myProfile = profiles[targetProfileId] || profiles['me'] || Object.values(profiles)[0] || {
     name: activeUserName,
     avatar: activeUserAvatar,
     username: 'scrapzone_mender',
@@ -1099,6 +1425,21 @@ export default function Communities({
       )}
 
       {activeComm ? (
+        (activeComm.bannedMembers && activeComm.bannedMembers.includes(activeUserId)) ? (
+          <div className="bg-red-50 border-4 border-red-350 rounded p-8 max-w-lg mx-auto text-center my-12 font-sans shadow-xl">
+            <span className="text-5xl block">🚫</span>
+            <h2 className="text-red-900 font-extrabold text-lg mt-4 uppercase tracking-tight">Acesso Bloqueado!</h2>
+            <p className="text-red-700 text-xs mt-2 leading-relaxed font-sans">
+              Você foi banido desta comunidade por um de seus Moderadores ou pelo Proprietário. Seu acesso aos tópicos e discussões foi bloqueado permanentemente de acordo com as regras de convivência.
+            </p>
+            <button 
+              onClick={() => handleSelectCommunity(null)}
+              className="mt-6 bg-red-600 hover:bg-red-700 text-white font-extrabold px-5 py-2.5 rounded text-xs transition-all tracking-tight cursor-pointer shadow-md"
+            >
+              Voltar para Minhas Comunidades
+            </button>
+          </div>
+        ) : (
         <div className="flex flex-col gap-3">
           {/* Back button to Minhas Comunidades list */}
           <div className="text-left select-none">
@@ -1134,13 +1475,54 @@ export default function Communities({
                 
                 {/* Upload override trigger overlay if user has moderation role */}
                 {isUserModerator() && (
-                  <div 
-                    onClick={() => editCommFileInputRef.current?.click()}
-                    className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white text-[10px] uppercase font-black cursor-pointer gap-1.5"
-                  >
-                    <Camera size={20} className="text-pink-400" />
-                    Alterar Capa
-                  </div>
+                  (() => {
+                    const isRealCommImage = activeComm.avatar && (
+                      activeComm.avatar.startsWith('data:') ||
+                      activeComm.avatar.startsWith('http://') ||
+                      activeComm.avatar.startsWith('https://') ||
+                      activeComm.avatar.startsWith('/')
+                    );
+
+                    return isRealCommImage ? (
+                      /* COM FOTO: Floating menu, semi-transparent, only shows on hover */
+                      <div 
+                        className="absolute bottom-2.5 left-2.5 right-2.5 h-8 bg-black/25 backdrop-blur-xs border border-white/10 rounded-full flex items-center justify-between px-3 text-white opacity-0 group-hover:opacity-100 transition-all duration-200 select-none font-sans"
+                      >
+                        <button 
+                          type="button"
+                          onClick={() => editCommFileInputRef.current?.click()}
+                          className="text-[9px] font-black uppercase tracking-wider text-left hover:text-pink-300 flex items-center gap-1 cursor-pointer bg-transparent border-none text-white p-0 outline-none"
+                        >
+                          Alterar Foto <Camera size={10} />
+                        </button>
+                        <button 
+                          type="button"
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            if (window.confirm('Deseja realmente remover a foto da comunidade?')) {
+                              try {
+                                await updateDoc(doc(db, 'communities', activeCommId), { avatar: '⏰' });
+                              } catch (err) {
+                                handleFirestoreError(err, OperationType.WRITE, `communities/${activeCommId}`);
+                              }
+                            }
+                          }}
+                          title="Remover Foto"
+                          className="text-red-400 hover:text-red-300 bg-transparent border-none cursor-pointer p-0.5 flex items-center justify-center outline-none"
+                        >
+                          <Trash2 size={10} />
+                        </button>
+                      </div>
+                    ) : (
+                      /* SEM FOTO: Menu visible by default, semi-transparent */
+                      <div 
+                        onClick={() => editCommFileInputRef.current?.click()}
+                        className="absolute bottom-2.5 left-2.5 right-2.5 h-8 bg-[#1e293b]/70 backdrop-blur-xs border border-white/10 rounded-full flex items-center justify-between px-3 text-white cursor-pointer select-none font-sans hover:bg-black/45 active:scale-[0.98] transition-all"
+                      >
+                        <span className="text-[9.5px] font-black uppercase tracking-wide flex items-center gap-1.5">📷 Adicionar Foto</span>
+                      </div>
+                    );
+                  })()
                 )}
               </div>
 
@@ -1508,18 +1890,69 @@ export default function Communities({
                     </div>
 
                     {isUserModerator() && (
-                      <button 
-                        onClick={() => handleDeleteTopic(activeTopic.id)}
-                        className="bg-red-50 hover:bg-red-100 text-red-600 px-1.5 py-0.5 rounded text-[9px] font-bold flex items-center gap-0.5"
-                      >
-                        <Trash2 size={10} /> Deletar Tópico
-                      </button>
+                      <div className="flex gap-1.5 flex-wrap">
+                        {/* Lock / Unlock Toggle */}
+                        <button 
+                          onClick={() => handleToggleLockTopic(activeTopic)}
+                          className={`px-1.5 py-0.5 rounded text-[9px] font-bold flex items-center gap-0.5 border ${
+                            activeTopic.isLocked
+                              ? 'bg-neutral-100 text-neutral-800 border-neutral-300'
+                              : 'bg-amber-50 hover:bg-amber-100 text-amber-700 border-amber-200'
+                          }`}
+                        >
+                          {activeTopic.isLocked ? <Unlock size={10} /> : <Lock size={10} />}
+                          {activeTopic.isLocked ? 'Desbloquear' : 'Trancar'}
+                        </button>
+
+                        {/* Pin / Unpin Toggle */}
+                        <button 
+                          onClick={() => handleTogglePinTopic(activeTopic)}
+                          className={`px-1.5 py-0.5 rounded text-[9px] font-bold flex items-center gap-0.5 border ${
+                            activeTopic.isPinned
+                              ? 'bg-yellow-100 text-yellow-900 border-yellow-300'
+                              : 'bg-[#eff6ff] hover:bg-blue-100 text-[#1e40af] border-blue-200'
+                          }`}
+                        >
+                          <Pin size={10} />
+                          {activeTopic.isPinned ? 'Desfixar' : 'Fixar'}
+                        </button>
+
+                        {/* Approve / Disapprove Toggle */}
+                        <button 
+                          onClick={() => handleToggleApproveTopic(activeTopic)}
+                          className={`px-1.5 py-0.5 rounded text-[9px] font-bold flex items-center gap-0.5 border ${
+                            activeTopic.isApproved
+                              ? 'bg-green-100 text-green-900 border-green-300'
+                              : 'bg-green-50 hover:bg-green-100 text-green-700 border-green-200'
+                          }`}
+                        >
+                          <ShieldCheck size={10} />
+                          {activeTopic.isApproved ? 'Desvincular Selo' : 'Aprovar'}
+                        </button>
+
+                        {/* Delete Topic (Existing) */}
+                        <button 
+                          onClick={() => handleDeleteTopic(activeTopic.id)}
+                          className="bg-red-50 hover:bg-red-100 text-red-600 px-1.5 py-0.5 rounded text-[9px] font-bold flex items-center gap-0.5 border border-red-200"
+                        >
+                          <Trash2 size={10} /> Deletar
+                        </button>
+                      </div>
                     )}
 
                   </div>
 
-                  <h3 className="font-black text-sm text-indigo-900 mt-3 border-b-2 border-slate-200 pb-1.5 mb-2 leading-none uppercase tracking-wide">
-                    {activeTopic.title}
+                  <h3 className="font-black text-sm text-indigo-900 mt-3 border-b-2 border-slate-200 pb-1.5 mb-2 uppercase flex items-center gap-1.5 flex-wrap leading-tight">
+                    <span>{activeTopic.title}</span>
+                    {activeTopic.isPinned && (
+                      <span className="bg-yellow-250 text-yellow-900 border border-yellow-350 font-black tracking-wide text-[8.5px] px-1.5 py-0.5 rounded shadow-xs">📌 FIXADO</span>
+                    )}
+                    {activeTopic.isLocked && (
+                      <span className="bg-amber-200 text-amber-950 border border-amber-300 font-black tracking-wide text-[8.5px] px-1.5 py-0.5 rounded shadow-xs animate-pulse">🔒 TRANCADO</span>
+                    )}
+                    {activeTopic.isApproved && (
+                      <span className="bg-green-250 text-green-900 border border-green-300 font-black tracking-wide text-[8.5px] px-1.5 py-0.5 rounded shadow-xs">🛡️ CONTEÚDO VERIFICADO</span>
+                    )}
                   </h3>
 
                   <p className="text-neutral-700 leading-relaxed whitespace-pre-wrap font-sans text-xs">
@@ -1689,7 +2122,14 @@ export default function Communities({
 
                 {/* 4. REPLY FORM FOOTER */}
                 {isJoined ? (
-                  <form onSubmit={handleAddReply} className="mt-2.5 border-t-2 border-neutral-100 pt-3 flex flex-col gap-2">
+                  activeTopic.isLocked ? (
+                    <div className="mt-4 p-4 bg-amber-50 border-2 border-dashed border-amber-300 rounded text-center text-xs text-amber-800 font-sans flex flex-col items-center gap-1.5 animate-pulse">
+                      <span className="text-xl">🔒</span>
+                      <h5 className="font-extrabold uppercase tracking-wide">Tópico Trancado pela Moderação</h5>
+                      <span className="text-[10px] text-amber-600 font-medium">Este assunto foi encerrado e não aceita mais comentários adicionais.</span>
+                    </div>
+                  ) : (
+                    <form onSubmit={handleAddReply} className="mt-2.5 border-t-2 border-neutral-100 pt-3 flex flex-col gap-2">
                     <label className="block text-[10px] font-black text-neutral-600 uppercase">📝 Enviar Resposta como {activeUserName}:</label>
                     <textarea
                       id="forum-reply-textarea-input"
@@ -1707,6 +2147,7 @@ export default function Communities({
                       Responder Tópico
                     </button>
                   </form>
+                )
                 ) : (
                   <div className="text-center p-3.5 bg-neutral-50/70 border rounded border-dashed text-neutral-500 italic mt-2.5 font-mono">
                     ⚠️ Você precisa participar desta comunidade para poder postar respostas.
@@ -1787,6 +2228,56 @@ export default function Communities({
 
             </div>
 
+            {/* C. CARD MODERADORES */}
+            <div className="bg-white border-2 border-neutral-300 rounded shadow-sm text-left relative flex flex-col">
+              
+              <div 
+                className="p-3 border-b border-neutral-200 flex items-center justify-between bg-zinc-50 cursor-pointer hover:bg-neutral-100/70 transition-colors"
+                onClick={() => setShowModsPanel(true)}
+              >
+                <div className="flex flex-col font-sans">
+                  <span className="font-extrabold text-[13px] text-neutral-800">Moderadores</span>
+                  <span className="text-[10px] text-pink-600 font-black tracking-tight underline select-none">
+                    Ver todos / Gerenciar ({getModeratorsList().length})
+                  </span>
+                </div>
+              </div>
+
+              {/* Moderadores Grid view */}
+              <div 
+                className="p-3 overflow-y-auto max-h-[220px]"
+                style={{ scrollbarWidth: 'thin' }}
+              >
+                <div className="flex flex-col gap-2">
+                  {getModeratorsList().map((mod) => (
+                    <div 
+                      key={mod.id}
+                      onClick={() => onNavigateToFriend(mod.id)}
+                      className="flex items-center gap-2.5 p-1 rounded hover:bg-neutral-50 border border-transparent hover:border-[#1d4ed8]/30 cursor-pointer transition-all"
+                    >
+                      <div className="w-8 h-8 rounded bg-neutral-100 border overflow-hidden shadow-inner flex-shrink-0">
+                        <img 
+                          src={mod.avatar} 
+                          alt={mod.name} 
+                          className="w-full h-full object-cover"
+                          referrerPolicy="no-referrer"
+                        />
+                      </div>
+                      <div className="flex-1 min-w-0 font-sans">
+                        <div className="font-bold text-[11px] text-neutral-800 truncate flex items-center gap-1">
+                          {mod.id === activeComm?.ownerId ? '👑' : '🛡️'} {mod.name}
+                        </div>
+                        <span className="text-[8.5px] font-black text-[#1d4ed8] uppercase tracking-tight">
+                          {mod.id === activeComm?.ownerId ? 'Proprietário' : 'Moderador'}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+            </div>
+
             {/* B. RELATED COMMUNITIES (CPMUNIDDES RELACIONADAS AS WRITTEN IN MOCKUP) */}
             <div className="bg-white border-2 border-neutral-300 rounded shadow-sm text-left relative flex flex-col">
               
@@ -1851,7 +2342,7 @@ export default function Communities({
           </div>
         </div>
       </div>
-
+      )
       ) : dbCommunities.length === 0 ? (
         <div className="p-16 border rounded bg-white text-center font-mono flex flex-col items-center justify-center gap-2">
           <RefreshCw size={24} className="text-pink-500 animate-spin" />
@@ -1956,42 +2447,50 @@ export default function Communities({
             {/* Header / Sub-banner for list section */}
             <div className="bg-[#dee7f4] border border-neutral-300 rounded p-3 text-left">
               <span className="text-xs font-black text-neutral-800 font-sans tracking-tight">
-                📚 Você participa de {dbCommunities.length} comunidades clássicas
+                {targetProfileId === activeUserId ? (
+                  `📚 Você participa de ${displayedCommunities.length} comunidades clássicas`
+                ) : (
+                  `📚 ${myProfile.name || 'Este usuário'} participa de ${displayedCommunities.length} comunidades clássicas`
+                )}
               </span>
             </div>
 
             {/* Communities Grid in 2 Columns */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {dbCommunities
+              {displayedCommunities
                 .filter(c =>
                   c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                   c.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
                   (c.category && c.category.toLowerCase().includes(searchQuery.toLowerCase()))
                 )
                 .map((comm) => {
+                  const realComm = dbCommunities.find(dbC => dbC.id === comm.id) || comm;
                   // Formatting of Short description limit (up to 2 lines, around 80 chars)
-                  let shortDesc = comm.description || '';
+                  let shortDesc = realComm.description || '';
                   if (shortDesc.length > 80) {
                     shortDesc = shortDesc.substring(0, 77) + '...';
                   }
 
                   return (
                     <div 
-                      key={comm.id}
+                      key={realComm.id}
                       onClick={() => {
-                        handleSelectCommunity(comm.id);
+                        handleSelectCommunity(realComm.id);
                         setActiveTopic(null);
                       }}
                       className="bg-white border-2 border-neutral-300 rounded-lg p-3 hover:border-pink-500 hover:shadow-md cursor-pointer transition-all flex gap-3 h-[115px] select-none relative group"
                     >
                       {/* Thumbnail: Left Side, brick color/brown rounded square ~90x90px */}
                       <div className="w-[90px] h-[90px] bg-[#a88a79] rounded-sm border border-neutral-300 overflow-hidden flex-shrink-0 flex items-center justify-center text-4xl shadow-inner group-hover:scale-102 transition-transform select-none">
-                        {comm.avatar && comm.avatar.startsWith('data:') ? (
-                          <img src={comm.avatar} alt={comm.name} className="w-full h-full object-cover" />
-                        ) : comm.avatar && (comm.avatar.startsWith('http://') || comm.avatar.startsWith('https://')) ? (
-                          <img src={comm.avatar} alt={comm.name} className="w-full h-full object-cover" />
+                        {realComm.avatar && (
+                          realComm.avatar.startsWith('data:') ||
+                          realComm.avatar.startsWith('http://') ||
+                          realComm.avatar.startsWith('https://') ||
+                          realComm.avatar.startsWith('/')
+                        ) ? (
+                          <img src={realComm.avatar} alt={realComm.name} className="w-full h-full object-cover" />
                         ) : (
-                          <span className="filter drop-shadow-sm select-none">{comm.avatar || '👥'}</span>
+                          <span className="filter drop-shadow-sm select-none">{realComm.avatar || '👥'}</span>
                         )}
                       </div>
 
@@ -1999,7 +2498,7 @@ export default function Communities({
                       <div className="flex-1 min-w-0 flex flex-col justify-between text-left">
                         <div className="space-y-0.5">
                           <h3 className="text-sm font-black text-[#1d4ed8] group-hover:underline truncate uppercase tracking-tight">
-                            {comm.name}
+                            {realComm.name}
                           </h3>
                           <p className="text-[11px] text-neutral-600 font-sans leading-snug line-clamp-2">
                             {shortDesc}
@@ -2009,7 +2508,7 @@ export default function Communities({
                         {/* Number of Members (Lowercase right align inside card) */}
                         <div className="text-right">
                           <span className="text-[10px] font-mono font-bold text-[#db2777] bg-pink-50/75 px-1.5 py-0.5 rounded border border-pink-200">
-                            {(comm.members || 3638).toLocaleString('pt-BR')}|Menders
+                            {(realComm.members || 3638).toLocaleString('pt-BR')} membros
                           </span>
                         </div>
                       </div>
@@ -2017,7 +2516,7 @@ export default function Communities({
                   );
                 })}
 
-              {dbCommunities.filter(c =>
+              {displayedCommunities.filter(c =>
                 c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 c.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 (c.category && c.category.toLowerCase().includes(searchQuery.toLowerCase()))
@@ -2122,8 +2621,12 @@ export default function Communities({
 
       {/* 3. NEW COMMUNITY FORM MODAL */}
       {showCreateModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-[#dee7f4] border-4 border-slate-300 rounded p-6 max-w-md w-full shadow-2xl anim-scale text-left flex flex-col my-8">
+        <div className={`fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 overflow-y-auto transition-opacity duration-[1500ms] ease-out ${
+          isClosingCreateModal ? 'opacity-0 pointer-events-none' : 'opacity-100'
+        }`}>
+          <div className={`bg-[#dee7f4] border-4 border-slate-300 rounded p-6 max-w-md w-full shadow-2xl text-left flex flex-col my-8 transition-all duration-[1500ms] ease-out ${
+            isClosingCreateModal ? 'opacity-0 scale-95 translate-y-4' : 'opacity-100 scale-100 translate-y-0'
+          }`}>
             
             <h3 className="text-md font-extrabold text-neutral-800 border-b border-neutral-300 pb-2 mb-4 uppercase flex items-center gap-1.5 leading-none">
               <PlusCircle size={17} className="text-pink-600" />
@@ -2287,6 +2790,19 @@ export default function Communities({
 
             <div className="flex flex-col gap-3 font-sans text-xs">
               
+              {isUserOwner() && (
+                <div>
+                  <label className="block text-[9px] font-extrabold text-neutral-500 mb-1">NOME DA COMUNIDADE:</label>
+                  <input
+                    type="text"
+                    id="edit-comm-name"
+                    value={activeComm.name}
+                    onChange={(e) => setActiveComm({ ...activeComm, name: e.target.value })}
+                    className="w-full px-3 py-1.5 bg-white border border-neutral-300 rounded focus:outline-none font-bold text-neutral-800"
+                  />
+                </div>
+              )}
+
               <div>
                 <label className="block text-[9px] font-extrabold text-neutral-500 mb-1">EDITAR DESCRIÇÃO:</label>
                 <textarea
@@ -2309,9 +2825,45 @@ export default function Communities({
                 />
               </div>
 
+              {isUserOwner() && (
+                <div className="border border-red-300 bg-red-50 p-2.5 rounded text-[10px] font-sans text-red-800 flex flex-col gap-1.5 mt-1">
+                  <span className="font-extrabold text-[9px] uppercase tracking-wide flex items-center gap-1 text-red-600">⚠ Zona de Perigo</span>
+                  <span>Deseja encerrar definitivamente esta comunidade? Esta ação apagará todos os tópicos e respostas de forma irreversível!</span>
+                  {!showConfirmDelete ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmDelete(true)}
+                      className="self-start px-2.5 py-1.5 bg-red-600 hover:bg-red-700 text-white font-extrabold rounded shadow-xs transition-colors cursor-pointer"
+                    >
+                      Excluir Comunidade
+                    </button>
+                  ) : (
+                    <div className="flex gap-2 items-center mt-1">
+                      <button
+                        type="button"
+                        onClick={handleCloseCommunity}
+                        className="px-3 py-1.5 bg-red-700 hover:bg-red-800 text-white font-black rounded uppercase text-[9px] tracking-wide animate-pulse cursor-pointer"
+                      >
+                        SIM, CONFIRMAR EXCLUSÃO DEFINITIVA
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmDelete(false)}
+                        className="px-2.5 py-1.5 bg-neutral-200 hover:bg-neutral-300 text-neutral-700 font-bold rounded cursor-pointer"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="flex justify-end gap-2.5 mt-4 border-t border-neutral-300 pt-3">
                 <button 
-                  onClick={() => setShowEditCommModal(false)}
+                  onClick={() => {
+                    setShowEditCommModal(false);
+                    setShowConfirmDelete(false);
+                  }}
                   className="bg-neutral-200 text-neutral-700 hover:bg-neutral-300 px-4 py-2 rounded text-xs font-bold font-sans cursor-pointer"
                 >
                   Cancelar
@@ -2329,6 +2881,235 @@ export default function Communities({
           </div>
         </div>
       )}
+
+      {/* SLIDING PANEL: MODERADORES & CARGOS (DRAWER) */}
+      <AnimatePresence>
+        {showModsPanel && activeComm && (
+          <div className="fixed inset-0 z-50 flex justify-end font-sans">
+            {/* Backdrop Overlay */}
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowModsPanel(false)}
+              className="absolute inset-0 bg-black/45 backdrop-blur-xs"
+            />
+
+            {/* Sliding Drawer Body */}
+            <motion.div 
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'tween', duration: 0.25 }}
+              className="relative w-full max-w-md h-full bg-[#dee7f4] border-l-4 border-slate-300 shadow-2xl p-5 flex flex-col justify-between z-10"
+            >
+              
+              <div className="flex flex-col h-full min-w-0">
+                {/* Header inside drawer */}
+                <div className="flex items-center justify-between border-b border-neutral-300 pb-3 mb-4">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck size={18} className="text-[#1d4ed8]" />
+                    <span className="font-black text-sm text-neutral-800 uppercase tracking-tight">🛡️ Moderação & Cargos</span>
+                  </div>
+                  <button 
+                    onClick={() => setShowModsPanel(false)}
+                    className="p-1 hover:bg-slate-200 rounded text-neutral-600 transition-colors"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+
+                {/* Subtitle / context info */}
+                <p className="text-[10.5px] text-neutral-600 leading-normal mb-3">
+                  Gerencie os donos, moderadores e banimentos da comunidade <strong>{activeComm.name}</strong>.
+                </p>
+
+                {/* Body Content - Scrollable container */}
+                <div 
+                  className="flex-1 overflow-y-auto pr-1 mb-3 space-y-4 text-xs font-sans"
+                  style={{ scrollbarWidth: 'thin' }}
+                >
+                  {/* SECTION 1: PROPRIETÁRIO */}
+                  <div className="bg-white border border-neutral-200 rounded p-3">
+                    <span className="font-extrabold text-[10.5px] text-indigo-900 uppercase block mb-2 tracking-wide">👑 Dono / Criador</span>
+                    {getModeratorsList().filter(m => m.id === activeComm.ownerId).map(owner => (
+                      <div key={owner.id} className="flex items-center gap-2.5">
+                        <img 
+                          src={owner.avatar} 
+                          alt={owner.name} 
+                          className="w-10 h-10 rounded border object-cover shadow-sm animate-fade-in"
+                          referrerPolicy="no-referrer"
+                        />
+                        <div>
+                          <p className="font-black text-xs text-neutral-800">{owner.name}</p>
+                          <span className="text-[8.5px] font-bold text-neutral-400">Criado em {owner.joinedAt}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* SECTION 2: LISTA DE MODERADORES */}
+                  <div className="bg-white border border-neutral-200 rounded p-3 flex flex-col gap-2">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-extrabold text-[10.5px] text-[#1d4ed8] uppercase tracking-wide">🛡️ Moderadores AuxiliareS</span>
+                      <span className="text-[9.5px] font-bold text-neutral-400">
+                        ({getModeratorsList().filter(m => m.id !== activeComm.ownerId).length} / 5)
+                      </span>
+                    </div>
+
+                    {getModeratorsList().filter(m => m.id !== activeComm.ownerId).length === 0 ? (
+                      <span className="text-[10px] text-neutral-400 italic py-1 block">Nenhum moderador nomeado para esta comunidade.</span>
+                    ) : (
+                      <div className="space-y-2">
+                        {getModeratorsList().filter(m => m.id !== activeComm.ownerId).map(mod => (
+                          <div key={mod.id} className="flex items-center justify-between p-1.5 border border-neutral-100 rounded hover:bg-slate-50 transition-colors">
+                            <div className="flex items-center gap-2">
+                              <img 
+                                src={mod.avatar} 
+                                alt={mod.name} 
+                                className="w-8 h-8 rounded border object-cover shadow-xs"
+                                referrerPolicy="no-referrer"
+                              />
+                              <div>
+                                <p className="font-bold text-xs text-neutral-800">{mod.name}</p>
+                                <span className="text-[8.5px] text-indigo-700 font-extrabold uppercase">MODERADOR</span>
+                              </div>
+                            </div>
+                            {isUserOwner() && (
+                              <button 
+                                onClick={() => handleRemoveModerator(mod.id)} 
+                                className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1 rounded transition-colors"
+                                title="Remover cargo de moderador"
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* SECTION 3: MANAGEMENT (ADD MODERATOR) / EXCLUSIVO PARA O DONO */}
+                  {isUserOwner() && (
+                    <div className="bg-amber-50/50 border border-amber-200 rounded p-3 flex flex-col gap-2">
+                      <span className="font-extrabold text-[10px] text-amber-800 uppercase block tracking-wider">🌟 Nomear Novo Moderador</span>
+                      
+                      {/* Check limit of 5 */}
+                      {getModeratorsList().filter(m => m.id !== activeComm.ownerId).length >= 5 ? (
+                        <div className="text-[10px] text-amber-700 bg-amber-100 border border-amber-300 rounded p-2 text-center font-bold">
+                          ⚠️ Limite máximo de 5 moderadores atingido. Remova um moderator para admitir outro.
+                        </div>
+                      ) : (
+                        <div className="flex gap-2">
+                          <select 
+                            value={modAddSelectId}
+                            onChange={(e) => setModAddSelectId(e.target.value)}
+                            className="flex-1 bg-white border border-neutral-300 rounded p-1.5 text-[11px] focus:outline-none"
+                          >
+                            <option value="">Selecione um membro da comunidade...</option>
+                            {communityMembers
+                              .filter(m => m.id !== activeComm.ownerId && !(activeComm.moderators || []).includes(m.id) && !(activeComm.bannedMembers || []).includes(m.id))
+                              .map(m => (
+                                <option key={m.id} value={m.id}>{m.name}</option>
+                              ))
+                            }
+                          </select>
+                          <button 
+                            onClick={() => handleAddModerator(modAddSelectId)}
+                            disabled={!modAddSelectId}
+                            className="bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-[10.5px] px-3.5 py-1.5 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                          >
+                            Conceder Cargo
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* SECTION 4: BAN MEMBERS (PERMITIDO PARA DONO & MODERADORES DE ACORDO COM REQUISITOS) */}
+                  <div className="bg-red-50/40 border border-red-200 rounded p-3 flex flex-col gap-2">
+                    <span className="font-extrabold text-[10.5px] text-red-800 uppercase tracking-widest flex items-center gap-1">
+                      <UserX size={12} /> Banimento de Membros
+                    </span>
+                    <p className="text-[9.5px] text-neutral-500 leading-tight">
+                      Administradores e moderadores podem banir usuários comuns. Usuários banidos são ejetados da comunidade e bloqueados de reingressar.
+                    </p>
+
+                    {/* Selector / Search to Ban */}
+                    <div className="flex gap-2 mt-1">
+                      <select 
+                        id="ban-member-select-picker"
+                        defaultValue=""
+                        onChange={(e) => {
+                          if (e.target.value) {
+                            handleBanMember(e.target.value);
+                            e.target.value = ""; // Reset selecting field
+                          }
+                        }}
+                        className="flex-1 bg-white border border-red-300 rounded p-1.5 text-[11px] focus:ring-1 focus:ring-red-400 focus:outline-none"
+                      >
+                        <option value="">Escolha um membro para banir...</option>
+                        {communityMembers
+                          // Cannot ban the owner, and moderators cannot ban other moderators or owner
+                          .filter(m => {
+                            if (m.id === activeComm.ownerId) return false;
+                            const isSelectedMod = (activeComm.moderators || []).includes(m.id);
+                            if (isUserOwner()) {
+                              // Owner can ban moderators too!
+                              return true;
+                            } else if (isUserModerator()) {
+                              // Moderators cannot ban other moderators (nor owner)
+                              return !isSelectedMod;
+                            }
+                            return false;
+                          })
+                          .map(m => (
+                            <option key={m.id} value={m.id}>{m.name}</option>
+                          ))
+                        }
+                      </select>
+                    </div>
+
+                    {/* Banned lists with option to Unban */}
+                    {activeComm.bannedMembers && activeComm.bannedMembers.length > 0 && (
+                      <div className="mt-2.5">
+                        <span className="font-bold text-[9px] text-neutral-600 block mb-1 uppercase tracking-wider">Lista de Banidos ({activeComm.bannedMembers.length})</span>
+                        <div className="max-h-24 overflow-y-auto space-y-1 bg-white border border-red-100 rounded p-1.5">
+                          {activeComm.bannedMembers.map((bannedId: string) => {
+                            const foundProfile = profiles[bannedId];
+                            const nameStr = foundProfile?.name || communityMembers.find(m => m.id === bannedId)?.name || bannedId;
+                            return (
+                              <div key={bannedId} className="flex items-center justify-between text-[10.5px] p-1 border-b border-neutral-50 last:border-b-0 font-sans">
+                                <span className="text-neutral-700 truncate max-w-[150px]">{nameStr}</span>
+                                <button 
+                                  onClick={() => handleUnbanMember(bannedId)}
+                                  className="text-[9px] font-extrabold text-blue-600 hover:underline hover:text-blue-800"
+                                >
+                                  Desbanir
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                </div>
+
+                {/* Info Footer inside drawer */}
+                <div className="bg-neutral-100 p-2.5 rounded-sm border border-neutral-200 mt-2 text-center text-[10px] text-neutral-500 font-sans flex items-center justify-center gap-1.5">
+                  <ShieldAlert size={12} className="text-[#1d4ed8]" />
+                  <span>Configurações administrativas de nível de Servidor</span>
+                </div>
+
+              </div>
+
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* 5. INDEPENDENT MEMBERS MODAL WITH THE +/- VERTICAL SCROLL ASSISTANCE INSTRUCTIONS */}
       {showMembersModal && activeComm && (
