@@ -259,51 +259,45 @@ export default function Communities({
   const [isLoadingProfileComms, setIsLoadingProfileComms] = useState<boolean>(false);
 
   useEffect(() => {
-    let isMounted = true;
-    const fetchProfileComms = async () => {
-      if (dbCommunities.length === 0) return; // Wait for initial bootstrap to avoid empty queries
-      setIsLoadingProfileComms(true);
-      try {
-        const response = await fetch(`/api/profile/${targetProfileId}/communities?visitorId=${activeUserId}`);
-        if (response.ok && isMounted) {
-          const data = await response.json();
-          if (data && Array.isArray(data.communities)) {
-            setDisplayedCommunities(data.communities);
-          }
-        }
-      } catch (err) {
-        console.error("Error fetching profile communities:", err);
-        if (isMounted) {
-          const isOwner = activeUserId === targetProfileId;
-          const friendsPool = ["me", "lucas", "alexandre", "orkut", "hacker"];
-          const isFriend = friendsPool.includes(activeUserId) && friendsPool.includes(targetProfileId);
-          
-          let userCommIds: string[] = ['1', '3'];
-          if (targetProfileId === 'me') userCommIds = ['1', '3', 'pendrive_perdido'];
-          else if (targetProfileId === 'orkut') userCommIds = ['1', '3', 'orkut_devs', '2'];
-          else if (targetProfileId === 'alexandre') userCommIds = ['1', '2', 'sec_pr'];
-          else if (targetProfileId === 'hacker') userCommIds = ['1', 'hacker_guild'];
+    if (dbCommunities.length === 0) return;
 
-          const localFiltered = dbCommunities.filter(c => {
-            if (!userCommIds.includes(c.id)) return false;
-            if (isOwner || isFriend) return true;
-            return !c.secureMode;
-          });
-          setDisplayedCommunities(localFiltered);
+    setIsLoadingProfileComms(true);
+    const docRef = doc(db, 'joined_communities', targetProfileId);
+    const unsubscribe = onSnapshot(docRef, (docSnap) => {
+      let userCommIds: string[] = ['1', '3'];
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data && Array.isArray(data.communityIds)) {
+          userCommIds = data.communityIds;
         }
-      } finally {
-        if (isMounted) {
-          setIsLoadingProfileComms(false);
-        }
+      } else {
+        // Fallback for default users if document does not exist yet
+        if (targetProfileId === 'me' || targetProfileId === activeUserId) userCommIds = ['1', '3', 'pendrive_perdido'];
+        else if (targetProfileId === 'orkut') userCommIds = ['1', '3', 'orkut_devs', '2'];
+        else if (targetProfileId === 'alexandre') userCommIds = ['1', '2', 'sec_pr'];
+        else if (targetProfileId === 'hacker') userCommIds = ['1', 'hacker_guild'];
       }
-    };
 
-    fetchProfileComms();
+      const isOwner = activeUserId === targetProfileId;
+      const friendsPool = ["me", "lucas", "alexandre", "orkut", "hacker"];
+      const isFriend = friendsPool.includes(activeUserId) && friendsPool.includes(targetProfileId);
+
+      const localFiltered = dbCommunities.filter(c => {
+        if (!userCommIds.includes(c.id)) return false;
+        if (isOwner || isFriend) return true;
+        return !c.secureMode;
+      });
+      setDisplayedCommunities(localFiltered);
+      setIsLoadingProfileComms(false);
+    }, (err) => {
+      console.error("Error listening to profile communities:", err);
+      setIsLoadingProfileComms(false);
+    });
 
     return () => {
-      isMounted = false;
+      unsubscribe();
     };
-  }, [targetProfileId, activeUserId, dbCommunities]);
+  }, [targetProfileId, dbCommunities, activeUserId]);
   const [activeCommId, setActiveCommId] = useState<string | null>(
     activeCommunityId !== undefined ? activeCommunityId : null
   );

@@ -424,23 +424,18 @@ export default function App() {
         const currentUid = authUid || cachedDemoId;
         if (currentUid && fetched[currentUid]) {
           fetched['me'] = fetched[currentUid];
+          const dbProfile = fetched[currentUid];
+          if (!currentUserProfile ||
+              currentUserProfile.name !== dbProfile.name ||
+              currentUserProfile.avatar !== dbProfile.avatar ||
+              currentUserProfile.location !== dbProfile.location ||
+              currentUserProfile.username !== dbProfile.username ||
+              currentUserProfile.webpage !== dbProfile.webpage ||
+              currentUserProfile.statusOnline !== dbProfile.statusOnline) {
+            setCurrentUserProfile(dbProfile);
+          }
         } else if (currentUserProfile) {
           fetched['me'] = currentUserProfile;
-        }
-
-        // Auto-update standard user/me profile loaded from DB to have scrapzone_galera2008/webpage
-        const targetMe = fetched['me'];
-        if (targetMe && (targetMe.username !== 'scrapzone_galera2008' || targetMe.webpage !== 'http://orky.net/scrapzone_galera2008')) {
-          const updatedMe = {
-            ...targetMe,
-            username: 'scrapzone_galera2008',
-            webpage: 'http://orky.net/scrapzone_galera2008'
-          };
-          fetched['me'] = updatedMe;
-          const writeId = currentUid || 'me';
-          setDoc(doc(db, 'profiles', writeId), updatedMe).catch(err => {
-            console.error("Error backing up profile updates: ", err);
-          });
         }
 
         setProfiles(fetched);
@@ -532,12 +527,25 @@ export default function App() {
       handleFirestoreError(error, OperationType.LIST, 'shared_memories');
     });
 
+    const unsubscribeCommunities = onSnapshot(collection(db, 'communities'), (snapshot) => {
+      if (!snapshot.empty) {
+        const list: Community[] = [];
+        snapshot.forEach((doc) => {
+          list.push({ ...doc.data(), id: doc.id } as Community);
+        });
+        setCommunities(list);
+      }
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'communities');
+    });
+
     return () => {
       unsubscribeProfiles();
       unsubscribeScraps();
       unsubscribeTestimonials();
       unsubscribeAlbums();
       unsubscribeSharedMemories();
+      unsubscribeCommunities();
     };
   }, []);
 
@@ -554,7 +562,8 @@ export default function App() {
         }
       } else {
         // Fallback or seed default communities
-        setDoc(docRef, { communityIds: ['1', '3'] }).catch(err => {
+        const defaultSet = ['1', '3', 'pendrive_perdido'];
+        setDoc(docRef, { communityIds: defaultSet }).catch(err => {
           handleFirestoreError(err, OperationType.WRITE, `joined_communities/${activeId}`);
         });
       }
@@ -569,8 +578,12 @@ export default function App() {
 
   // Subscription to Visited Profile's Joined Communities List
   useEffect(() => {
-    if (!activeProfileId) return;
-    const docRef = doc(db, 'joined_communities', activeProfileId);
+    const targetProfileId = activeProfileId === 'me'
+      ? (currentUserProfile?.id || 'me')
+      : activeProfileId;
+
+    if (!targetProfileId) return;
+    const docRef = doc(db, 'joined_communities', targetProfileId);
     
     const unsubscribeVisitedJoinedCommunities = onSnapshot(docRef, (docSnap) => {
       if (docSnap.exists()) {
@@ -580,27 +593,31 @@ export default function App() {
         }
       } else {
         // Seed standard classic defaults when missing
+        const targetId = targetProfileId;
+        const myRealId = currentUserProfile?.id || 'me';
         let defs = ['1', '3'];
-        if (activeProfileId === 'me') defs = ['1', '3', 'pendrive_perdido'];
-        else if (activeProfileId === 'orkut') defs = ['1', '3', 'orkut_devs', '2']; 
-        else if (activeProfileId === 'alexandre') defs = ['1', '2', 'sec_pr'];
-        else if (activeProfileId === 'hacker') defs = ['1', 'hacker_guild'];
+        if (targetId === myRealId || targetId === 'me') defs = ['1', '3', 'pendrive_perdido'];
+        else if (targetId === 'orkut') defs = ['1', '3', 'orkut_devs', '2']; 
+        else if (targetId === 'alexandre') defs = ['1', '2', 'sec_pr'];
+        else if (targetId === 'hacker') defs = ['1', 'hacker_guild'];
         setVisitedProfileJoinedCommIds(defs);
       }
     }, (error) => {
       console.error("Error loading visited profile joined communities:", error);
+      const targetId = targetProfileId;
+      const myRealId = currentUserProfile?.id || 'me';
       let defs = ['1', '3'];
-      if (activeProfileId === 'me') defs = ['1', '3', 'pendrive_perdido'];
-      else if (activeProfileId === 'orkut') defs = ['1', '3', 'orkut_devs', '2']; 
-      else if (activeProfileId === 'alexandre') defs = ['1', '2', 'sec_pr'];
-      else if (activeProfileId === 'hacker') defs = ['1', 'hacker_guild'];
+      if (targetId === myRealId || targetId === 'me') defs = ['1', '3', 'pendrive_perdido'];
+      else if (targetId === 'orkut') defs = ['1', '3', 'orkut_devs', '2']; 
+      else if (targetId === 'alexandre') defs = ['1', '2', 'sec_pr'];
+      else if (targetId === 'hacker') defs = ['1', 'hacker_guild'];
       setVisitedProfileJoinedCommIds(defs);
     });
 
     return () => {
       unsubscribeVisitedJoinedCommunities();
     };
-  }, [activeProfileId]);
+  }, [activeProfileId, currentUserProfile?.id]);
 
   // Synchronize browser Hash URL with React States (Simulating router navigation cleanly)
   useEffect(() => {
@@ -859,15 +876,16 @@ export default function App() {
     { id: 'hacker', name: 'H3_Elit3_Hacker', avatar: 'https://images.unsplash.com/photo-1544197150-b99a580bb7a8?w=150', location: 'Deep Web' }
   ];
 
-  // Simulated Communities List
-  const communities: Community[] = [
+  // Real-time Communities List
+  const [communities, setCommunities] = useState<Community[]>(() => [
     { id: '1', name: 'Eu odeio acordar cedo', description: 'Porque o sono pós-compilação em Rust é sagrado.', members: 42152, avatar: '⏰', category: 'Lazer', secureMode: false },
     { id: '2', name: 'Digo "Oi" e continuo programando', description: 'Ative sua chave simétrica e não interrompa meu raciocínio.', members: 12510, avatar: '💻', category: 'Tecnologia', secureMode: false },
     { id: '3', name: 'Eu amo chocolate preto', description: 'Combina muito bem com café preto e revisões estritas de código.', members: 8920, avatar: '🍫', category: 'Culinária', secureMode: false },
     { id: 'sec_pr', name: 'Assembleia Segura PR (Rust)', description: 'Fórum da Assembleia Legislativa do Paraná para debater leis de cibersegurança do pinhão.', members: 1337, avatar: '🌲', category: 'Governo', secureMode: true },
     { id: 'hacker_guild', name: 'Hacker Elite - Anti-XSS Guild', description: 'Debates puros sobre buffer safety e como aniquilar XSS com isolamento de WebAssembly linear-memory.', members: 777, avatar: '🕵️', category: 'Segurança', secureMode: true },
-    { id: 'orkut_devs', name: 'Scrapzone Devs & Zero-Knowledge', description: 'Simulações de zk-SNARKs e criptossistemas de alto gabarito sob governança descentralizada.', members: 502, avatar: '🔑', category: 'Cripto', secureMode: true }
-  ];
+    { id: 'orkut_devs', name: 'Scrapzone Devs & Zero-Knowledge', description: 'Simulações de zk-SNARKs e criptossistemas de alto gabarito sob governança descentralizada.', members: 502, avatar: '🔑', category: 'Cripto', secureMode: true },
+    { id: 'pendrive_perdido', name: 'QUEM NUNCA PERDEU O PENDRIVE?', description: 'Pra quem já sofreu perdendo arquivos importantes ou a chave de criptografia do pendrive de backup.', members: 3638, avatar: '💾', category: 'Nostalgia', secureMode: false }
+  ]);
 
   // Scraps State
   const [scraps, setScraps] = useState<Scrap[]>([
@@ -1295,7 +1313,7 @@ export default function App() {
             joinedIds={joinedCommunities}
             profiles={profiles}
             currentUser={{ id: currentUserProfile?.id || profiles.me.id || 'me', name: profiles.me.name, avatar: profiles.me.avatar }}
-            visitedProfileId={activeProfileId}
+            visitedProfileId={currentViewedProfile.id}
             onNavigateToFriend={handleNavigateToFriend}
             onNavigateToTab={(tab, forceVisitor = false, autoTriggerUpload = false, communityId) => {
               setCurrentTab(tab);
