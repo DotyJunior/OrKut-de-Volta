@@ -640,6 +640,8 @@ export default function App() {
         }
       } else if (hash.startsWith('#/communities')) {
         setCurrentTab('communities');
+      } else if (hash.startsWith('#/scrapbook-builder')) {
+        setCurrentTab('scrapbook-builder');
       } else if (hash.startsWith('#/scrapbook')) {
         setCurrentTab('scrapbook');
       } else if (hash.startsWith('#/testimonials')) {

@@ -12,6 +12,26 @@ import GlossyRetroButton from './GlossyRetroButton';
 import { db, auth, handleFirestoreError, OperationType } from '../firebase';
 import { collection, doc, onSnapshot, setDoc, updateDoc, addDoc, deleteDoc, query, where, getDocs, writeBatch } from 'firebase/firestore';
 import { Profile, Community } from '../types';
+import { getThemeStyles } from '../lib/theme';
+
+const getFontStyleClass = (style?: string) => {
+  switch (style) {
+    case 'gothic':
+      return 'font-gothic';
+    case 'medieval':
+      return 'font-medieval';
+    case 'cursivo':
+      return 'font-cursivo';
+    case 'cyber':
+      return 'font-cyber tracking-wider';
+    case 'vaporwave':
+      return 'font-vaporwave tracking-widest';
+    case 'smallcaps':
+      return 'font-smallcaps tracking-tight font-extrabold';
+    default:
+      return 'font-sans';
+  }
+};
 
 interface CommunitiesProps {
   communities: Community[]; // unused except as reference/fallback
@@ -853,6 +873,11 @@ export default function Communities({
         } else if (target === 'topicImage') {
           setPostImg(resultString);
         } else if (target === 'editAvatar') {
+          // Only community owner or moderators are allowed to change community photos/avatars
+          if (!isUserModerator()) {
+            alert("Operação não permitida: Apenas o dono ou os moderadores podem alterar a foto da comunidade!");
+            return;
+          }
           // Update immediately or save in state
           updateDoc(doc(db, 'communities', activeCommId), { avatar: resultString }).catch(err => {
             handleFirestoreError(err, OperationType.WRITE, `communities/${activeCommId}`);
@@ -1098,16 +1123,39 @@ export default function Communities({
   // Action: Edit Community Details
   const handleSaveCommunityEdits = async () => {
     if (!activeComm) return;
+
+    const isOwner = isUserOwner();
+    const isMod = isUserModerator();
+
+    if (!isOwner && !isMod) {
+      alert("Operação não permitida: Você não tem permissão para editar esta comunidade.");
+      return;
+    }
+
+    // Find original community in database copy before edit took place
+    const originalComm = dbCommunities.find(c => c.id === activeCommId);
+    let targetName = activeComm.name;
+
+    // NOMES DE COMUNIDADES SÓ POSSIVEL ALTERAÇÃO PELO ( DONO) Da comunidade.
+    if (originalComm && originalComm.name !== activeComm.name) {
+      if (!isOwner) {
+        alert("Operação não permitida: Apenas o dono (proprietário) da comunidade possui permissão para alterar seu nome!");
+        targetName = originalComm.name;
+      }
+    }
+
+    // Close the modal instantly upon clicking Save Changes!
+    setShowConfirmDelete(false);
+    setShowEditCommModal(false);
+
     try {
       await updateDoc(doc(db, 'communities', activeCommId), {
         description: activeComm.description,
         rules: activeComm.rules || '',
-        name: activeComm.name,
+        name: targetName,
         avatar: activeComm.avatar || '💬',
         category: activeComm.category || 'Nostalgia'
       });
-      setShowConfirmDelete(false);
-      setShowEditCommModal(false);
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, `communities/${activeCommId}`);
     }
@@ -1328,12 +1376,20 @@ export default function Communities({
   };
 
   // Find current user profile
-  const myProfile = profiles[targetProfileId] || profiles['me'] || Object.values(profiles)[0] || {
+  const myProfile: any = profiles[targetProfileId] || profiles['me'] || Object.values(profiles)[0] || {
     name: activeUserName,
     avatar: activeUserAvatar,
     username: 'scrapzone_mender',
-    location: 'Curitiba, PR - Brasil'
+    location: 'Curitiba, PR - Brasil',
+    theme: 'default',
+    nome_exibicao: '',
+    estilo_fonte: 'default'
   };
+
+  const themeStyles = getThemeStyles(myProfile.theme || 'default');
+  const isOwnProfile = targetProfileId === activeUserId;
+  const displayNameText = myProfile.nome_exibicao && myProfile.nome_exibicao.trim() ? myProfile.nome_exibicao.trim() : myProfile.name;
+  const displayNameClass = myProfile.nome_exibicao && myProfile.nome_exibicao.trim() ? getFontStyleClass(myProfile.estilo_fonte) : 'font-sans';
 
   // Render Pinned Star icon or pin logo
   const isJoined = activeComm ? joinedIds.includes(activeComm.id) : false;
@@ -2348,33 +2404,45 @@ export default function Communities({
           {/* ================= COLUMN 1 (LEFT): USER PROFILE PANEL ================= */}
           <div className="lg:col-span-3 flex flex-col gap-4">
             
-            {/* Profile Card */}
-            <div className="bg-white border-2 border-neutral-300 rounded p-3 text-center shadow-xs">
-              <div className="relative group mx-auto w-36 h-36 border border-neutral-300 overflow-hidden bg-neutral-100 rounded">
-                <img
-                  src={myProfile.avatar}
-                  alt={myProfile.name}
-                  className="w-full h-full object-cover"
-                  referrerPolicy="no-referrer"
-                />
+            {/* Profile Card Only - Photo Container (Enlarged and aligned to Profile layout) */}
+            <div className={`border rounded p-3 text-center transition-all bg-white border-neutral-300 shadow-sm`}>
+              <div className="relative group mx-auto w-full aspect-square border-2 border-neutral-300 overflow-hidden bg-neutral-100 rounded-lg flex items-center justify-center shadow-xs">
+                {myProfile.avatar && myProfile.avatar !== '👤' && myProfile.avatar.trim() !== '' ? (
+                  <img
+                    src={myProfile.avatar}
+                    alt={myProfile.name}
+                    className="w-full h-full object-cover"
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  <div className="w-full h-full bg-[#dee7f4] flex flex-col items-center justify-center text-neutral-400 gap-2 select-none">
+                    <span className="text-6xl">👤</span>
+                    <span className="text-xs font-bold tracking-widest uppercase text-neutral-500">Sem Foto</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Profile Details Container Below Photo */}
+            <div className={`border rounded p-4 text-center bg-white border-neutral-300 shadow-sm space-y-3.5`}>
+              <div className="py-1">
+                <h2 className={`text-base md:text-lg font-bold flex items-center justify-center gap-1.5 break-all tracking-wide text-neutral-800 ${displayNameClass}`}>
+                  {displayNameText}
+                </h2>
+                {myProfile.username && (
+                  <p className="text-xs font-mono text-neutral-500 opacity-95 mt-1 tracking-normal">
+                    @{myProfile.username}
+                  </p>
+                )}
+                
+                <p className="text-[12px] md:text-[13px] font-medium font-sans flex items-center justify-center gap-1.5 mt-2.5 text-neutral-700 tracking-wider uppercase">
+                  <MapPin size={14} className="text-pink-600 shrink-0" />
+                  {myProfile.location || 'Curitiba, PR - Brasil'}
+                </p>
               </div>
 
-              <h2 className="text-sm font-bold mt-2 flex items-center justify-center gap-1 break-all font-sans text-neutral-800">
-                {(myProfile as any).nome_exibicao || myProfile.name}
-              </h2>
-              {myProfile.username && (
-                <p className="text-[10px] font-mono opacity-80 mt-0.5 text-neutral-500">
-                  @{myProfile.username}
-                </p>
-              )}
-              
-              <p className="text-[11px] font-sans flex items-center justify-center gap-1 mt-1 text-neutral-500">
-                <MapPin size={12} className="inline shrink-0 text-neutral-400" />
-                {myProfile.location || 'Curitiba, PR - Brasil'}
-              </p>
-
-              <div className="border-t border-dashed border-neutral-300 mt-3 pt-3 text-left">
-                <span className="text-[10px] font-bold uppercase tracking-widest block mb-1 text-neutral-400">Criptografia Local</span>
+              <div className="border-t border-dashed border-neutral-300 pt-3.5 text-left">
+                <span className="text-[10px] font-bold uppercase tracking-widest block mb-2 opacity-70">Criptografia Local</span>
                 <div className="flex items-center gap-1.5 p-1 px-2 bg-green-500/10 border border-green-500/40 rounded text-[10px] text-green-700 font-semibold font-mono">
                   <ShieldCheck size={14} className="text-green-650 flex-shrink-0" />
                   Chave RSA Ativa
@@ -2385,25 +2453,27 @@ export default function Communities({
               </div>
 
               {/* Gerenciar Imagens */}
-              <div className="border-t border-dashed border-neutral-300 mt-2.5 pt-2.5 text-center flex flex-col gap-1.5">
-                <div className="text-[10px] uppercase font-bold text-neutral-400 font-sans">
-                  Gerenciar Imagens
+              {isOwnProfile && (
+                <div className="border-t border-dashed border-neutral-300 pt-3 text-center">
+                  <div className="text-[10px] uppercase font-bold text-neutral-500 mb-2 font-sans tracking-wider">
+                    Gerenciar Imagens
+                  </div>
+                  <GlossyRetroButton
+                    id="portal-btn-photos"
+                    onClick={() => {
+                      if (onNavigateToTab) onNavigateToTab('photos');
+                    }}
+                    variant="action"
+                    className="w-full text-[10px] h-11 py-0 uppercase"
+                  >
+                    Add Fotos
+                  </GlossyRetroButton>
                 </div>
-                <GlossyRetroButton
-                  id="portal-btn-photos"
-                  onClick={() => {
-                    if (onNavigateToTab) onNavigateToTab('photos');
-                  }}
-                  variant="action"
-                  className="w-full text-[10px] h-9 py-0 uppercase"
-                >
-                  Add Fotos
-                </GlossyRetroButton>
-              </div>
+              )}
 
               {/* Conversa Secreta */}
-              <div className="border-t border-dashed border-neutral-300 mt-2.5 pt-2.5 text-center flex flex-col gap-1.5">
-                <div className="text-[10px] uppercase font-bold text-neutral-400 font-sans">
+              <div className="border-t border-dashed border-neutral-300 pt-3 text-center">
+                <div className="text-[10px] uppercase font-bold text-neutral-500 mb-2 font-sans tracking-wider">
                   Conversa Secreta (48h)
                 </div>
                 <GlossyRetroButton
@@ -2414,7 +2484,7 @@ export default function Communities({
                     }
                   }}
                   variant="action"
-                  className="w-full text-[10px] h-9 py-0 uppercase bg-pink-600 hover:bg-pink-700 text-white"
+                  className="w-full text-[10px] h-11 py-0 uppercase bg-pink-600 hover:bg-pink-700 text-white"
                 >
                   💬 Mensagem
                 </GlossyRetroButton>

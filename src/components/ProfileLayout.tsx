@@ -75,6 +75,10 @@ export default function ProfileLayout({
   const userAvatarInputRef = useRef<HTMLInputElement>(null);
 
   const handleProfileImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!isOwnProfile) {
+      alert('Operação não permitida: Apenas o dono do perfil pode alterar a foto!');
+      return;
+    }
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -95,6 +99,10 @@ export default function ProfileLayout({
 
   const handleRemoveProfilePhoto = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (!isOwnProfile) {
+      alert('Operação não permitida: Apenas o dono do perfil pode remover a foto!');
+      return;
+    }
     if (window.confirm('Deseja realmente remover sua foto de perfil?')) {
       onSaveProfile({ avatar: '👤' });
     }
@@ -240,6 +248,10 @@ export default function ProfileLayout({
   }, [profile]);
 
   const handleSave = () => {
+    if (!isOwnProfile) {
+      alert("Operação não permitida: Apenas o dono do perfil pode editar esses dados!");
+      return;
+    }
     if (!validateAboutMeField(editForm.aboutMe)) {
       return;
     }
