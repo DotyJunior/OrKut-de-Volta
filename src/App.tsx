@@ -321,6 +321,50 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
+  // Sync profiles['me'] dynamically whenever the authenticated currentUserProfile changes
+  useEffect(() => {
+    if (currentUserProfile) {
+      setProfiles((prev) => {
+        const prevMe = prev.me;
+        if (
+          prevMe &&
+          prevMe.id === currentUserProfile.id &&
+          prevMe.name === currentUserProfile.name &&
+          prevMe.avatar === currentUserProfile.avatar &&
+          prevMe.location === currentUserProfile.location &&
+          prevMe.relationship === currentUserProfile.relationship &&
+          prevMe.humor === currentUserProfile.humor &&
+          prevMe.hereFor === currentUserProfile.hereFor &&
+          prevMe.fashion === currentUserProfile.fashion &&
+          prevMe.religion === currentUserProfile.religion &&
+          prevMe.ethnicity === currentUserProfile.ethnicity &&
+          prevMe.languages === currentUserProfile.languages &&
+          prevMe.hometown === currentUserProfile.hometown &&
+          prevMe.webpage === currentUserProfile.webpage &&
+          prevMe.passions === currentUserProfile.passions &&
+          prevMe.aboutMe === currentUserProfile.aboutMe &&
+          prevMe.trusty === currentUserProfile.trusty &&
+          prevMe.cool === currentUserProfile.cool &&
+          prevMe.sexy === currentUserProfile.sexy &&
+          prevMe.fans === currentUserProfile.fans &&
+          prevMe.username === currentUserProfile.username &&
+          prevMe.theme === currentUserProfile.theme &&
+          (prevMe as any).nome_exibicao === (currentUserProfile as any).nome_exibicao &&
+          (prevMe as any).estilo_fonte === (currentUserProfile as any).estilo_fonte &&
+          prevMe.statusOnline === currentUserProfile.statusOnline
+        ) {
+          return prev;
+        }
+
+        return {
+          ...prev,
+          [currentUserProfile.id]: currentUserProfile,
+          me: currentUserProfile
+        };
+      });
+    }
+  }, [currentUserProfile]);
+
   // Automatic Presence Heartbeat Tracker (online/away/offline)
   useEffect(() => {
     if (!currentUserProfile) return;
@@ -951,6 +995,9 @@ export default function App() {
       ...prev,
       me: updatedMe
     }));
+    if (currentUserProfile) {
+      setCurrentUserProfile(prev => prev ? { ...prev, ...updatedProfile } : null);
+    }
     try {
       const realId = profiles.me?.id || currentUserProfile?.id || 'me';
       await setDoc(doc(db, 'profiles', realId), updatedMe);
