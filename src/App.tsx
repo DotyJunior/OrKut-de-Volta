@@ -325,37 +325,6 @@ export default function App() {
   useEffect(() => {
     if (currentUserProfile) {
       setProfiles((prev) => {
-        const prevMe = prev.me;
-        if (
-          prevMe &&
-          prevMe.id === currentUserProfile.id &&
-          prevMe.name === currentUserProfile.name &&
-          prevMe.avatar === currentUserProfile.avatar &&
-          prevMe.location === currentUserProfile.location &&
-          prevMe.relationship === currentUserProfile.relationship &&
-          prevMe.humor === currentUserProfile.humor &&
-          prevMe.hereFor === currentUserProfile.hereFor &&
-          prevMe.fashion === currentUserProfile.fashion &&
-          prevMe.religion === currentUserProfile.religion &&
-          prevMe.ethnicity === currentUserProfile.ethnicity &&
-          prevMe.languages === currentUserProfile.languages &&
-          prevMe.hometown === currentUserProfile.hometown &&
-          prevMe.webpage === currentUserProfile.webpage &&
-          prevMe.passions === currentUserProfile.passions &&
-          prevMe.aboutMe === currentUserProfile.aboutMe &&
-          prevMe.trusty === currentUserProfile.trusty &&
-          prevMe.cool === currentUserProfile.cool &&
-          prevMe.sexy === currentUserProfile.sexy &&
-          prevMe.fans === currentUserProfile.fans &&
-          prevMe.username === currentUserProfile.username &&
-          prevMe.theme === currentUserProfile.theme &&
-          (prevMe as any).nome_exibicao === (currentUserProfile as any).nome_exibicao &&
-          (prevMe as any).estilo_fonte === (currentUserProfile as any).estilo_fonte &&
-          prevMe.statusOnline === currentUserProfile.statusOnline
-        ) {
-          return prev;
-        }
-
         return {
           ...prev,
           [currentUserProfile.id]: currentUserProfile,
@@ -462,27 +431,21 @@ export default function App() {
           fetched[doc.id] = doc.data() as Profile;
         });
 
-        // Ensure that our logged in identity takes precedence under the 'me' key
-        const cachedDemoId = localStorage.getItem('orkut_demo_me_id');
-        const authUid = auth.currentUser?.uid;
-        const currentUid = authUid || cachedDemoId;
-        if (currentUid && fetched[currentUid]) {
-          fetched['me'] = fetched[currentUid];
-          const dbProfile = fetched[currentUid];
-          if (!currentUserProfile ||
-              currentUserProfile.name !== dbProfile.name ||
-              currentUserProfile.avatar !== dbProfile.avatar ||
-              currentUserProfile.location !== dbProfile.location ||
-              currentUserProfile.username !== dbProfile.username ||
-              currentUserProfile.webpage !== dbProfile.webpage ||
-              currentUserProfile.statusOnline !== dbProfile.statusOnline) {
-            setCurrentUserProfile(dbProfile);
+        setProfiles((prev) => {
+          const cachedDemoId = localStorage.getItem('orkut_demo_me_id');
+          const authUid = auth.currentUser?.uid;
+          const currentUid = authUid || cachedDemoId;
+          
+          if (currentUid && fetched[currentUid]) {
+            fetched['me'] = fetched[currentUid];
+          } else if (prev && prev.me) {
+            fetched['me'] = prev.me;
           }
-        } else if (currentUserProfile) {
-          fetched['me'] = currentUserProfile;
-        }
-
-        setProfiles(fetched);
+          return {
+            ...prev,
+            ...fetched
+          };
+        });
       }
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'profiles');
@@ -987,8 +950,9 @@ export default function App() {
 
   // Save editable profile locally and sync to Firestore
   const handleSaveProfile = async (updatedProfile: Partial<Profile>) => {
+    const baseSource = currentUserProfile || profiles.me;
     const updatedMe = {
-      ...profiles.me,
+      ...baseSource,
       ...updatedProfile
     };
     setProfiles(prev => ({
@@ -999,10 +963,10 @@ export default function App() {
       setCurrentUserProfile(prev => prev ? { ...prev, ...updatedProfile } : null);
     }
     try {
-      const realId = profiles.me?.id || currentUserProfile?.id || 'me';
+      const realId = currentUserProfile?.id || profiles.me?.id || 'me';
       await setDoc(doc(db, 'profiles', realId), updatedMe);
     } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, `profiles/${profiles.me?.id || currentUserProfile?.id || 'me'}`);
+      handleFirestoreError(err, OperationType.WRITE, `profiles/${currentUserProfile?.id || profiles.me?.id || 'me'}`);
     }
   };
 
@@ -1351,6 +1315,7 @@ export default function App() {
             currentUser={{ id: currentUserProfile?.id || profiles.me.id || 'me', name: profiles.me.name, avatar: profiles.me.avatar }}
             onLikeTestimonial={handleLikeTestimonial}
             onShareToFeed={handleAddNewShare}
+            profiles={profiles}
           />
         )}
 

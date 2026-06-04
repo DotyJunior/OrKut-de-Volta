@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Eye, EyeOff, ShieldCheck, MailWarning, Lock, Send, RefreshCw, Star, Heart } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Eye, EyeOff, ShieldCheck, MailWarning, Lock, Send, RefreshCw, Star, Heart, Plus } from 'lucide-react';
 import { Testimonial, Profile } from '../types';
 import SocialActions from './SocialActions';
 
@@ -11,6 +11,7 @@ interface TestimonialsProps {
   currentUser: { id: string; name: string; avatar: string };
   onLikeTestimonial?: (id: string, liked: boolean, count: number) => void;
   onShareToFeed: (itemTitle: string, itemType: string) => void;
+  profiles?: Record<string, Profile>;
 }
 
 export default function Testimonials({
@@ -21,6 +22,7 @@ export default function Testimonials({
   currentUser,
   onLikeTestimonial,
   onShareToFeed,
+  profiles,
 }: TestimonialsProps) {
   const [inputText, setInputText] = useState('');
   const [encryptTestimonial, setEncryptTestimonial] = useState(true);
@@ -30,8 +32,42 @@ export default function Testimonials({
   const [unlockedState, setUnlockedState] = useState<Record<string, boolean>>({}); // id -> state
   const [decryptedTexts, setDecryptedTexts] = useState<Record<string, string>>({}); // id -> value
 
-  // Filter testimonials received by this active profile
-  const filteredTestimonials = testimonials.filter((t) => t.toId === activeProfile.id);
+  // State to manage showing/hiding the "Criar Depoimento" form
+  const [isFormOpen, setIsFormOpen] = useState(!isOwnProfile);
+  // State for filtering received vs sent testimonials
+  const [filterTab, setFilterTab] = useState<'received' | 'sent'>('received');
+
+  // List of profiles to select recipient
+  const friendsOptions = Object.values(profiles || {});
+  const otherFriends = friendsOptions.filter(p => p.id !== currentUser.id);
+  const [selectedRecipientId, setSelectedRecipientId] = useState('');
+
+  // Keep form auto-open when visiting others, but starts closed when looking at ourselves
+  useEffect(() => {
+    setIsFormOpen(!isOwnProfile);
+  }, [isOwnProfile, activeProfile.id]);
+
+  // Set default recipient to first friend or self
+  useEffect(() => {
+    if (!selectedRecipientId && otherFriends.length > 0) {
+      setSelectedRecipientId(otherFriends[0].id);
+    } else if (!selectedRecipientId) {
+      setSelectedRecipientId(currentUser.id);
+    }
+  }, [profiles, currentUser.id]);
+
+  // Filter testimonials based on owner versus visiting mode
+  const filteredTestimonials = testimonials.filter((t) => {
+    if (!isOwnProfile) {
+      return t.toId === activeProfile.id;
+    } else {
+      if (filterTab === 'received') {
+        return t.toId === currentUser.id;
+      } else {
+        return t.fromId === currentUser.id;
+      }
+    }
+  });
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,11 +75,12 @@ export default function Testimonials({
 
     setIsSending(true);
     setTimeout(() => {
+      const targetId = isOwnProfile ? (selectedRecipientId || currentUser.id) : activeProfile.id;
       let payload: Omit<Testimonial, 'id' | 'timestamp' | 'unlocked'> = {
         fromId: currentUser.id,
         fromName: currentUser.name,
         fromAvatar: currentUser.avatar,
-        toId: activeProfile.id,
+        toId: targetId,
         content: inputText,
         isEncrypted: encryptTestimonial,
       };
@@ -64,6 +101,11 @@ export default function Testimonials({
       onAddTestimonial(payload);
       setInputText('');
       setIsSending(false);
+      
+      // Close the form if on own profile
+      if (isOwnProfile) {
+        setIsFormOpen(false);
+      }
     }, 400);
   };
 
@@ -87,24 +129,92 @@ export default function Testimonials({
     <div id="testimonials-view" className="bg-white border border-neutral-300 rounded p-4 shadow-sm text-left">
       <div className="border-b pb-2 mb-4">
         <h2 className="text-lg font-bold font-sans text-neutral-800 flex items-center gap-1.5">
-          🌟 Depoimentos (Testimonials) de <strong>{activeProfile.name}</strong>
+          {isOwnProfile && filterTab === 'sent' ? (
+            <span>📤 Depoimentos Enviados por Você</span>
+          ) : (
+            <span>🌟 Depoimentos de <strong>{activeProfile.name}</strong></span>
+          )}
         </h2>
         <p className="text-xs text-neutral-500 font-sans">
           "Depoimento só aceita se for legal!" - No Scrapzone clássico as pessoas se declaravam para os melhores amigos. No <strong>Scrapzone Secure</strong>, seus depoimentos são protegidos por chaves criptográficas para que os fofoqueiros do feed não vejam sua declaração!
         </p>
       </div>
 
-      {/* Testimonial Form write-up - ONLY for visiting friends */}
-      {!isOwnProfile && (
-        <form onSubmit={handleCreate} className="bg-neutral-50 border border-neutral-200 rounded p-3 mb-6 font-sans">
-          <label className="block text-xs font-bold text-neutral-600 uppercase mb-2">Escrever Depoimento "Leve e apague" super criptografado:</label>
+      {/* Tabs / Filter & Creation Toggle UI for Owner */}
+      {isOwnProfile && (
+        <div className="flex justify-between items-center mb-6 flex-wrap gap-3">
+          <div className="flex gap-1 p-1 bg-neutral-100 rounded border border-neutral-200">
+            <button
+              id="tab-received-testimonials"
+              type="button"
+              onClick={() => setFilterTab('received')}
+              className={`px-3 py-1.5 text-xs font-bold font-sans rounded transition-all cursor-pointer ${
+                filterTab === 'received'
+                  ? 'bg-pink-600 text-white shadow-sm'
+                  : 'text-neutral-600 hover:bg-neutral-200/50'
+              }`}
+            >
+              📬 Recebidos ({testimonials.filter(t => t.toId === currentUser.id).length})
+            </button>
+            <button
+              id="tab-sent-testimonials"
+              type="button"
+              onClick={() => setFilterTab('sent')}
+              className={`px-3 py-1.5 text-xs font-bold font-sans rounded transition-all cursor-pointer ${
+                filterTab === 'sent'
+                  ? 'bg-pink-600 text-white shadow-sm'
+                  : 'text-neutral-600 hover:bg-neutral-200/50'
+              }`}
+            >
+              📤 Enviados ({testimonials.filter(t => t.fromId === currentUser.id).length})
+            </button>
+          </div>
+
+          <button
+            id="btn-toggle-create-testimonial"
+            type="button"
+            onClick={() => setIsFormOpen(!isFormOpen)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#fae8ff] hover:bg-[#f5d0fe] border border-pink-300 text-pink-700 font-bold text-xs rounded transition-all cursor-pointer shadow-xs font-sans uppercase"
+          >
+            <Plus size={14} />
+            {isFormOpen ? 'Fechar Formulário' : 'Criar Depoimento'}
+          </button>
+        </div>
+      )}
+
+      {/* Testimonial Form write-up - For visitors, or when form is opened */}
+      {isFormOpen && (
+        <form onSubmit={handleCreate} className="bg-neutral-50 border border-neutral-200 rounded p-4 mb-6 font-sans shadow-xs animate-fadeIn">
+          {isOwnProfile && (
+            <div className="mb-4">
+              <label className="block text-xs font-bold text-neutral-600 uppercase mb-2">Para qual amigo você quer enviar esse depoimento?</label>
+              <select
+                id="testimonial-recipient-select"
+                value={selectedRecipientId}
+                onChange={(e) => setSelectedRecipientId(e.target.value)}
+                className="w-full px-3 py-2 text-xs border border-neutral-300 rounded focus:outline-none focus:ring-1 focus:ring-pink-500 bg-white"
+                required
+              >
+                <option value="" disabled>-- Selecione um Amigo --</option>
+                {friendsOptions.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} {p.id === currentUser.id ? '(Eu — Postar no meu próprio mural)' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <label className="block text-xs font-bold text-neutral-600 uppercase mb-2">
+            {isOwnProfile ? 'Declarar sentimento para amigo:' : `Chore as pitangas e diga o quanto você gosta de ${activeProfile.name}!`}
+          </label>
           <textarea
             id="testimonial-textarea"
             rows={3}
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
-            placeholder={`Chore as pitangas e diga o quanto você gosta de ${activeProfile.name}!`}
-            className="w-full px-3 py-2 text-xs border border-neutral-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+            placeholder="Escreva com muito amor e seja legal..."
+            className="w-full px-3 py-2 text-xs border border-neutral-300 rounded focus:outline-none focus:ring-1 focus:ring-pink-500 bg-white"
             disabled={isSending}
             required
           />
@@ -124,7 +234,7 @@ export default function Testimonials({
 
               {encryptTestimonial && (
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] text-neutral-500 font-bold uppercase">Senha Depo:</span>
+                  <span className="text-[10px] text-neutral-500 font-bold uppercase">Senha:</span>
                   <input
                     id="input-depo-passkey"
                     type="password"
@@ -148,7 +258,7 @@ export default function Testimonials({
               ) : (
                 <Send size={14} />
               )}
-              Enviar Depoimento
+              {isOwnProfile ? 'Enviar Depoimento' : 'Enviar Depoimento'}
             </button>
           </div>
         </form>
