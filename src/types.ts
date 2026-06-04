@@ -26,6 +26,7 @@ export interface Profile {
   estilo_fonte?: string;
   preserve_formatting?: boolean;
   isEmailVerified?: boolean;
+  isTwoFactorEnabled?: boolean;
   emailCode?: string | null;
   emailCodeExpiresAt?: number | null;
   emailCodeAttempts?: number;
@@ -83,6 +84,14 @@ export interface Friend {
   name: string;
   avatar: string;
   location: string;
+}
+
+export interface FriendRequest {
+  id: string;
+  senderId: string;
+  receiverId: string;
+  status: 'pending' | 'accepted' | 'rejected';
+  createdAt: number;
 }
 
 export interface RustConsoleLog {

@@ -1,12 +1,13 @@
 import React, { useState, FormEvent, useEffect, useRef, ChangeEvent, MouseEvent } from 'react';
-import { Eye, Edit, Save, ShieldCheck, Heart, IceCream, Smile, Star, MapPin, Sparkles, KeyRound, Palette, RefreshCw, Send, MessageSquare, Camera, Trash2 } from 'lucide-react';
-import { Profile, Friend, Community, Album, Photo, SharedMemory } from '../types';
+import { Eye, Edit, Save, ShieldCheck, Heart, IceCream, Smile, Star, MapPin, Sparkles, KeyRound, Palette, RefreshCw, Send, MessageSquare, Camera, Trash2, Bell, UserPlus } from 'lucide-react';
+import { Profile, Friend, Community, Album, Photo, SharedMemory, FriendRequest } from '../types';
 import { getThemeStyles } from '../lib/theme';
 import SocialSidebar from './SocialSidebar';
 import IdentityWizard from './IdentityWizard';
 import SocialActions from './SocialActions';
 import PresenceStatus from './PresenceStatus';
 import GlossyRetroButton from './GlossyRetroButton';
+import { motion, AnimatePresence } from 'motion/react';
 
 const getFontStyleClass = (style?: string) => {
   switch (style) {
@@ -25,6 +26,14 @@ const getFontStyleClass = (style?: string) => {
     default:
       return 'font-sans';
   }
+};
+
+const DEFAULT_PROFILES_LOCAL: Record<string, any> = {
+  me: { id: 'me', name: 'Junior Sombra', avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150' },
+  alexandre: { id: 'alexandre', name: 'Alexandre Curi', avatar: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=150' },
+  orkut: { id: 'orkut', name: 'Orkut Büyükkökten', avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150' },
+  hacker: { id: 'hacker', name: 'H3_Elit3_Hacker', avatar: 'https://images.unsplash.com/photo-1544197150-b99a580bb7a8?w=150' },
+  lucas: { id: 'lucas', name: 'Lucas Santos', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150' },
 };
 
 const sanitizeTextInput = (text: string): string => {
@@ -49,6 +58,11 @@ interface ProfileLayoutProps {
   onLikeShare: (id: string, liked: boolean, count: number) => void;
   onOpenSecretChat?: (targetFriendId?: string) => void;
   onRateProfile?: (profileId: string, type: 'trusty' | 'cool' | 'sexy' | 'fans', value: number) => void;
+  friendRequests?: FriendRequest[];
+  onAddFriend?: (receiverId: string) => Promise<void>;
+  onAcceptFriendRequest?: (requestId: string) => Promise<void>;
+  onRejectFriendRequest?: (requestId: string) => Promise<void>;
+  profiles?: Record<string, Profile>;
 }
 
 export default function ProfileLayout({
@@ -68,9 +82,59 @@ export default function ProfileLayout({
   onLikeShare,
   onOpenSecretChat,
   onRateProfile,
+  friendRequests = [],
+  onAddFriend,
+  onAcceptFriendRequest,
+  onRejectFriendRequest,
+  profiles = {},
 }: ProfileLayoutProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [showIdentityWizard, setShowIdentityWizard] = useState(false);
+
+  const [isPendingLocal, setIsPendingLocal] = useState(false);
+  const [isRequestsModalOpen, setIsRequestsModalOpen] = useState(false);
+
+  const getLoggedInUserId = () => {
+    return localStorage.getItem('orkut_demo_me_id') || 'me';
+  };
+  const loggedInUid = getLoggedInUserId();
+
+  // Determine friendship status
+  const isAlreadyFriend = friends.some(f => f.id === loggedInUid) || 
+    (profile.id === 'me' || loggedInUid === 'me' ? ['lucas', 'alexandre', 'orkut', 'hacker', 'me'].includes(profile.id) : false);
+
+  const isFriends = isAlreadyFriend || friendRequests.some(req => 
+    req.status === 'accepted' && 
+    ((req.senderId === loggedInUid && req.receiverId === profile.id) || 
+     (req.senderId === profile.id && req.receiverId === loggedInUid))
+  );
+
+  const pendingRequest = friendRequests.find(req => 
+    req.status === 'pending' && 
+    ((req.senderId === loggedInUid && req.receiverId === profile.id) || 
+     (req.senderId === profile.id && req.receiverId === loggedInUid))
+  );
+
+  // Compute "Amigos de amigos / Sugestões" that are clickable and load the profile
+  const friendsIds = friends.map(f => f.id);
+  const friendsOfFriends = Object.values(profiles).filter(p => 
+    p.id !== loggedInUid && 
+    p.id !== profile.id && 
+    !friendsIds.includes(p.id) &&
+    ['marina', 'carlos', 'ana', 'felipe', 'juliana', 'bruno', 'patricia', 'ricardo'].includes(p.id)
+  );
+
+  // Pending received requests FOR the logged-in user to show in the Bell icon notification!
+  const pendingReceivedRequests = friendRequests.filter(req => 
+    req.status === 'pending' && req.receiverId === loggedInUid
+  );
+  const hasPendingRequests = pendingReceivedRequests.length > 0;
+
+  const handleAddFriendClick = async () => {
+    if (!onAddFriend) return;
+    setIsPendingLocal(true);
+    await onAddFriend(profile.id);
+  };
 
   const userAvatarInputRef = useRef<HTMLInputElement>(null);
 
@@ -225,6 +289,7 @@ export default function ProfileLayout({
     nome_exibicao: profile.nome_exibicao || profile.name || '',
     estilo_fonte: profile.estilo_fonte || 'normal',
     preserve_formatting: profile.preserve_formatting !== false, // default to true to match user desire for preservation
+    isTwoFactorEnabled: profile.isTwoFactorEnabled || false,
   });
 
   useEffect(() => {
@@ -242,6 +307,7 @@ export default function ProfileLayout({
       nome_exibicao: profile.nome_exibicao || profile.name || '',
       estilo_fonte: profile.estilo_fonte || 'normal',
       preserve_formatting: profile.preserve_formatting !== false,
+      isTwoFactorEnabled: profile.isTwoFactorEnabled || false,
     });
     // Reset error when profile changes
     setAboutMeError(null);
@@ -551,6 +617,40 @@ export default function ProfileLayout({
               💬 Mensagem
             </GlossyRetroButton>
           </div>
+
+          {/* Friend System Button Section (Shown when visiting another profile) */}
+          {!isOwnProfile && (
+            <div className="border-t border-dashed border-neutral-350 pt-3 text-center">
+              <div className="text-[10px] uppercase font-bold text-neutral-500 mb-2 font-sans tracking-wider">
+                Rede de Amigos
+              </div>
+              {isFriends ? (
+                <GlossyRetroButton
+                  id="sidebar-btn-friends"
+                  onClick={() => {}}
+                  disabled={true}
+                  variant="action"
+                  className="w-full h-11 bg-neutral-100 border border-neutral-300 text-neutral-500 cursor-default font-sans font-bold flex items-center justify-center gap-1"
+                >
+                  ✓ Amigos
+                </GlossyRetroButton>
+              ) : (
+                <GlossyRetroButton
+                  id="sidebar-btn-add-friend"
+                  onClick={handleAddFriendClick}
+                  disabled={isPendingLocal || !!pendingRequest}
+                  variant="action"
+                  className={`w-full h-11 text-white font-sans ${
+                    isPendingLocal || !!pendingRequest 
+                    ? 'bg-neutral-400 border-neutral-300 cursor-not-allowed opacity-80' 
+                    : 'bg-emerald-600 hover:bg-emerald-700 hover:border-emerald-700 text-white'
+                  }`}
+                >
+                  {isPendingLocal || !!pendingRequest ? '⏳ Pendente' : '➕ Amigo'}
+                </GlossyRetroButton>
+              )}
+            </div>
+          )}
 
         </div>
 
@@ -1061,6 +1161,22 @@ export default function ProfileLayout({
                       <span>☑ Preservar Formatação (Mantém alinhamentos, múltiplos espaços e ASCII Art)</span>
                     </label>
                   </div>
+
+                  {/* TWO-FACTOR AUTHENTICATION (MFA) OPTION (OPTIONAL) */}
+                  <div className="flex flex-col gap-1 mt-3 select-none border border-[#92afd9]/60 bg-[#ecf2fa]/75 p-3 rounded">
+                    <label className="flex items-center gap-2 text-[11.5px] text-[#1b4372] font-black hover:text-[#0b1f3c] cursor-pointer font-sans">
+                      <input
+                        type="checkbox"
+                        checked={editForm.isTwoFactorEnabled}
+                        onChange={(e) => setEditForm({ ...editForm, isTwoFactorEnabled: e.target.checked })}
+                        className="rounded border-neutral-300 text-[#1b4372] focus:ring-indigo-400 h-4 w-4 cursor-pointer accent-[#1b4372]"
+                      />
+                      <span className="flex items-center gap-1">🔒 Ativar Autenticação de 2 Fatores (MFA / 2FA)</span>
+                    </label>
+                    <p className="text-[10px] text-[#3b526d] pl-6 leading-normal font-sans">
+                      Altamente recomendado! Ao ativar, um código pin de 6 dígitos será enviado ao seu e-mail de segurança simulado a cada novo login para blindar sua conta.
+                    </p>
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
@@ -1300,13 +1416,13 @@ export default function ProfileLayout({
       {/* 3. Right Side: Friends and Communities lists (Classic 3x3 layout) */}
       <div className="lg:col-span-3 flex flex-col gap-4">
         {/* Friends Grid */}
-        <div className={`border rounded shadow-sm overflow-hidden text-left transition-all ${themeStyles.cardBg} ${themeStyles.glow} ${themeStyles.borderClass}`}>
+        <div className={`relative border rounded shadow-sm overflow-hidden text-left transition-all ${themeStyles.cardBg} ${themeStyles.glow} ${themeStyles.borderClass}`}>
           <div className={`px-3 py-1.5 flex justify-between items-center ${themeStyles.accent}`}>
             <span className="text-[11px] font-bold uppercase">Amigos ({friends.length})</span>
             <button onClick={() => onNavigateToTab('profile')} className="text-[10px] hover:underline font-bold">ver todos</button>
           </div>
 
-          <div className="p-3 grid grid-cols-3 gap-2 bg-transparent">
+          <div className="p-3 grid grid-cols-3 gap-2 bg-transparent pb-10">
             {friends.slice(0, 9).map((friend) => (
               <div
                 key={friend.id}
@@ -1326,6 +1442,32 @@ export default function ProfileLayout({
                 </span>
               </div>
             ))}
+          </div>
+
+          {/* Dynamic/Pulsating Notification Bell - Bottom-Right layout within friends panel */}
+          <div className="absolute bottom-1.5 right-1.5 z-25">
+            <button
+              id="friends-notification-bell"
+              onClick={() => setIsRequestsModalOpen(true)}
+              className="p-1 px-1.5 bg-white border border-neutral-300 rounded hover:bg-neutral-50 hover:scale-105 active:scale-95 transition-all shadow-md relative flex items-center justify-center cursor-pointer"
+              title="Solicitações de Amizade"
+            >
+              {hasPendingRequests ? (
+                <div className="flex items-center justify-center relative w-5 h-5">
+                  <motion.div
+                    animate={{ scale: [1, 1.15, 1], rotate: [0, 8, -8, 8, 0] }}
+                    transition={{ repeat: Infinity, duration: 1.8, ease: "easeInOut" }}
+                  >
+                    <Bell size={16} className="text-[#ff003a]" fill="#ff003a" />
+                  </motion.div>
+                  <span className="absolute -top-1.5 -right-1.5 bg-[#ff003a] text-white text-[8px] font-bold rounded-full w-4 h-4 flex items-center justify-center shadow-sm">
+                    {pendingReceivedRequests.length}
+                  </span>
+                </div>
+              ) : (
+                <Bell size={16} className="text-neutral-400" />
+              )}
+            </button>
           </div>
         </div>
 
@@ -1404,6 +1546,41 @@ export default function ProfileLayout({
             </div>
           </div>
         </div>
+
+        {/* Sugestões: Amigos de amigos widget */}
+        {friendsOfFriends.length > 0 && (
+          <div className={`border rounded shadow-sm overflow-hidden text-left transition-all ${themeStyles.cardBg} ${themeStyles.glow} ${themeStyles.borderClass} mt-4`}>
+            <div className={`px-3 py-1.5 flex justify-between items-center ${themeStyles.accent}`}>
+              <span className="text-[11px] font-bold uppercase flex items-center gap-1.5">
+                👥 Amigos de amigo
+              </span>
+              <span className="text-[9px] text-neutral-500 font-sans">sugestões</span>
+            </div>
+
+            <div className="p-3 grid grid-cols-3 gap-2 bg-transparent pb-4">
+              {friendsOfFriends.slice(0, 6).map((item) => (
+                <div
+                  key={item.id}
+                  onClick={() => onNavigateToFriend(item.id)}
+                  className="flex flex-col items-center justify-center cursor-pointer p-1.5 rounded transition-all group hover:bg-neutral-100/10"
+                  title={`Visualizar perfil de ${item.name}`}
+                >
+                  <div className="w-12 h-12 border border-neutral-300 overflow-hidden rounded bg-neutral-100 group-hover:border-[#1d4ed8]">
+                    <img
+                      src={item.avatar}
+                      alt={item.name}
+                      className="w-full h-full object-cover"
+                      referrerPolicy="no-referrer"
+                    />
+                  </div>
+                  <span className="text-[9px] font-bold text-center mt-1 truncate w-full group-hover:underline leading-tight">
+                    {item.name.split(' ')[0]}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
 
@@ -1418,6 +1595,115 @@ export default function ProfileLayout({
           }}
         />
       )}
+
+      {/* Modern Floating Modal for Friend Requests */}
+      <AnimatePresence>
+        {isRequestsModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            {/* Backdrop overlay with blur */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsRequestsModalOpen(false)}
+              className="fixed inset-0 bg-neutral-900/35 backdrop-blur-md"
+            />
+
+            {/* Modal content box */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              transition={{ type: "spring", duration: 0.4 }}
+              className="bg-white rounded-lg shadow-2xl border border-neutral-200 w-full max-w-md overflow-hidden text-left flex flex-col z-10 max-h-[480px]"
+            >
+              {/* Header */}
+              <div className="px-4 py-3 bg-[#e0f2fe] border-b border-sky-100 flex justify-between items-center">
+                <h3 className="text-xs font-bold text-sky-850 uppercase tracking-widest flex items-center gap-2">
+                  <Bell size={15} className="text-sky-600" />
+                  Solicitações de Amizade ({pendingReceivedRequests.length})
+                </h3>
+                <button
+                  onClick={() => setIsRequestsModalOpen(false)}
+                  className="text-neutral-500 hover:text-neutral-850 text-sm font-bold p-1 cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="p-4 overflow-y-auto flex-1 divide-y divide-neutral-100 max-h-[350px]">
+                {pendingReceivedRequests.length === 0 ? (
+                  <div className="py-8 text-center flex flex-col items-center justify-center gap-2">
+                    <span className="text-3xl text-neutral-350 select-none">🎐</span>
+                    <p className="text-xs text-neutral-500 font-sans">
+                      Sua caixa de correio está limpa! Nenhuma solicitação pendente.
+                    </p>
+                  </div>
+                ) : (
+                  pendingReceivedRequests.map((req) => {
+                    const senderProfile = profiles[req.senderId] || DEFAULT_PROFILES_LOCAL[req.senderId];
+                    const avatarUrl = senderProfile?.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150';
+                    const senderName = senderProfile?.name || 'Membro do Scrapzone';
+                    
+                    return (
+                      <div key={req.id} className="py-3 flex items-center justify-between gap-3 first:pt-0 last:pb-0">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded border border-neutral-250 overflow-hidden shrink-0 bg-neutral-100">
+                            <img
+                              src={avatarUrl}
+                              alt={senderName}
+                              className="w-full h-full object-cover"
+                              referrerPolicy="no-referrer"
+                            />
+                          </div>
+                          <div>
+                            <span 
+                              className="text-xs font-bold text-neutral-850 block hover:underline cursor-pointer" 
+                              onClick={() => {
+                                setIsRequestsModalOpen(false);
+                                onNavigateToFriend(req.senderId);
+                              }}
+                            >
+                              {senderName}
+                            </span>
+                            <span className="text-[9px] text-neutral-400 font-mono">
+                              Enviado em {new Date(req.createdAt).toLocaleDateString('pt-BR')}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            onClick={async () => {
+                              if (onAcceptFriendRequest) {
+                                await onAcceptFriendRequest(req.id);
+                              }
+                            }}
+                            className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded text-[10px] shadow-sm select-none cursor-pointer"
+                          >
+                            Aceitar
+                          </button>
+                          <button
+                            onClick={async () => {
+                              if (onRejectFriendRequest) {
+                                await onRejectFriendRequest(req.id);
+                              }
+                            }}
+                            className="px-2.5 py-1.5 bg-neutral-100 hover:bg-neutral-200 border border-neutral-300 text-neutral-700 font-bold font-sans rounded text-[10px] select-none cursor-pointer"
+                          >
+                            Recusar
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -6,6 +6,7 @@ interface GlossyRetroButtonProps extends React.ButtonHTMLAttributes<HTMLButtonEl
   children: React.ReactNode;
   className?: string;
   variant?: 'action' | 'visitor' | 'default';
+  disabled?: boolean;
 }
 
 export default function GlossyRetroButton({
@@ -14,12 +15,14 @@ export default function GlossyRetroButton({
   children,
   className = '',
   variant = 'default',
+  disabled = false,
   ...props
 }: GlossyRetroButtonProps) {
   return (
     <button
       id={id}
       onClick={onClick}
+      disabled={disabled}
       className={`
         w-full py-3.5 px-6
         rounded-full
@@ -36,6 +39,7 @@ export default function GlossyRetroButton({
         hover:shadow-[inset_0_2px_4px_rgba(255,255,255,0.9),_inset_0_-2px_4px_rgba(0,0,0,0.25),_0_0_18px_rgba(236,72,153,0.7)]
         active:translate-y-[2px]
         active:shadow-[inset_0_4px_8px_rgba(0,0,0,0.5),_0_0_6px_rgba(236,72,153,0.45)]
+        ${disabled ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}
         ${className}
       `}
       style={{

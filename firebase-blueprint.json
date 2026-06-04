@@ -371,6 +371,19 @@
         "isApproved": { "type": "boolean" }
       },
       "required": ["id", "topicId", "communityId", "content", "authorId"]
+    },
+    "FriendRequest": {
+      "title": "FriendRequest",
+      "description": "Friend connection requests between users of Scrapzone",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "senderId": { "type": "string" },
+        "receiverId": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "accepted", "rejected"] },
+        "createdAt": { "type": "integer" }
+      },
+      "required": ["id", "senderId", "receiverId", "status", "createdAt"]
     }
   },
   "firestore": {
@@ -413,6 +426,10 @@
     "/community_replies/{replyId}": {
       "schema": "CommunityReply",
       "description": "Comments in response to threads"
+    },
+    "/friend_requests/{requestId}": {
+      "schema": "FriendRequest",
+      "description": "All friendship connection states and pending requests"
     }
   }
 }

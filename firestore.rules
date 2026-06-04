@@ -122,5 +122,35 @@ service cloud.firestore {
         get(/databases/$(database)/documents/communities/$(resource.data.communityId)).data.moderators.hasAny([request.auth.uid])
       );
     }
+
+    // Friend Requests Collection
+    match /friend_requests/{requestId} {
+      // Allow read if user is guest/visitor or matching sender/receiver for privacy
+      allow read: if !isAuthenticated() || (
+        resource.data.senderId == request.auth.uid || 
+        resource.data.receiverId == request.auth.uid
+      );
+      
+      // Allow create if auth matches senderId, status is 'pending', and sender != receiver
+      allow create: if isAuthenticated() && 
+        request.resource.data.senderId == request.auth.uid &&
+        request.resource.data.receiverId != request.auth.uid &&
+        request.resource.data.status == 'pending' &&
+        requestId.size() <= 128;
+
+      // Allow update if the receiver is the logged-in user and only 'status' is changed to accepted/rejected
+      allow update: if isAuthenticated() && 
+        resource.data.receiverId == request.auth.uid &&
+        request.resource.data.senderId == resource.data.senderId &&
+        request.resource.data.receiverId == resource.data.receiverId &&
+        (request.resource.data.status == 'accepted' || request.resource.data.status == 'rejected') &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']);
+
+      // Allow delete if either the sender or receiver triggers the deletion/cancel
+      allow delete: if isAuthenticated() && (
+        resource.data.senderId == request.auth.uid || 
+        resource.data.receiverId == request.auth.uid
+      );
+    }
   }
 }

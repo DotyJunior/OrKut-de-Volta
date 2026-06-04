@@ -81,6 +81,12 @@ export default function OrkutLogin({ onLoginSuccess, defaultProfiles, isEmailUnv
   const [passwordVerificationPendingProfile, setPasswordVerificationPendingProfile] = useState<any | null>(null);
   const [emailSuccessNotification, setEmailSuccessNotification] = useState<string | null>(null);
 
+  // Two-Factor Authentication (MFA / 2FA) states
+  const [showMfaModal, setShowMfaModal] = useState(false);
+  const [userMfaInput, setUserMfaInput] = useState('');
+  const [mfaError, setMfaError] = useState('');
+  const [mfaPendingProfile, setMfaPendingProfile] = useState<any | null>(null);
+
   // Form Fields - Recover
   const [recoverEmail, setRecoverEmail] = useState('');
 
@@ -246,6 +252,45 @@ export default function OrkutLogin({ onLoginSuccess, defaultProfiles, isEmailUnv
         return;
       }
 
+      // Check Two-Factor Authentication status (MFA is optional)
+      if (loggedProfile.isTwoFactorEnabled === true) {
+        const privateDocRef = doc(db, 'private_profiles', uid);
+        const privateDocSnap = await getDoc(privateDocRef);
+        const privateData = privateDocSnap.exists() ? privateDocSnap.data() : null;
+
+        const code = Math.floor(100000 + Math.random() * 900000).toString();
+        const codeExpiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
+
+        const userEmail = privateData?.email || (loggedProfile as any).email || targetEmail;
+        const userPhone = privateData?.phone || (loggedProfile as any).phone || '';
+
+        const updatedMfaFields = {
+          mfaCode: code,
+          mfaCodeExpiresAt: codeExpiresAt,
+          mfaCodeAttempts: 0,
+          mfaCodeLastSentAt: Date.now()
+        };
+
+        await setDoc(privateDocRef, updatedMfaFields, { merge: true });
+
+        setMfaPendingProfile({
+          ...loggedProfile,
+          email: userEmail,
+          phone: userPhone,
+          mfaCode: code,
+          mfaCodeExpiresAt: codeExpiresAt,
+          mfaCodeAttempts: 0,
+          mfaCodeLastSentAt: Date.now()
+        });
+
+        setIsProcessing(false);
+        setShowMfaModal(true);
+        setUserMfaInput('');
+        setMfaError('');
+        sendMfaEmailNotification(userEmail, code);
+        return;
+      }
+
       // If remember me is checked, we can simulate an auth cookie / local state indicator
       if (rememberMe) {
         localStorage.setItem('orkut_remember_uid', uid);
@@ -335,6 +380,19 @@ Assunto: [Scrapzone Secure] Ativação de Conta
 Seu código de segurança único do Scrapzone é: ${code}
 
 Este código expira em 17 minutos. Não compartilhe com ninguém.`);
+  };
+
+  // Simulated MFA / 2FA Email Notification Toast
+  const sendMfaEmailNotification = (email: string, code: string) => {
+    setEmailSuccessNotification(`✉️ Novo E-mail recebido hoje:
+Para: ${email}
+Assunto: [Scrapzone Secure] Código de Autenticação em 2 Fatores (MFA)
+
+Olá! Alguém está tentando acessar sua conta comunitária Scrapzone.
+
+Seu código de verificação em dois fatores (MFA/2FA) é: ${code}
+
+Este código expira em 10 minutos. Não revele esta chave temporária para terceiros.`);
   };
 
   // Refactored helper: Core Registration Executor
@@ -1519,6 +1577,252 @@ Este código expira em 17 minutos. Não compartilhe com ninguém.`);
               <div className="bg-[#dee7f4] border-t border-[#b7cbdc] px-4 py-2 flex items-center justify-between text-[10px] text-neutral-600 font-sans">
                 <span>Status: Validando Integridade do E-mail</span>
                 <span className="font-semibold text-emerald-700">Verificação Segura SHA-256</span>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Optional Two-Factor Authentication (MFA / 2FA) Modal */}
+      <AnimatePresence>
+        {showMfaModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4"
+          >
+            <motion.div
+              initial={{ y: -30, scale: 0.95 }}
+              animate={{ y: 0, scale: 1 }}
+              exit={{ y: -30, scale: 0.95 }}
+              className="max-w-md w-full bg-[#f3f7fc] border-2 border-[#1b4372] rounded shadow-2xl overflow-hidden font-sans text-left"
+            >
+              {/* Window Header */}
+              <div className="bg-[#1b4372] px-4 py-2.5 flex items-center justify-between text-white select-none">
+                <span className="text-xs font-black uppercase tracking-wider flex items-center gap-1.5 font-sans">
+                  <Lock size={13} className="text-pink-400" />
+                  Autenticação de Dois Fatores (MFA / 2FA)
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowMfaModal(false);
+                    setEmailSuccessNotification(null);
+                    setMfaPendingProfile(null);
+                    setUserMfaInput('');
+                    setMfaError('');
+                  }}
+                  className="text-neutral-300 hover:text-white font-bold text-xs bg-transparent border-none cursor-pointer font-mono"
+                >
+                  [ Fechar ]
+                </button>
+              </div>
+
+              {/* Content Panel */}
+              <div className="p-5 space-y-4">
+                <div className="bg-indigo-50 border border-indigo-200 rounded p-3 text-xs text-[#1e3a8a] leading-relaxed">
+                  <span className="font-bold block mb-1 font-sans">Status de Login: <span className="text-[#103056] uppercase font-sans font-black">REQUER MFA 🔒</span></span>
+                  Para sua total proteção, a autenticação de 2 fatores está ativada. Enviamos um código de acesso de 6 dígitos para o e-mail cadastrado associado a esta conta: <strong className="text-black font-semibold">{mfaPendingProfile?.email}</strong>.
+                </div>
+
+                {mfaError && (
+                  <div className="bg-rose-50 border border-rose-200 text-rose-805 text-xs p-2.5 rounded flex items-start gap-1.5 font-sans animate-fade-in text-[11px]">
+                    <AlertCircle size={15} className="flex-shrink-0 mt-0.5 text-rose-600" />
+                    <span className="font-semibold text-rose-850">{mfaError}</span>
+                  </div>
+                )}
+
+                <form onSubmit={async (e) => {
+                  e.preventDefault();
+                  setMfaError('');
+                  
+                  if (!mfaPendingProfile) return;
+
+                  try {
+                    const privateDocRef = doc(db, 'private_profiles', mfaPendingProfile.id);
+                    const privateDocSnap = await getDoc(privateDocRef);
+                    if (!privateDocSnap.exists()) {
+                      setMfaError('Configuração de segurança da conta não encontrada.');
+                      return;
+                    }
+
+                    const privateProfile = privateDocSnap.data();
+
+                    // Brute force checks
+                    const currentAttempts = privateProfile.mfaCodeAttempts || 0;
+                    if (currentAttempts >= 5) {
+                      setMfaError("⚠ Muitas tentativas de MFA inválidas. Faça login novamente para receber um novo código.");
+                      return;
+                    }
+
+                    // Expiry check - 10 minutes limit
+                    const expiresAt = privateProfile.mfaCodeExpiresAt || 0;
+                    if (Date.now() > expiresAt) {
+                      setMfaError("⚠ Código de 2 fatores expirado. Por favor, volte e tente login novamente.");
+                      return;
+                    }
+
+                    const enteredCode = userMfaInput.trim();
+                    if (enteredCode !== privateProfile.mfaCode) {
+                      const newAttempts = currentAttempts + 1;
+                      const updateData: any = {
+                        mfaCodeAttempts: newAttempts
+                      };
+
+                      if (newAttempts >= 5) {
+                        updateData.mfaCode = null; // Discard invalid/reused code
+                      }
+
+                      await setDoc(privateDocRef, updateData, { merge: true });
+
+                      if (newAttempts >= 5) {
+                        setMfaError("⚠ Muitas tentativas inválidas. Faça login novamente para receber outro código.");
+                      } else {
+                        setMfaError(`Código de 2 fatores incorreto. Tentativa ${newAttempts} de 5. Tente novamente.`);
+                      }
+                      return;
+                    }
+
+                    // Success! Clean up code fields in private profiles
+                    await setDoc(privateDocRef, {
+                      mfaCode: null,
+                      mfaCodeAttempts: 0
+                    }, { merge: true });
+
+                    // Login the user fully
+                    const uid = mfaPendingProfile.id;
+                    if (rememberMe) {
+                      localStorage.setItem('orkut_remember_uid', uid);
+                    } else {
+                      localStorage.removeItem('orkut_remember_uid');
+                    }
+
+                    // Clear login attempts counter
+                    localStorage.removeItem('scrapzone_login_attempts');
+                    localStorage.removeItem('scrapzone_login_lockout_until');
+                    setAttempts(0);
+                    setLockoutUntil(0);
+
+                    // De-escalate MFA modal
+                    setEmailSuccessNotification(null);
+                    setShowMfaModal(false);
+                    setUserMfaInput('');
+                    setMfaPendingProfile(null);
+                    setSuccessMessage('Autenticação de 2 fatores realizada com sucesso!');
+
+                    onLoginSuccess(mfaPendingProfile, false);
+
+                  } catch (err) {
+                    console.error(err);
+                    setMfaError('Erro de sistema ao validar o código 2FA. Tente novamente.');
+                  }
+                }} className="space-y-4">
+                  <div className="space-y-1">
+                    <label className="block text-[11px] font-black text-neutral-600 uppercase tracking-wide text-center sm:text-left">
+                      Insira o seu código pin de 2 fatores recebido:
+                    </label>
+                    <input
+                      type="text"
+                      maxLength={6}
+                      value={userMfaInput}
+                      onChange={(e) => setUserMfaInput(e.target.value.replace(/\D/g, ''))}
+                      placeholder="Ex: 123456"
+                      className="w-full text-center text-xl tracking-widest font-mono py-2 bg-white border-2 border-neutral-350 rounded focus:border-[#1b4372] focus:outline-none text-[#1b4372] font-semibold"
+                      required
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-2 pt-1 font-sans">
+                    <button
+                      type="submit"
+                      className="w-full py-2 bg-[#1b4372] hover:bg-[#102a4b] text-white font-black text-xs uppercase tracking-wide rounded cursor-pointer transition-all flex items-center justify-center gap-1.5 border-none"
+                    >
+                      <span>🔓 Confirmar Token & Acessar Conta</span>
+                    </button>
+
+                    <div className="flex justify-between items-center text-xs mt-1">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (!mfaPendingProfile) return;
+                          
+                          try {
+                            const privateDocRef = doc(db, 'private_profiles', mfaPendingProfile.id);
+                            const privateDocSnap = await getDoc(privateDocRef);
+                            if (!privateDocSnap.exists()) return;
+
+                            const privateProfile = privateDocSnap.data();
+
+                            // Anti-spam 1-minute limit
+                            const lastSent = privateProfile.mfaCodeLastSentAt || 0;
+                            const elapsed = Date.now() - lastSent;
+                            if (elapsed < 60000) {
+                              const waitSecs = Math.ceil((60000 - elapsed) / 1000);
+                              setMfaError(`Aguarde ${waitSecs} s para reenviar o código.`);
+                              return;
+                            }
+
+                            const newCode = Math.floor(100000 + Math.random() * 900000).toString();
+                            const newExpires = Date.now() + 10 * 60 * 1000;
+
+                            const updated = {
+                              mfaCode: newCode,
+                              mfaCodeExpiresAt: newExpires,
+                              mfaCodeAttempts: 0,
+                              mfaCodeLastSentAt: Date.now()
+                            };
+
+                            await setDoc(privateDocRef, updated, { merge: true });
+
+                            setMfaPendingProfile({
+                              ...mfaPendingProfile,
+                              mfaCode: newCode,
+                              mfaCodeExpiresAt: newExpires
+                            });
+
+                            sendMfaEmailNotification(mfaPendingProfile.email, newCode);
+                            setMfaError('');
+                            setUserMfaInput('');
+
+                          } catch (e) {
+                            console.error(e);
+                            setMfaError('Erro no reenvio do código 2FA.');
+                          }
+                        }}
+                        className="text-[#103056] font-bold hover:underline bg-transparent border-none cursor-pointer flex items-center gap-1 font-sans"
+                      >
+                        [ Reenviar Código ] 🔄
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowMfaModal(false);
+                          setEmailSuccessNotification(null);
+                          setMfaPendingProfile(null);
+                          setUserMfaInput('');
+                          setMfaError('');
+                        }}
+                        className="text-neutral-500 hover:text-neutral-700 underline bg-transparent border-none cursor-pointer font-sans"
+                      >
+                        Cancelar login
+                      </button>
+                    </div>
+
+                    {mfaPendingProfile && (
+                      <div className="text-[10px] text-neutral-500 font-sans text-center mt-1">
+                        Código válido por 10 minutos
+                      </div>
+                    )}
+                  </div>
+                </form>
+              </div>
+
+              {/* Bottom Decorative Status Area */}
+              <div className="bg-[#dee7f4] border-t border-[#b7cbdc] px-4 py-2 flex items-center justify-between text-[10px] text-neutral-600 font-sans">
+                <span>Passo de Segurança: Dois Fatores Opcionais</span>
+                <span className="font-semibold text-emerald-700">Canal Seguro Ativo</span>
               </div>
             </motion.div>
           </motion.div>

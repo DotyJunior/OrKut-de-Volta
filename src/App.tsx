@@ -14,12 +14,12 @@ import PhotoAlbums from './components/PhotoAlbums';
 import MsnToastSystem from './components/MsnToastSystem';
 import SecretChat from './components/SecretChat';
 import { getInitialAlbums } from './data/initialAlbums';
-import { Profile, Friend, Community, Scrap, Testimonial, Album, SharedMemory } from './types';
+import { Profile, Friend, Community, Scrap, Testimonial, Album, SharedMemory, FriendRequest } from './types';
 import { getThemeStyles } from './lib/theme';
 import OrkutLogin from './components/OrkutLogin';
 
 // Firebase imports
-import { collection, doc, setDoc, onSnapshot, getDoc, getDocFromServer } from 'firebase/firestore';
+import { collection, doc, setDoc, onSnapshot, getDoc, getDocFromServer, addDoc, deleteDoc, query, where, or } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType } from './firebase';
 
 const DEFAULT_PROFILES: Record<string, Profile> = {
@@ -142,6 +142,198 @@ const DEFAULT_PROFILES: Record<string, Profile> = {
     username: 'Lucas_Santos',
     statusOnline: '● livre para chat',
     theme: 'default'
+  },
+  marina: {
+    id: 'marina',
+    name: 'Marina Costa',
+    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150',
+    location: 'Belo Horizonte, MG - Brasil',
+    relationship: 'Solteira',
+    humor: 'Super animada',
+    hereFor: 'Fazer novos amigos',
+    fashion: 'Floral e vintage',
+    religion: 'Nenhuma',
+    ethnicity: 'Brasileira',
+    languages: 'Português, Inglês',
+    hometown: 'Belo Horizonte',
+    webpage: 'http://marina-retratos.net',
+    passions: 'Fotografia retro, design de interfaces e passeios de bicicleta',
+    aboutMe: 'Oi gente! Sou a Marina, fotógrafa entusiasta e designer nas horas vagas. Adoro resgatar a estética clássica dos anos 2000! Se quiser conversar sobre fotografia analógica ou design vintage, me adiciona e deixe um scrap!',
+    trusty: 3,
+    cool: 3,
+    sexy: 3,
+    fans: 24,
+    username: 'marina_costa',
+    statusOnline: '● Online Agora',
+    theme: 'default'
+  },
+  carlos: {
+    id: 'carlos',
+    name: 'Carlos Mendes',
+    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150',
+    location: 'Rio de Janeiro, RJ - Brasil',
+    relationship: 'Casado',
+    humor: 'Trabalhador',
+    hereFor: 'Trocar ideias sobre código',
+    fashion: 'Bermuda e sandália',
+    religion: 'Espírita',
+    ethnicity: 'Carioca',
+    languages: 'Português',
+    hometown: 'Rio de Janeiro',
+    webpage: 'https://github.com/carlosm_dev',
+    passions: 'Futebol clássico, colecionar discos de vinil e desenvolvimento front-end',
+    aboutMe: 'E aí pessoal! Sou o Carlos, desenvolvedor web carioca. Adoro ouvir uma boa MPB em vinil e jogar uma pelada com os amigos no fim de semana. Sejam bem-vindos!',
+    trusty: 3,
+    cool: 2,
+    sexy: 1,
+    fans: 8,
+    username: 'carlos_mendes',
+    statusOnline: '● escutando Jorge Ben',
+    theme: 'rock-underground'
+  },
+  ana: {
+    id: 'ana',
+    name: 'Ana Ribeiro',
+    avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150',
+    location: 'Porto Alegre, RS - Brasil',
+    relationship: 'Namorando',
+    humor: 'Curiosa',
+    hereFor: 'Amizade e novidades',
+    fashion: 'Casaco quente e cachecol',
+    religion: 'Nenhuma',
+    ethnicity: 'Gaúcha',
+    languages: 'Português, Inglês',
+    hometown: 'Porto Alegre',
+    webpage: 'http://quimica-estudos.cafe',
+    passions: 'Café de alta qualidade, ciência, e jogos eletrônicos independentes',
+    aboutMe: 'Olá! Me chamo Ana, estudo engenharia química e sou apaixonada por barismo de café espresso de especialidade. Adoro testar novos jogos indie e ler ficção científica de madrugada!',
+    trusty: 3,
+    cool: 3,
+    sexy: 2,
+    fans: 19,
+    username: 'ana_ribeiro1',
+    statusOnline: '● tomando café coado',
+    theme: 'vaporwave'
+  },
+  felipe: {
+    id: 'felipe',
+    name: 'Felipe Rocha',
+    avatar: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=150',
+    location: 'Salvador, BA - Brasil',
+    relationship: 'Solteiro',
+    humor: 'Zen',
+    hereFor: 'Contatos acadêmicos e surfe',
+    fashion: 'Pé na areia e bermuda de banho',
+    religion: 'Sincretismo baiano',
+    ethnicity: 'Negro',
+    languages: 'Português, Espanhol',
+    hometown: 'Salvador',
+    webpage: 'http://academicflow.ba',
+    passions: 'Pegar ondas de manhã bem cedo, pesquisa em física de partículas e música axé de raiz',
+    aboutMe: 'Fala galera! Sou o Felipe da Bahia, pesquisador de física teórica. Minha terapia favorita é pegar uma onda cedo e depois tomar uma água de coco na areia. Vamos bater um papo no Scrapzone!',
+    trusty: 3,
+    cool: 3,
+    sexy: 2,
+    fans: 11,
+    username: 'felipe_surf',
+    statusOnline: '● de volta da praia',
+    theme: 'default'
+  },
+  juliana: {
+    id: 'juliana',
+    name: 'Juliana Alves',
+    avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150',
+    location: 'Brasília, DF - Brasil',
+    relationship: 'Solteira',
+    humor: 'Intensa',
+    hereFor: 'Discussões literárias e nerdice',
+    fashion: 'Jeans escuro e jaqueta puffer',
+    religion: 'Budista',
+    ethnicity: 'Brasileira',
+    languages: 'Português',
+    hometown: 'Brasília',
+    webpage: 'https://juliana-books.com',
+    passions: 'Mitologia nórdica, automação industrial com CLP, gatos vira-latas e RPG de mesa',
+    aboutMe: 'Oi oi! Me chamo Ju, trabalho com engenharia mecânica e automação em Brasília. Moro com meus 3 gatos adotados e jogo RPG todo sábado à noite. O Scrapzone retro é bom demais!',
+    trusty: 3,
+    cool: 3,
+    sexy: 2,
+    fans: 15,
+    username: 'juliana_alves',
+    statusOnline: '● programando CLP',
+    theme: 'default'
+  },
+  bruno: {
+    id: 'bruno',
+    name: 'Bruno Lima',
+    avatar: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=150',
+    location: 'Recife, PE - Brasil',
+    relationship: 'Solteiro',
+    humor: 'Zoeiro',
+    hereFor: 'Diversão e ensaios musicais',
+    fashion: 'Camiseta cavada preta e coturno',
+    religion: 'Do Rock n Roll',
+    ethnicity: 'Nordestino',
+    languages: 'Português, Inglês',
+    hometown: 'Recife',
+    webpage: 'https://www.garage-band-bruno.com',
+    passions: 'Guitarras distorcidas, comer hambúrguer com muito bacon e Recife Antigo',
+    aboutMe: 'Eae! Sou o Bruno, guitarrista de bueiro e desenvolvedor Python por obrigação. Adoro passear pelo Recife Antigo escutando heavy metal dos anos 80. Deixe o metal rolar!',
+    trusty: 2,
+    cool: 3,
+    sexy: 1,
+    fans: 31,
+    username: 'bruno_lima_guitar',
+    statusOnline: '● tirando solo de guitarra',
+    theme: 'rock-underground'
+  },
+  patricia: {
+    id: 'patricia',
+    name: 'Patricia Souza',
+    avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150',
+    location: 'Fortaleza, CE - Brasil',
+    relationship: 'Casada',
+    humor: 'Tranquila',
+    hereFor: 'Compartilhar receitas saudáveis',
+    fashion: 'Roupas leves de fibra natural',
+    religion: 'Espiritualista',
+    ethnicity: 'Cearense',
+    languages: 'Português, Francês',
+    hometown: 'Fortaleza',
+    webpage: 'http://vida-patricia.natureza',
+    passions: 'Yoga na praia, meliponicultura, cozinhar pães rústicos de fermentação natural',
+    aboutMe: 'Sejam bem-vindos! Sou a Patrícia, cearense fã do vento e do sol do Nordeste. Pratico yoga, cuido de colônias de abelhas sem ferrão nativas do Brasil e adoro assar pães franceses artesanais.',
+    trusty: 3,
+    cool: 2,
+    sexy: 2,
+    fans: 14,
+    username: 'patricia_souza',
+    statusOnline: '● meditando silenciosamente',
+    theme: 'vaporwave'
+  },
+  ricardo: {
+    id: 'ricardo',
+    name: 'Ricardo Martins',
+    avatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=150',
+    location: 'Florianópolis, SC - Brasil',
+    relationship: 'Solteiro',
+    humor: 'Tech geek',
+    hereFor: 'Networking de hacker seguro',
+    fashion: 'Moletom techwear com capuz e tênis esportivo',
+    religion: 'Nenhuma',
+    ethnicity: 'Sulista',
+    languages: 'Português, Inglês, Go',
+    hometown: 'Florianópolis',
+    webpage: 'http://ricardo-infosec.cafe',
+    passions: 'Escalada indoor, segurança em cloud, café gelado e servidores Linux',
+    aboutMe: 'Eae! Sou o Ricardo, faço estágio de InfoSec/DevOps em Floripa. Quando não estou auditando logs de contêineres, estou escalando paredões de treino ou correndo à beira-mar de Floripa.',
+    trusty: 3,
+    cool: 3,
+    sexy: 1,
+    fans: 5,
+    username: 'ricardo_martins_99',
+    statusOnline: '● corrigindo bugs na nuvem',
+    theme: 'neon-hacker'
   }
 };
 
@@ -247,6 +439,9 @@ export default function App() {
   const [isVisitorMode, setIsVisitorMode] = useState<boolean>(false);
   const [autoOpenUpload, setAutoOpenUpload] = useState<boolean>(false);
   const [sharedMemories, setSharedMemories] = useState<SharedMemory[]>(() => DEFAULT_SHARED_MEMORIES);
+
+  // Dynamic Friend Requests State
+  const [friendRequests, setFriendRequests] = useState<FriendRequest[]>([]);
 
   // Authentication & Session States
   const [currentUserProfile, setCurrentUserProfile] = useState<Profile | null>(null);
@@ -416,37 +611,38 @@ export default function App() {
 
     // Attach real-time snapshot listeners for total full-stack auto-sync
     const unsubscribeProfiles = onSnapshot(collection(db, 'profiles'), (snapshot) => {
-      if (snapshot.empty) {
-        // Automatically seed/bootstrap profiles in database
-        Object.keys(DEFAULT_PROFILES).forEach(async (key) => {
+      const fetched: Record<string, Profile> = {};
+      snapshot.forEach((doc) => {
+        fetched[doc.id] = doc.data() as Profile;
+      });
+
+      // Automatically seed any missing default profiles
+      Object.keys(DEFAULT_PROFILES).forEach(async (key) => {
+        if (!fetched[key]) {
           try {
             await setDoc(doc(db, 'profiles', key), DEFAULT_PROFILES[key]);
+            fetched[key] = DEFAULT_PROFILES[key];
           } catch (err) {
-            handleFirestoreError(err, OperationType.WRITE, `profiles/${key}`);
+            console.error(`Error auto-seeding missing profile ${key}:`, err);
           }
-        });
-      } else {
-        const fetched: Record<string, Profile> = {};
-        snapshot.forEach((doc) => {
-          fetched[doc.id] = doc.data() as Profile;
-        });
+        }
+      });
 
-        setProfiles((prev) => {
-          const cachedDemoId = localStorage.getItem('orkut_demo_me_id');
-          const authUid = auth.currentUser?.uid;
-          const currentUid = authUid || cachedDemoId;
-          
-          if (currentUid && fetched[currentUid]) {
-            fetched['me'] = fetched[currentUid];
-          } else if (prev && prev.me) {
-            fetched['me'] = prev.me;
-          }
-          return {
-            ...prev,
-            ...fetched
-          };
-        });
-      }
+      setProfiles((prev) => {
+        const cachedDemoId = localStorage.getItem('orkut_demo_me_id');
+        const authUid = auth.currentUser?.uid;
+        const currentUid = authUid || cachedDemoId;
+        
+        if (currentUid && fetched[currentUid]) {
+          fetched['me'] = fetched[currentUid];
+        } else if (prev && prev.me) {
+          fetched['me'] = prev.me;
+        }
+        return {
+          ...prev,
+          ...fetched
+        };
+      });
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'profiles');
     });
@@ -555,6 +751,70 @@ export default function App() {
       unsubscribeCommunities();
     };
   }, []);
+
+  // Dynamic subscription to Friend Requests dependent on current logged-in identity
+  useEffect(() => {
+    const activeId = currentUserProfile?.id || 'me';
+    
+    // Create optimized secure query to listen ONLY to friend requests where this user is sender or receiver
+    const q = query(
+      collection(db, 'friend_requests'),
+      or(
+        where('senderId', '==', activeId),
+        where('receiverId', '==', activeId)
+      )
+    );
+
+    const unsubscribeFriendRequests = onSnapshot(q, (snapshot) => {
+      const list: FriendRequest[] = [];
+      snapshot.forEach((docSnap) => {
+        list.push({ ...docSnap.data(), id: docSnap.id } as FriendRequest);
+      });
+      setFriendRequests(list);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'friend_requests');
+    });
+
+    return () => {
+      unsubscribeFriendRequests();
+    };
+  }, [currentUserProfile?.id]);
+
+  // Seeding default sandbox states for test profiles (Carlos pending, Ana accepted)
+  useEffect(() => {
+    const activeId = currentUserProfile?.id || 'me';
+    if (!activeId || isAuthLoading) return;
+
+    // Check if Carlos has any relation
+    const hasCarlosRelation = friendRequests.some(req => 
+      (req.senderId === activeId && req.receiverId === 'carlos') ||
+      (req.senderId === 'carlos' && req.receiverId === activeId)
+    );
+
+    if (!hasCarlosRelation) {
+      addDoc(collection(db, 'friend_requests'), {
+        senderId: activeId,
+        receiverId: 'carlos',
+        status: 'pending',
+        timestamp: new Date().toLocaleString('pt-BR')
+      }).catch(err => console.log('Error seeding Carlos request:', err));
+    }
+
+    // Check if Ana has any relation
+    const hasAnaRelation = friendRequests.some(req => 
+      (req.senderId === activeId && req.receiverId === 'ana') ||
+      (req.senderId === 'ana' && req.receiverId === activeId)
+    );
+
+    if (!hasAnaRelation) {
+      addDoc(collection(db, 'friend_requests'), {
+        senderId: activeId,
+        receiverId: 'ana',
+        status: 'accepted',
+        timestamp: new Date().toLocaleString('pt-BR')
+      }).catch(err => console.log('Error seeding Ana friends relation:', err));
+    }
+  }, [currentUserProfile?.id, friendRequests.length, isAuthLoading]);
 
   // Dynamic subscription to Joined Communities depending on current logged-in identity
   useEffect(() => {
@@ -877,13 +1137,136 @@ export default function App() {
     }
   });
 
-  // Simulated Friends list (Classical layout)
-  const friends: Friend[] = [
-    { id: 'lucas', name: 'Lucas Santos', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150', location: 'São Paulo, SP' },
-    { id: 'alexandre', name: 'Alexandre Curi', avatar: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=150', location: 'Curitiba, PR' },
-    { id: 'orkut', name: 'Orkut Büyükkökten', avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150', location: 'San Francisco, CA' },
-    { id: 'hacker', name: 'H3_Elit3_Hacker', avatar: 'https://images.unsplash.com/photo-1544197150-b99a580bb7a8?w=150', location: 'Deep Web' }
-  ];
+  // Dynamic Friends list getter
+  const getFriendsForProfile = (uid: string) => {
+    const myRealId = currentUserProfile?.id || 'me';
+    const isCurrentMe = (uid === 'me' || uid === myRealId);
+    
+    const friendsSet = new Set<string>();
+    
+    // Add default friends if this is the logged-in user
+    if (isCurrentMe) {
+      ['lucas', 'alexandre', 'orkut', 'hacker'].forEach(id => friendsSet.add(id));
+    } else if (['lucas', 'alexandre', 'orkut', 'hacker'].includes(uid)) {
+      // If viewing one of the default profiles, they are friends with current user by default
+      friendsSet.add(myRealId);
+      if (myRealId !== 'me') {
+        friendsSet.add('me');
+      }
+    }
+    
+    // Add dynamic friends from accepted requests
+    friendRequests.forEach(req => {
+      if (req.status === 'accepted') {
+        if (req.senderId === uid) friendsSet.add(req.receiverId);
+        if (req.receiverId === uid) friendsSet.add(req.senderId);
+      }
+    });
+    
+    // Remove self just in case
+    friendsSet.delete(uid);
+    friendsSet.delete('me'); // Keep clean representation
+    if (myRealId) {
+      friendsSet.delete(myRealId);
+    }
+    
+    // Map back to Friend objects
+    const list: Friend[] = [];
+    friendsSet.forEach(id => {
+      const profile = profiles[id];
+      if (profile) {
+        list.push({
+          id,
+          name: profile.name,
+          avatar: profile.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
+          location: profile.location || 'Brasil'
+        });
+      } else {
+        const defaultProf = DEFAULT_PROFILES[id];
+        if (defaultProf) {
+          list.push({
+            id,
+            name: defaultProf.name,
+            avatar: defaultProf.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
+            location: defaultProf.location || 'Brasil'
+          });
+        }
+      }
+    });
+    return list;
+  };
+
+  // Friend Requests handlers
+  const handleAddFriend = async (receiverId: string) => {
+    const currentUserId = currentUserProfile?.id || 'me';
+    if (!currentUserId || !receiverId) return;
+
+    if (currentUserId === receiverId) {
+      console.warn("Você não pode adicionar a si mesmo como amigo.");
+      return;
+    }
+
+    // Check if there is already any request between sender and receiver in either direction
+    const existingReq = friendRequests.find(req => 
+      (req.senderId === currentUserId && req.receiverId === receiverId) ||
+      (req.senderId === receiverId && req.receiverId === currentUserId)
+    );
+
+    if (existingReq) {
+      if (existingReq.status === 'pending') {
+        if (existingReq.senderId === currentUserId) {
+          console.warn("Você já enviou uma solicitação de amizade para este usuário que está pendente.");
+        } else {
+          console.warn("Este usuário já enviou uma solicitação de amizade para você. Por favor, verifique suas notificações.");
+        }
+        return;
+      } else if (existingReq.status === 'accepted') {
+        console.warn("Vocês já são amigos!");
+        return;
+      }
+    }
+
+    try {
+      await addDoc(collection(db, 'friend_requests'), {
+        senderId: currentUserId,
+        receiverId,
+        status: 'pending',
+        createdAt: Date.now()
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, 'friend_requests');
+    }
+  };
+
+  const handleAcceptFriendRequest = async (requestId: string) => {
+    try {
+      const reqRef = doc(db, 'friend_requests', requestId);
+      await setDoc(reqRef, { status: 'accepted' }, { merge: true });
+
+      const targetReq = friendRequests.find(r => r.id === requestId);
+      if (targetReq) {
+        const opposite = friendRequests.find(r => 
+          r.senderId === targetReq.receiverId && 
+          r.receiverId === targetReq.senderId && 
+          r.id !== requestId
+        );
+        if (opposite) {
+          await deleteDoc(doc(db, 'friend_requests', opposite.id));
+        }
+      }
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, `friend_requests/${requestId}`);
+    }
+  };
+
+  const handleRejectFriendRequest = async (requestId: string) => {
+    try {
+      const reqRef = doc(db, 'friend_requests', requestId);
+      await setDoc(reqRef, { status: 'rejected' }, { merge: true });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, `friend_requests/${requestId}`);
+    }
+  };
 
   // Real-time Communities List
   const [communities, setCommunities] = useState<Community[]>(() => [
@@ -1172,6 +1555,7 @@ export default function App() {
 
   const currentViewedProfile = profiles[activeProfileId] || profiles.me || DEFAULT_PROFILES.me;
   const themeStyles = getThemeStyles(currentViewedProfile.theme);
+  const friends = getFriendsForProfile(currentViewedProfile.id);
 
   // Filter communities joined by the visited profile applying privacy rules
   const visitorId = currentUserProfile?.id || 'me';
@@ -1259,6 +1643,11 @@ export default function App() {
               setIsSecretChatOpen(true);
             }}
             onRateProfile={handleRateProfile}
+            friendRequests={friendRequests}
+            onAddFriend={handleAddFriend}
+            onAcceptFriendRequest={handleAcceptFriendRequest}
+            onRejectFriendRequest={handleRejectFriendRequest}
+            profiles={profiles}
           />
         )}
  
