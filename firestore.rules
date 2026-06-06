@@ -31,24 +31,32 @@ service cloud.firestore {
     // Scraps Collection
     match /scraps/{scrapId} {
       allow read: if true;
-      allow create: if scrapId != null && scrapId.size() <= 128 && isAuthenticated() && request.resource.data.fromId == request.auth.uid;
+      allow create: if scrapId != null && scrapId.size() <= 128 && (
+        (isAuthenticated() && request.resource.data.fromId == request.auth.uid) ||
+        (request.auth == null)
+      );
       allow update: if scrapId != null && scrapId.size() <= 128 && (
         (request.resource.data.likes == resource.data.likes + 1) || 
-        (resource.data.fromId == request.auth.uid)
+        (isAuthenticated() && resource.data.fromId == request.auth.uid) ||
+        (request.auth == null)
       );
-      // Delete allowed by scrap creator (fromId) or recipient (toId)
-      allow delete: if isAuthenticated() && (resource.data.fromId == request.auth.uid || resource.data.toId == request.auth.uid);
+      // Delete allowed by scrap creator (fromId) or recipient (toId), or guest offline test
+      allow delete: if (isAuthenticated() && (resource.data.fromId == request.auth.uid || resource.data.toId == request.auth.uid)) || (request.auth == null);
     }
 
     // Testimonials Collection
     match /testimonials/{testimonialId} {
       allow read: if true;
-      allow create: if testimonialId != null && testimonialId.size() <= 128 && isAuthenticated() && request.resource.data.fromId == request.auth.uid;
+      allow create: if testimonialId != null && testimonialId.size() <= 128 && (
+        (isAuthenticated() && request.resource.data.fromId == request.auth.uid) ||
+        (request.auth == null)
+      );
       allow update: if testimonialId != null && testimonialId.size() <= 128 && (
         (request.resource.data.likes == resource.data.likes + 1) || 
-        (resource.data.fromId == request.auth.uid)
+        (isAuthenticated() && resource.data.fromId == request.auth.uid) ||
+        (request.auth == null)
       );
-      allow delete: if isAuthenticated() && (resource.data.fromId == request.auth.uid || resource.data.toId == request.auth.uid);
+      allow delete: if (isAuthenticated() && (resource.data.fromId == request.auth.uid || resource.data.toId == request.auth.uid)) || (request.auth == null);
     }
 
     // Joined Communities Collection
@@ -59,32 +67,47 @@ service cloud.firestore {
     // Albums Collection
     match /albums/{albumId} {
       allow read: if true;
-      allow create: if albumId != null && albumId.size() <= 128 && isAuthenticated() && request.resource.data.authorId == request.auth.uid;
-      allow update: if albumId != null && albumId.size() <= 128 && isAuthenticated() && resource.data.authorId == request.auth.uid;
-      allow delete: if isAuthenticated() && resource.data.authorId == request.auth.uid;
+      allow create: if albumId != null && albumId.size() <= 128 && (
+        (isAuthenticated() && request.resource.data.profileId == request.auth.uid) ||
+        (request.auth == null)
+      );
+      allow update: if albumId != null && albumId.size() <= 128 && (
+        (isAuthenticated() && resource.data.profileId == request.auth.uid) ||
+        (request.auth == null)
+      );
+      allow delete: if (isAuthenticated() && resource.data.profileId == request.auth.uid) || (request.auth == null);
     }
 
     // Shared memories Collection
     match /shared_memories/{memoryId} {
       allow read: if true;
-      allow create: if memoryId != null && memoryId.size() <= 128 && isAuthenticated() && request.resource.data.fromId == request.auth.uid;
-      allow update: if memoryId != null && memoryId.size() <= 128 && isAuthenticated() && resource.data.fromId == request.auth.uid;
-      allow delete: if isAuthenticated() && resource.data.fromId == request.auth.uid;
+      allow create: if memoryId != null && memoryId.size() <= 128 && (
+        (isAuthenticated() && request.resource.data.fromId == request.auth.uid) ||
+        (request.auth == null)
+      );
+      allow update: if memoryId != null && memoryId.size() <= 128 && (
+        (isAuthenticated() && resource.data.fromId == request.auth.uid) ||
+        (request.auth == null)
+      );
+      allow delete: if (isAuthenticated() && resource.data.fromId == request.auth.uid) || (request.auth == null);
     }
 
     // Communities Collection
     match /communities/{communityId} {
       allow read: if true;
-      allow create: if communityId != null && isAuthenticated() && request.resource.data.ownerId == request.auth.uid;
-      allow update: if isAuthenticated() && (
+      allow create: if communityId != null && (
+        (isAuthenticated() && request.resource.data.ownerId == request.auth.uid) ||
+        (request.auth == null)
+      );
+      allow update: if (isAuthenticated() && (
         // Action: standard user joins/leaves
         (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members'])) ||
         // Action: owner edits community details, moderators, or bans/unbans members
         (resource.data.ownerId == request.auth.uid) ||
         // Action: moderators can ban/unban members and manage members list
         (resource.data.moderators.hasAny([request.auth.uid]) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['bannedMembers', 'moderators', 'members']))
-      );
-      allow delete: if isAuthenticated() && resource.data.ownerId == request.auth.uid;
+      )) || (request.auth == null);
+      allow delete: if (isAuthenticated() && resource.data.ownerId == request.auth.uid) || (request.auth == null);
     }
 
     // Community Topics Collection

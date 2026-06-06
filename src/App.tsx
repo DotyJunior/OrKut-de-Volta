@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { ShieldCheck, Calendar, Lock, BookOpen, RefreshCw } from 'lucide-react';
 import OrkutHeader from './components/OrkutHeader';
 import OrkutFooter from './components/OrkutFooter';
@@ -14,12 +14,13 @@ import PhotoAlbums from './components/PhotoAlbums';
 import MsnToastSystem from './components/MsnToastSystem';
 import SecretChat from './components/SecretChat';
 import { getInitialAlbums } from './data/initialAlbums';
-import { Profile, Friend, Community, Scrap, Testimonial, Album, SharedMemory, FriendRequest } from './types';
+import { DEFAULT_COMMUNITIES_SEED } from './data/initialCommunities';
+import { Profile, Friend, Community, Scrap, Testimonial, Album, SharedMemory, FriendRequest, Relationship } from './types';
 import { getThemeStyles } from './lib/theme';
 import OrkutLogin from './components/OrkutLogin';
 
 // Firebase imports
-import { collection, doc, setDoc, onSnapshot, getDoc, getDocFromServer, addDoc, deleteDoc, query, where, or } from 'firebase/firestore';
+import { collection, doc, setDoc, onSnapshot, getDoc, getDocFromServer, addDoc, deleteDoc, query, where, or, getDocs } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType } from './firebase';
 
 const DEFAULT_PROFILES: Record<string, Profile> = {
@@ -446,11 +447,57 @@ export default function App() {
   // Authentication & Session States
   const [currentUserProfile, setCurrentUserProfile] = useState<Profile | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState<boolean>(true);
+  const [isAppReady, setIsAppReady] = useState<boolean>(false);
+
+  const [users, setUsers] = useState<any[]>([]);
+  const [relationships, setRelationships] = useState<Relationship[]>([]);
+  const [photos, setPhotos] = useState<any[]>([]);
+
+  // Real-time snapshot loader and hydration controller
+  const [initDone, setInitDone] = useState<boolean>(false);
+  const initFlags = useRef({
+    profiles: false,
+    users: false,
+    relationships: false,
+    photos: false,
+    scraps: false,
+    testimonials: false,
+    albums: false,
+    memories: false,
+    communities: false,
+  });
+
+  const checkInitDone = () => {
+    const allReady =
+      initFlags.current.profiles &&
+      initFlags.current.users &&
+      initFlags.current.relationships &&
+      initFlags.current.photos &&
+      initFlags.current.scraps &&
+      initFlags.current.testimonials &&
+      initFlags.current.albums &&
+      initFlags.current.memories &&
+      initFlags.current.communities;
+
+    if (allReady) {
+      setInitDone(true);
+      setIsAppReady(true);
+    }
+  };
 
   // Google Firebase Auth listener
   useEffect(() => {
+    let unsubscribeDemoProfile: (() => void) | null = null;
+
     const unsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
       setIsAuthLoading(true);
+
+      // Clean up previous demo snapshot listener if auth state changes
+      if (unsubscribeDemoProfile) {
+        unsubscribeDemoProfile();
+        unsubscribeDemoProfile = null;
+      }
+
       if (firebaseUser) {
         // Watch user profile in firestore
         const docRef = doc(db, 'profiles', firebaseUser.uid);
@@ -505,15 +552,33 @@ export default function App() {
         // Not logged in with Firebase Auth. Check for static demo login cache
         const cachedDemoId = localStorage.getItem('orkut_demo_me_id');
         if (cachedDemoId && DEFAULT_PROFILES[cachedDemoId]) {
-          setCurrentUserProfile(DEFAULT_PROFILES[cachedDemoId]);
+          const docRef = doc(db, 'profiles', cachedDemoId);
+          unsubscribeDemoProfile = onSnapshot(docRef, (docSnap) => {
+            if (docSnap.exists()) {
+              setCurrentUserProfile(docSnap.data() as Profile);
+            } else {
+              setDoc(docRef, DEFAULT_PROFILES[cachedDemoId]).catch(err => console.error(err));
+              setCurrentUserProfile(DEFAULT_PROFILES[cachedDemoId]);
+            }
+            setIsAuthLoading(false);
+          }, (err) => {
+            console.error("Demo Profile snap error, falling back static:", err);
+            setCurrentUserProfile(DEFAULT_PROFILES[cachedDemoId]);
+            setIsAuthLoading(false);
+          });
         } else {
           setCurrentUserProfile(null);
+          setIsAuthLoading(false);
         }
-        setIsAuthLoading(false);
       }
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      if (unsubscribeDemoProfile) {
+        unsubscribeDemoProfile();
+      }
+    };
   }, []);
 
   // Sync profiles['me'] dynamically whenever the authenticated currentUserProfile changes
@@ -612,20 +677,8 @@ export default function App() {
     // Attach real-time snapshot listeners for total full-stack auto-sync
     const unsubscribeProfiles = onSnapshot(collection(db, 'profiles'), (snapshot) => {
       const fetched: Record<string, Profile> = {};
-      snapshot.forEach((doc) => {
-        fetched[doc.id] = doc.data() as Profile;
-      });
-
-      // Automatically seed any missing default profiles
-      Object.keys(DEFAULT_PROFILES).forEach(async (key) => {
-        if (!fetched[key]) {
-          try {
-            await setDoc(doc(db, 'profiles', key), DEFAULT_PROFILES[key]);
-            fetched[key] = DEFAULT_PROFILES[key];
-          } catch (err) {
-            console.error(`Error auto-seeding missing profile ${key}:`, err);
-          }
-        }
+      snapshot.forEach((docSnap) => {
+        fetched[docSnap.id] = docSnap.data() as Profile;
       });
 
       setProfiles((prev) => {
@@ -643,107 +696,132 @@ export default function App() {
           ...fetched
         };
       });
+      initFlags.current.profiles = true;
+      checkInitDone();
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'profiles');
+      initFlags.current.profiles = true;
+      checkInitDone();
+    });
+
+    const unsubscribeUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
+      const list = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      setUsers(list);
+      
+      const fetched: Record<string, Profile> = {};
+      list.forEach((u: any) => {
+        fetched[u.id] = { id: u.id, ...u } as Profile;
+      });
+      
+      setProfiles((prev) => ({
+        ...prev,
+        ...fetched
+      }));
+      initFlags.current.users = true;
+      checkInitDone();
+    }, (error) => {
+      console.error("Error listening to users collection:", error);
+      initFlags.current.users = true;
+      checkInitDone();
+    });
+
+    const unsubscribeRelationships = onSnapshot(collection(db, 'relationships'), (snapshot) => {
+      const list = snapshot.docs.map(d => ({ id: d.id, ...d.data() }) as any);
+      setRelationships(list);
+      initFlags.current.relationships = true;
+      checkInitDone();
+    }, (error) => {
+      console.error("Error listening to relationships collection:", error);
+      initFlags.current.relationships = true;
+      checkInitDone();
+    });
+
+    const unsubscribePhotos = onSnapshot(collection(db, 'photos'), (snapshot) => {
+      const list = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      setPhotos(list);
+      initFlags.current.photos = true;
+      checkInitDone();
+    }, (error) => {
+      console.error("Error listening to photos collection:", error);
+      initFlags.current.photos = true;
+      checkInitDone();
     });
 
     const unsubscribeScraps = onSnapshot(collection(db, 'scraps'), (snapshot) => {
-      if (snapshot.empty) {
-        DEFAULT_SCRAPS.forEach(async (item) => {
-          try {
-            await setDoc(doc(db, 'scraps', item.id), item);
-          } catch (err) {
-            handleFirestoreError(err, OperationType.WRITE, `scraps/${item.id}`);
-          }
-        });
-      } else {
-        const list: Scrap[] = [];
-        snapshot.forEach((doc) => {
-          list.push(doc.data() as Scrap);
-        });
-        // Sort or display
-        setScraps(list);
-      }
+      const list: Scrap[] = [];
+      snapshot.forEach((docSnap) => {
+        list.push(docSnap.data() as Scrap);
+      });
+      setScraps(list);
+      initFlags.current.scraps = true;
+      checkInitDone();
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'scraps');
+      initFlags.current.scraps = true;
+      checkInitDone();
     });
 
     const unsubscribeTestimonials = onSnapshot(collection(db, 'testimonials'), (snapshot) => {
-      if (snapshot.empty) {
-        DEFAULT_TESTIMONIALS.forEach(async (item) => {
-          try {
-            await setDoc(doc(db, 'testimonials', item.id), item);
-          } catch (err) {
-            handleFirestoreError(err, OperationType.WRITE, `testimonials/${item.id}`);
-          }
-        });
-      } else {
-        const list: Testimonial[] = [];
-        snapshot.forEach((doc) => {
-          list.push(doc.data() as Testimonial);
-        });
-        setTestimonials(list);
-      }
+      const list: Testimonial[] = [];
+      snapshot.forEach((docSnap) => {
+        list.push(docSnap.data() as Testimonial);
+      });
+      setTestimonials(list);
+      initFlags.current.testimonials = true;
+      checkInitDone();
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'testimonials');
+      initFlags.current.testimonials = true;
+      checkInitDone();
     });
 
     const unsubscribeAlbums = onSnapshot(collection(db, 'albums'), (snapshot) => {
-      if (snapshot.empty) {
-        // Seeding initial albums if DB is empty
-        const initial = getInitialAlbums();
-        initial.forEach(async (item) => {
-          try {
-            await setDoc(doc(db, 'albums', item.id), item);
-          } catch (err) {
-            handleFirestoreError(err, OperationType.WRITE, `albums/${item.id}`);
-          }
-        });
-      } else {
-        const list: Album[] = [];
-        snapshot.forEach((doc) => {
-          list.push(doc.data() as Album);
-        });
-        setAlbums(list);
-      }
+      const list: Album[] = [];
+      snapshot.forEach((docSnap) => {
+        list.push(docSnap.data() as Album);
+      });
+      setAlbums(list);
+      initFlags.current.albums = true;
+      checkInitDone();
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'albums');
+      initFlags.current.albums = true;
+      checkInitDone();
     });
 
     const unsubscribeSharedMemories = onSnapshot(collection(db, 'shared_memories'), (snapshot) => {
-      if (snapshot.empty) {
-        DEFAULT_SHARED_MEMORIES.forEach(async (item) => {
-          try {
-            await setDoc(doc(db, 'shared_memories', item.id), item);
-          } catch (err) {
-            handleFirestoreError(err, OperationType.WRITE, `shared_memories/${item.id}`);
-          }
-        });
-      } else {
-        const list: SharedMemory[] = [];
-        snapshot.forEach((doc) => {
-          list.push(doc.data() as SharedMemory);
-        });
-        setSharedMemories(list);
-      }
+      const list: SharedMemory[] = [];
+      snapshot.forEach((docSnap) => {
+        list.push(docSnap.data() as SharedMemory);
+      });
+      setSharedMemories(list);
+      initFlags.current.memories = true;
+      checkInitDone();
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'shared_memories');
+      initFlags.current.memories = true;
+      checkInitDone();
     });
 
     const unsubscribeCommunities = onSnapshot(collection(db, 'communities'), (snapshot) => {
-      if (!snapshot.empty) {
-        const list: Community[] = [];
-        snapshot.forEach((doc) => {
-          list.push({ ...doc.data(), id: doc.id } as Community);
-        });
-        setCommunities(list);
-      }
+      const list: Community[] = [];
+      snapshot.forEach((docSnap) => {
+        list.push({ ...docSnap.data(), id: docSnap.id } as Community);
+      });
+      setCommunities(list);
+      initFlags.current.communities = true;
+      checkInitDone();
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'communities');
+      initFlags.current.communities = true;
+      checkInitDone();
     });
 
     return () => {
       unsubscribeProfiles();
+      unsubscribeUsers();
+      unsubscribeRelationships();
+      unsubscribePhotos();
       unsubscribeScraps();
       unsubscribeTestimonials();
       unsubscribeAlbums();
@@ -752,69 +830,20 @@ export default function App() {
     };
   }, []);
 
-  // Dynamic subscription to Friend Requests dependent on current logged-in identity
+  // Synchronize friendRequests state dynamically from the real-time relationships list dependent on currentUserProfile
   useEffect(() => {
     const activeId = currentUserProfile?.id || 'me';
-    
-    // Create optimized secure query to listen ONLY to friend requests where this user is sender or receiver
-    const q = query(
-      collection(db, 'friend_requests'),
-      or(
-        where('senderId', '==', activeId),
-        where('receiverId', '==', activeId)
-      )
-    );
-
-    const unsubscribeFriendRequests = onSnapshot(q, (snapshot) => {
-      const list: FriendRequest[] = [];
-      snapshot.forEach((docSnap) => {
-        list.push({ ...docSnap.data(), id: docSnap.id } as FriendRequest);
-      });
-      setFriendRequests(list);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'friend_requests');
-    });
-
-    return () => {
-      unsubscribeFriendRequests();
-    };
-  }, [currentUserProfile?.id]);
-
-  // Seeding default sandbox states for test profiles (Carlos pending, Ana accepted)
-  useEffect(() => {
-    const activeId = currentUserProfile?.id || 'me';
-    if (!activeId || isAuthLoading) return;
-
-    // Check if Carlos has any relation
-    const hasCarlosRelation = friendRequests.some(req => 
-      (req.senderId === activeId && req.receiverId === 'carlos') ||
-      (req.senderId === 'carlos' && req.receiverId === activeId)
-    );
-
-    if (!hasCarlosRelation) {
-      addDoc(collection(db, 'friend_requests'), {
-        senderId: activeId,
-        receiverId: 'carlos',
-        status: 'pending',
-        timestamp: new Date().toLocaleString('pt-BR')
-      }).catch(err => console.log('Error seeding Carlos request:', err));
-    }
-
-    // Check if Ana has any relation
-    const hasAnaRelation = friendRequests.some(req => 
-      (req.senderId === activeId && req.receiverId === 'ana') ||
-      (req.senderId === 'ana' && req.receiverId === activeId)
-    );
-
-    if (!hasAnaRelation) {
-      addDoc(collection(db, 'friend_requests'), {
-        senderId: activeId,
-        receiverId: 'ana',
-        status: 'accepted',
-        timestamp: new Date().toLocaleString('pt-BR')
-      }).catch(err => console.log('Error seeding Ana friends relation:', err));
-    }
-  }, [currentUserProfile?.id, friendRequests.length, isAuthLoading]);
+    const mapped = relationships
+      .filter((rel: any) => rel.type === 'friend' && (rel.fromUserId === activeId || rel.toUserId === activeId))
+      .map((rel: any) => ({
+        id: rel.id,
+        senderId: rel.fromUserId,
+        receiverId: rel.toUserId,
+        status: rel.status,
+        createdAt: rel.createdAt || Date.now()
+      }));
+    setFriendRequests(mapped);
+  }, [relationships, currentUserProfile?.id]);
 
   // Dynamic subscription to Joined Communities depending on current logged-in identity
   useEffect(() => {
@@ -828,11 +857,8 @@ export default function App() {
           setJoinedCommunities(data.communityIds);
         }
       } else {
-        // Fallback or seed default communities
-        const defaultSet = ['1', '3', 'pendrive_perdido'];
-        setDoc(docRef, { communityIds: defaultSet }).catch(err => {
-          handleFirestoreError(err, OperationType.WRITE, `joined_communities/${activeId}`);
-        });
+        // Fallback in client-side memory only, no automatic database writes
+        setJoinedCommunities([]);
       }
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, `joined_communities/${activeId}`);
@@ -996,7 +1022,23 @@ export default function App() {
 
   const handleUpdateAlbums = async (newAlbums: Album[] | ((prev: Album[]) => Album[])) => {
     const resolvedAlbums = typeof newAlbums === 'function' ? newAlbums(albums) : newAlbums;
+    
+    // Find albums that were deleted
+    const newAlbumIds = new Set(resolvedAlbums.map(a => a.id));
+    const deletedAlbums = albums.filter(a => !newAlbumIds.has(a.id));
+    
     setAlbums(resolvedAlbums);
+    
+    // Delete removed albums from firestore
+    for (const album of deletedAlbums) {
+      try {
+        await deleteDoc(doc(db, 'albums', album.id));
+      } catch (err) {
+        handleFirestoreError(err, OperationType.DELETE, `albums/${album.id}`);
+      }
+    }
+    
+    // Save/update remaining albums
     for (const album of resolvedAlbums) {
       try {
         await setDoc(doc(db, 'albums', album.id), album);
@@ -1227,20 +1269,21 @@ export default function App() {
     }
 
     try {
-      await addDoc(collection(db, 'friend_requests'), {
-        senderId: currentUserId,
-        receiverId,
+      await addDoc(collection(db, 'relationships'), {
+        fromUserId: currentUserId,
+        toUserId: receiverId,
+        type: 'friend',
         status: 'pending',
         createdAt: Date.now()
       });
     } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, 'friend_requests');
+      handleFirestoreError(err, OperationType.WRITE, 'relationships');
     }
   };
 
   const handleAcceptFriendRequest = async (requestId: string) => {
     try {
-      const reqRef = doc(db, 'friend_requests', requestId);
+      const reqRef = doc(db, 'relationships', requestId);
       await setDoc(reqRef, { status: 'accepted' }, { merge: true });
 
       const targetReq = friendRequests.find(r => r.id === requestId);
@@ -1251,20 +1294,20 @@ export default function App() {
           r.id !== requestId
         );
         if (opposite) {
-          await deleteDoc(doc(db, 'friend_requests', opposite.id));
+          await deleteDoc(doc(db, 'relationships', opposite.id));
         }
       }
     } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, `friend_requests/${requestId}`);
+      handleFirestoreError(err, OperationType.WRITE, `relationships/${requestId}`);
     }
   };
 
   const handleRejectFriendRequest = async (requestId: string) => {
     try {
-      const reqRef = doc(db, 'friend_requests', requestId);
+      const reqRef = doc(db, 'relationships', requestId);
       await setDoc(reqRef, { status: 'rejected' }, { merge: true });
     } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, `friend_requests/${requestId}`);
+      handleFirestoreError(err, OperationType.WRITE, `relationships/${requestId}`);
     }
   };
 
@@ -1521,8 +1564,8 @@ export default function App() {
     }
   };
 
-  // Loading state during session check
-  if (isAuthLoading) {
+  // Loading state during session check and app bootstrap
+  if (isAuthLoading || !initDone) {
     return (
       <div className="min-h-screen bg-gradient-to-tr from-[#cbdcf3] to-[#fbcfe8] flex flex-col items-center justify-center font-sans gap-4 select-none">
         <div className="flex items-center gap-1.5 mb-1.5 animate-pulse">

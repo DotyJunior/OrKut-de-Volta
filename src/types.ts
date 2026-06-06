@@ -77,6 +77,12 @@ export interface Community {
   avatar: string; // custom color/emoji or icon
   category: string;
   secureMode: boolean; // Needs cryptographic key signature check to enter
+  language?: string;
+  type?: string;
+  createdAt?: string;
+  ownerId?: string;
+  moderators?: string[];
+  rules?: string;
 }
 
 export interface Friend {
@@ -146,4 +152,14 @@ export interface SharedMemory {
   likes: number;
   likedByMe?: boolean;
 }
+
+export interface Relationship {
+  id: string;
+  fromUserId: string;
+  toUserId: string;
+  type: "friend" | "follow" | "block";
+  status: "pending" | "accepted" | "rejected";
+  createdAt: number;
+}
+
 
