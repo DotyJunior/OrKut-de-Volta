@@ -752,7 +752,10 @@ export default function App() {
       snapshot.forEach((docSnap) => {
         list.push(docSnap.data() as Scrap);
       });
-      setScraps(list);
+      const isFirstLoad = !initFlags.current.scraps;
+      if (!isFirstLoad || !snapshot.empty) {
+        setScraps(list);
+      }
       initFlags.current.scraps = true;
       checkInitDone();
     }, (error) => {
@@ -766,7 +769,10 @@ export default function App() {
       snapshot.forEach((docSnap) => {
         list.push(docSnap.data() as Testimonial);
       });
-      setTestimonials(list);
+      const isFirstLoad = !initFlags.current.testimonials;
+      if (!isFirstLoad || !snapshot.empty) {
+        setTestimonials(list);
+      }
       initFlags.current.testimonials = true;
       checkInitDone();
     }, (error) => {
@@ -780,7 +786,10 @@ export default function App() {
       snapshot.forEach((docSnap) => {
         list.push(docSnap.data() as Album);
       });
-      setAlbums(list);
+      const isFirstLoad = !initFlags.current.albums;
+      if (!isFirstLoad || !snapshot.empty) {
+        setAlbums(list);
+      }
       initFlags.current.albums = true;
       checkInitDone();
     }, (error) => {
@@ -794,7 +803,10 @@ export default function App() {
       snapshot.forEach((docSnap) => {
         list.push(docSnap.data() as SharedMemory);
       });
-      setSharedMemories(list);
+      const isFirstLoad = !initFlags.current.memories;
+      if (!isFirstLoad || !snapshot.empty) {
+        setSharedMemories(list);
+      }
       initFlags.current.memories = true;
       checkInitDone();
     }, (error) => {
@@ -808,7 +820,10 @@ export default function App() {
       snapshot.forEach((docSnap) => {
         list.push({ ...docSnap.data(), id: docSnap.id } as Community);
       });
-      setCommunities(list);
+      const isFirstLoad = !initFlags.current.communities;
+      if (!isFirstLoad || !snapshot.empty) {
+        setCommunities(list);
+      }
       initFlags.current.communities = true;
       checkInitDone();
     }, (error) => {
