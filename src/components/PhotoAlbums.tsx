@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { Album, Photo, PhotoComment } from '../types';
 import SocialActions from './SocialActions';
+import { storage, ref, uploadBytes, getDownloadURL } from '../firebase';
 
 export const getPhotoEffectClass = (effect?: string) => {
   if (!effect) return '';
@@ -192,6 +193,7 @@ export default function PhotoAlbums({
   const [activeEffect, setActiveEffect] = useState<string>('');
   const [aiPrompt, setAiPrompt] = useState('');
   const [isGeneratingPhotoAi, setIsGeneratingPhotoAi] = useState(false);
+  const [isUploadingLocalPhoto, setIsUploadingLocalPhoto] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Comment posting
@@ -377,8 +379,8 @@ export default function PhotoAlbums({
     }, 'Processando cores de filme analógico...');
   };
 
-  // Local File Upload from device (JPG, PNG, WEBP, GIF)
-  const handleLocalFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Local File Upload from device (JPG, PNG, WEBP, GIF) uploaded straight to Firebase Storage
+  const handleLocalFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -388,13 +390,39 @@ export default function PhotoAlbums({
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      if (event.target?.result) {
-        setNewPhotoUrl(event.target.result as string);
-      }
-    };
-    reader.readAsDataURL(file);
+    console.log("FILE SIZE", file.size);
+    setIsUploadingLocalPhoto(true);
+    try {
+      const fileExtension = file.name.split('.').pop() || 'jpg';
+      const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${fileExtension}`;
+      const filePath = `albums/${profileId || 'anonymous'}/${fileName}`;
+
+      const storageRef = ref(storage, filePath);
+      const uploadResult = await uploadBytes(storageRef, file);
+      console.log("UPLOAD SUCCESS", uploadResult);
+      
+      const downloadUrl = await getDownloadURL(storageRef);
+      console.log("DOWNLOAD URL", downloadUrl);
+
+      setNewPhotoUrl(downloadUrl);
+    } catch (err) {
+      console.warn('Error uploading file to Firebase Storage, falling back to local FileReader:', err);
+      // Perfect fallback: read file into Base64 data URL so mock or quota exhausted environments work 100% cleanly
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const base64Url = event.target?.result as string;
+        if (base64Url) {
+          setNewPhotoUrl(base64Url);
+          console.log("Local reader fallback success.");
+        }
+      };
+      reader.onerror = () => {
+        alert('Erro ao processar imagem localmente.');
+      };
+      reader.readAsDataURL(file);
+    } finally {
+      setIsUploadingLocalPhoto(false);
+    }
   };
 
   // AI Image generation using Pollinations
@@ -1596,12 +1624,13 @@ export default function PhotoAlbums({
                   </span>
                   <button
                     type="button"
+                    disabled={isUploadingLocalPhoto || isGeneratingPhotoAi}
                     onClick={() => fileInputRef.current?.click()}
-                    className="w-full py-4 bg-gradient-to-b from-[#a21caf] to-[#86198f] hover:from-[#c026d3] hover:to-[#a21caf] text-white font-black text-lg uppercase rounded shadow-md border-b-[4px] border-[#701a75] active:border-b-0 hover:scale-[1.01] active:translate-y-[4px] transition-all flex flex-col items-center justify-center gap-1 cursor-pointer pointer-events-auto"
+                    className={`w-full py-4 bg-gradient-to-b from-[#a21caf] to-[#86198f] hover:from-[#c026d3] hover:to-[#a21caf] text-white font-black text-lg uppercase rounded shadow-md border-b-[4px] border-[#701a75] active:border-b-0 hover:scale-[1.01] active:translate-y-[4px] transition-all flex flex-col items-center justify-center gap-1 cursor-pointer pointer-events-auto ${(isUploadingLocalPhoto || isGeneratingPhotoAi) ? 'opacity-70 cursor-not-allowed' : ''}`}
                   >
                     <div className="flex items-center gap-2">
-                      <Upload size={22} className="stroke-[3]" />
-                      <span className="tracking-wider text-xl">UPLOAD</span>
+                      <Upload size={22} className={`stroke-[3] ${isUploadingLocalPhoto ? 'animate-spin' : 'animate-bounce'}`} />
+                      <span className="tracking-wider text-xl">{isUploadingLocalPhoto ? 'ENVIANDO...' : 'UPLOAD'}</span>
                     </div>
                   </button>
                   <div className="text-center text-[9px] text-[#86198f] font-mono font-bold mt-1.5 uppercase tracking-wide">

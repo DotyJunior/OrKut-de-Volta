@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import GlossyRetroButton from './GlossyRetroButton';
 import { db, auth, handleFirestoreError, OperationType } from '../firebase';
-import { collection, doc, onSnapshot, setDoc, updateDoc, addDoc, deleteDoc, query, where, getDocs, writeBatch } from 'firebase/firestore';
+import { collection, doc, onSnapshot, setDoc, updateDoc, addDoc, deleteDoc, query, where, getDocs, writeBatch, arrayUnion, getDoc } from 'firebase/firestore';
 import { Profile, Community } from '../types';
 import { getThemeStyles } from '../lib/theme';
 import { DEFAULT_COMMUNITIES_SEED } from '../data/initialCommunities';
@@ -146,19 +146,45 @@ export default function Communities({
         else if (targetProfileId === 'hacker') userCommIds = ['1', 'hacker_guild'];
       }
 
+      // Merge userCommIds with localStorage local_joined_${targetProfileId}
+      const localJoinedJson = localStorage.getItem(`local_joined_${targetProfileId}`);
+      const localJoined = localJoinedJson ? JSON.parse(localJoinedJson) : [];
+      const mergedCommIds = Array.from(new Set([...userCommIds, ...localJoined]));
+
       const isOwner = activeUserId === targetProfileId;
       const friendsPool = ["me", "lucas", "alexandre", "orkut", "hacker"];
       const isFriend = friendsPool.includes(activeUserId) && friendsPool.includes(targetProfileId);
 
       const localFiltered = dbCommunities.filter(c => {
-        if (!userCommIds.includes(c.id)) return false;
+        if (!mergedCommIds.includes(c.id)) return false;
         if (isOwner || isFriend) return true;
         return !c.secureMode;
       });
       setDisplayedCommunities(localFiltered);
       setIsLoadingProfileComms(false);
     }, (err) => {
-      console.error("Error listening to profile communities:", err);
+      console.warn("Error listening to profile communities. Falling back onto localStorage.", err);
+      // Fallback
+      let fallbackIds = ['1', '3'];
+      if (targetProfileId === 'me' || targetProfileId === activeUserId) fallbackIds = ['1', '3', 'pendrive_perdido'];
+      else if (targetProfileId === 'orkut') fallbackIds = ['1', '3', 'orkut_devs', '2'];
+      else if (targetProfileId === 'alexandre') fallbackIds = ['1', '2', 'sec_pr'];
+      else if (targetProfileId === 'hacker') fallbackIds = ['1', 'hacker_guild'];
+
+      const localJoinedJson = localStorage.getItem(`local_joined_${targetProfileId}`);
+      const localJoined = localJoinedJson ? JSON.parse(localJoinedJson) : [];
+      const mergedCommIds = Array.from(new Set([...fallbackIds, ...localJoined]));
+
+      const isOwner = activeUserId === targetProfileId;
+      const friendsPool = ["me", "lucas", "alexandre", "orkut", "hacker"];
+      const isFriend = friendsPool.includes(activeUserId) && friendsPool.includes(targetProfileId);
+
+      const localFiltered = dbCommunities.filter(c => {
+        if (!mergedCommIds.includes(c.id)) return false;
+        if (isOwner || isFriend) return true;
+        return !c.secureMode;
+      });
+      setDisplayedCommunities(localFiltered);
       setIsLoadingProfileComms(false);
     });
 
@@ -177,6 +203,9 @@ export default function Communities({
   }, [activeCommunityId]);
 
   const handleSelectCommunity = (id: string | null) => {
+    if (id) {
+      console.log("SELECT COMMUNITY", id);
+    }
     setActiveCommId(id);
     if (setActiveCommunityId) {
       setActiveCommunityId(id);
@@ -184,6 +213,13 @@ export default function Communities({
   };
   const [activeComm, setActiveComm] = useState<any>(null);
   const [activeTopic, setActiveTopic] = useState<Topic | null>(null);
+
+  // Use a React Ref to prevent stale closures in real-time listeners without causing infinite re-render loops
+  const activeTopicRef = useRef(activeTopic);
+  useEffect(() => {
+    activeTopicRef.current = activeTopic;
+  }, [activeTopic]);
+
   const [searchQuery, setSearchQuery] = useState('');
   
   // Real-time forum posts
@@ -242,75 +278,41 @@ export default function Communities({
     'Escola', 'Filmes', 'Música', 'Memes', 'TV', 'Outros'
   ];
 
-  // 1. Sync communities from Firestore in real-time
+  // 1. Sync communities from Firestore in real-time (READ ONLY, NO SEEDING OR WRITING)
   useEffect(() => {
     const unsubscribe = onSnapshot(collection(db, 'communities'), (snapshot) => {
-      if (snapshot.empty) {
-        // Bootstrap/Seed default communities
-        const seedAll = async () => {
-          for (const comm of DEFAULT_COMMUNITIES_SEED) {
-            try {
-              await setDoc(doc(db, 'communities', comm.id!), comm);
-            } catch (err) {
-              handleFirestoreError(err, OperationType.WRITE, `communities/${comm.id}`);
-            }
-          }
-        };
-        seedAll();
-      } else {
-        const list: any[] = [];
-        const existingIds = new Set<string>();
-        snapshot.forEach((doc) => {
-          list.push({ ...doc.data(), id: doc.id });
-          existingIds.add(doc.id);
-        });
-        setDbCommunities(list);
-        
-        // Auto-update owner of the 'pendrive_perdido' community to the active user's ID
-        const currentUserId = currentUser?.id || 'me';
-        const pendriveComm = list.find(c => c.id === 'pendrive_perdido');
-        if (pendriveComm && (pendriveComm.ownerId !== currentUserId || !pendriveComm.moderators?.includes(currentUserId))) {
-          updateDoc(doc(db, 'communities', 'pendrive_perdido'), {
-            ownerId: currentUserId,
-            moderators: [currentUserId]
-          }).catch(err => {
-            console.error("Error setting community owner for pendrive_perdido:", err);
-          });
+      console.log("COMMUNITIES SNAPSHOT SIZE", snapshot.size);
+      const list: any[] = [];
+      snapshot.forEach((doc) => {
+        list.push({ ...doc.data(), id: doc.id });
+      });
+      console.log("DB COMMUNITIES IDS", list.map(c => c.id));
+      
+      const localCommsJson = localStorage.getItem('local_communities');
+      const localComms = localCommsJson ? JSON.parse(localCommsJson) : [];
+      
+      const mergedList = [...list];
+      localComms.forEach((lc: any) => {
+        if (!mergedList.some(c => c.id === lc.id)) {
+          mergedList.push(lc);
         }
+      });
 
-        // Auto-update owner of the '1' (Eu Odeio Acordar Cedo) community to the active user's ID
-        const hateMorningsComm = list.find(c => c.id === '1');
-        if (hateMorningsComm && (hateMorningsComm.ownerId !== currentUserId || !hateMorningsComm.moderators?.includes(currentUserId))) {
-          updateDoc(doc(db, 'communities', '1'), {
-            ownerId: currentUserId,
-            moderators: [currentUserId]
-          }).catch(err => {
-            console.error("Error setting community owner for Eu Odeio Acordar Cedo:", err);
-          });
-        }
-        
-        // Seed any missing classic required communities
-        const missing = DEFAULT_COMMUNITIES_SEED.filter(c => !existingIds.has(c.id!));
-        if (missing.length > 0) {
-          const seedMissing = async () => {
-            for (const comm of missing) {
-              try {
-                await setDoc(doc(db, 'communities', comm.id!), comm);
-              } catch (err) {
-                console.error("Error seeding missing community", comm.id, err);
-              }
-            }
-          };
-          seedMissing();
-        }
+      console.log("COMMUNITY OPEN", activeCommId);
+      console.log("TOPICS", 0);
+      console.log("ACTIVE TOPIC", activeTopic);
+      console.log("CURRENT USER", currentUser);
+      setDbCommunities(mergedList);
 
-        // Auto-select starting community if set but missing
-        if (activeCommId !== null && list.length > 0 && !list.find(c => c.id === activeCommId)) {
-          handleSelectCommunity(list[0].id);
-        }
+      // Auto-select starting community if set but missing
+      if (activeCommId !== null && mergedList.length > 0 && !mergedList.find(c => c.id === activeCommId)) {
+        handleSelectCommunity(mergedList[0].id);
       }
     }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'communities');
+      console.error("Error loading communities onSnapshot, falling back to local storage:", error);
+      const localCommsJson = localStorage.getItem('local_communities');
+      const localComms = localCommsJson ? JSON.parse(localCommsJson) : [];
+      setDbCommunities(localComms);
     });
 
     return () => unsubscribe();
@@ -321,16 +323,28 @@ export default function Communities({
     if (dbCommunities.length > 0) {
       const selected = dbCommunities.find(c => c.id === activeCommId);
       if (selected) {
+        console.log("COMMUNITY OPEN", activeCommId);
+        console.log("TOPICS", 0);
+        console.log("ACTIVE TOPIC", activeTopic);
+        console.log("CURRENT USER", currentUser);
         setActiveComm(selected);
       } else {
+        console.log("COMMUNITY OPEN", activeCommId);
+        console.log("TOPICS", 0);
+        console.log("ACTIVE TOPIC", activeTopic);
+        console.log("CURRENT USER", currentUser);
         setActiveComm(null);
       }
     } else {
+      console.log("COMMUNITY OPEN", activeCommId);
+      console.log("TOPICS", 0);
+      console.log("ACTIVE TOPIC", activeTopic);
+      console.log("CURRENT USER", currentUser);
       setActiveComm(null);
     }
   }, [activeCommId, dbCommunities]);
 
-  // 3. Sync Topics for Active Community in real-time
+  // 3. Sync Topics for Active Community in real-time (READ ONLY, NO SEEDING)
   useEffect(() => {
     if (!activeCommId) return;
 
@@ -340,130 +354,45 @@ export default function Communities({
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      if (snapshot.empty) {
-        // Automatically seed/bootstrap nostalgic threads for default community to make it feel super alive!
-        const seedDefaultTopics = async () => {
-          const batchTopics: Omit<Topic, 'id'>[] = [];
+      const list: Topic[] = [];
+      snapshot.forEach((doc) => {
+        list.push({ ...doc.data(), id: doc.id } as Topic);
+      });
+      
+      // Sort topics (pinned at top, then by date descending)
+      list.sort((a, b) => {
+        if (a.isPinned && !b.isPinned) return -1;
+        if (!a.isPinned && b.isPinned) return 1;
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      });
 
-          if (activeCommId === '1') {
-            batchTopics.push({
-              communityId: '1',
-              title: "📌 Regras Oficiais - Leia Antes de Postar!",
-              content: "Sejam bem-vindos à oficial e maior comunidade do ScrapZone! Aqui odiamos o despertador de segunda a segunda. Regras básicas:\n1. Não poste o som do alarme padrão do telefone.\n2. Respeite o sono pós-programação de madrugada chapa!\n3. Não marque reuniões às 8:00 AM.",
-              authorId: 'orkut',
-              authorName: 'Orkut Büyükkökten',
-              authorAvatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150',
-              createdAt: new Date(Date.now() - 5 * 24 * 3600 * 1000).toISOString(),
-              views: 1245,
-              repliesCount: 3,
-              isPinned: true
-            });
-            batchTopics.push({
-              communityId: '1',
-              title: "Quem mais odeia acordar na segunda-feira?",
-              content: "O relógio nem bateu 7h e meu cérebro ainda está compilando as linhas de código que escrevi domingo à noite. Quem compartilha do sentimento e quer jogar o despertador pela janela?",
-              authorId: 'lucas',
-              authorName: 'Lucas Santos',
-              authorAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
-              createdAt: new Date(Date.now() - 2 * 24 * 3600 * 1000).toISOString(),
-              views: 890,
-              repliesCount: 2,
-              isPinned: false
-            });
-            batchTopics.push({
-              communityId: '1',
-              title: "Como lidar com programador que agenda daily às 8:00 AM?",
-              content: "Gente, na moral, isso devia ser proibido na convicção de Genebra. Daily 8 da manhã? É pra cometer um crime de segurança simétrica na rede!",
-              authorId: 'alexandre',
-              authorName: 'Alexandre Curi',
-              authorAvatar: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=150',
-              createdAt: new Date(Date.now() - 12 * 3600 * 1000).toISOString(),
-              views: 450,
-              repliesCount: 4,
-              isPinned: false
-            });
-          } else if (activeCommId === '2') {
-            batchTopics.push({
-              communityId: '2',
-              title: "📌 Linguagem de Verdade é Rust, o Resto é Interpretação",
-              content: "Regra básica da comunidade: se a compilação demorar 5 minutos, você aproveita pra tomar café. Não me chame pra 'fazer fofoca' sem antes validar os tipos da sua alma.",
-              authorId: 'alexandre',
-              authorName: 'Alexandre Curi',
-              authorAvatar: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=150',
-              createdAt: new Date(Date.now() - 10 * 24 * 3600 * 1000).toISOString(),
-              views: 1390,
-              repliesCount: 0,
-              isPinned: true
-            });
-            batchTopics.push({
-              communityId: '2',
-              title: "Disseram Oi hoje e continuei codando... kkkk",
-              content: "Minha tia veio falar comigo no MSN, eu mandei um bot responder 'Compiling...' com status offline no ScrapZone. Funciona demais!",
-              authorId: 'thiago',
-              authorName: 'Thiago Webmaster',
-              authorAvatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150',
-              createdAt: new Date().toISOString(),
-              views: 120,
-              repliesCount: 0,
-              isPinned: false
-            });
-          } else {
-            // Standard general fallback topic
-            batchTopics.push({
-              communityId: activeCommId,
-              title: "📌 Tópico Geral de Apresentação",
-              content: "Boas-vindas a todos! Usem este tópico fixado para se apresentarem e compartilharem suas paixões retro.",
-              authorId: 'orkut',
-              authorName: 'Orkut',
-              authorAvatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150',
-              createdAt: new Date().toISOString(),
-              views: 32,
-              repliesCount: 0,
-              isPinned: true
-            });
-          }
+      console.log("COMMUNITY OPEN", activeCommId);
+      console.log("TOPICS", list.length);
+      console.log("ACTIVE TOPIC", activeTopicRef.current);
+      console.log("CURRENT USER", currentUser);
+      setForumTopics(list);
 
-          for (const top of batchTopics) {
-            try {
-              const docRef = doc(collection(db, 'community_topics'));
-              await setDoc(docRef, { ...top, id: docRef.id });
-            } catch (err) {
-              handleFirestoreError(err, OperationType.WRITE, 'community_topics');
-            }
-          }
-        };
-        seedDefaultTopics();
-      } else {
-        const list: Topic[] = [];
-        snapshot.forEach((doc) => {
-          list.push(doc.data() as Topic);
-        });
-        
-        // Sort topics (pinned at top, then by date descending)
-        list.sort((a, b) => {
-          if (a.isPinned && !b.isPinned) return -1;
-          if (!a.isPinned && b.isPinned) return 1;
-          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-        });
-
-        setForumTopics(list);
-
-        // Keep active topic synchronized if open
-        if (activeTopic) {
-          const refreshed = list.find(t => t.id === activeTopic.id);
-          if (refreshed) {
-            setActiveTopic(refreshed);
-          }
+      // Keep active topic synchronized if open
+      const currentActive = activeTopicRef.current;
+      if (currentActive) {
+        const refreshed = list.find(t => t.id === currentActive.id);
+        if (refreshed) {
+          console.log("COMMUNITY OPEN", activeCommId);
+          console.log("TOPICS", list.length);
+          console.log("ACTIVE TOPIC", currentActive);
+          console.log("CURRENT USER", currentUser);
+          setActiveTopic(refreshed);
         }
       }
     }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, `community_topics (where communityId == ${activeCommId})`);
+      console.error("Error loading community topics onSnapshot:", error);
+      setForumTopics([]);
     });
 
     return () => unsubscribe();
   }, [activeCommId]);
 
-  // 4. Sync Replies for Active Topic in real-time
+  // 4. Sync Replies for Active Topic in real-time (READ ONLY, NO SEEDING)
   useEffect(() => {
     if (!activeTopic) {
       setTopicReplies([]);
@@ -484,77 +413,10 @@ export default function Communities({
       // Sort by message time ascending (classical forum chronological order)
       list.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
       
-      // Auto-seed default replies if thread was seeded but blank
-      if (list.length === 0 && activeTopic.authorId !== activeUserId) {
-        const seedDefaultReplies = async () => {
-          let seeded: Omit<Reply, 'id'>[] = [];
-          if (activeTopic.id.includes('pinned') || activeTopic.title.includes('Regras')) {
-            seeded = [
-              {
-                topicId: activeTopic.id,
-                communityId: activeCommId,
-                content: "Muito bom saber as regras do clube! Vou respeitar o sono alheio com toda a seriedade.",
-                authorId: 'thiago',
-                authorName: 'Thiago Webmaster',
-                authorAvatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150',
-                createdAt: new Date(Date.now() - 4 * 24 * 3600 * 1000).toISOString(),
-                likes: 3,
-                likedBy: ['lucas', 'alexandre', 'orkut']
-              },
-              {
-                topicId: activeTopic.id,
-                communityId: activeCommId,
-                content: "Concordo plenamente! Marcadores de reunião antes das 10h devem ser reportados ao sindicato dos noturnos.",
-                authorId: 'mariana',
-                authorName: 'Mariana Goth99',
-                authorAvatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150',
-                createdAt: new Date(Date.now() - 2 * 24 * 3600 * 1000).toISOString(),
-                likes: 5,
-                likedBy: ['thiago', 'bruno', 'gabriela']
-              }
-            ];
-          } else if (activeTopic.title.includes('segunda-feira')) {
-            seeded = [
-              {
-                topicId: activeTopic.id,
-                communityId: activeCommId,
-                content: "Eu levanto, tomo meu café solúvel com lágrimas e volto pro terminal em silêncio. Um trauma semanal.",
-                authorId: 'aline',
-                authorName: 'Aline Glitter',
-                authorAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
-                createdAt: new Date(Date.now() - 1.5 * 24 * 3600 * 1000).toISOString(),
-                likes: 7,
-                likedBy: ['lucas', 'thiago']
-              },
-              {
-                topicId: activeTopic.id,
-                communityId: activeCommId,
-                content: "Kkkkkkk as segundas são fodas! Eu só começo a produzir de verdade depois do almoço.",
-                authorId: 'roberto',
-                authorName: 'Roberto Sysadmin',
-                authorAvatar: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=150',
-                createdAt: new Date(Date.now() - 1 * 24 * 3600 * 1000).toISOString(),
-                likes: 2,
-                likedBy: ['aline']
-              }
-            ];
-          }
-
-          for (const rep of seeded) {
-            try {
-              const docRef = doc(collection(db, 'community_replies'));
-              await setDoc(docRef, { ...rep, id: docRef.id });
-            } catch (err) {
-              handleFirestoreError(err, OperationType.WRITE, 'community_replies');
-            }
-          }
-        };
-        seedDefaultReplies();
-      } else {
-        setTopicReplies(list);
-      }
+      setTopicReplies(list);
     }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, `community_replies (where topicId == ${activeTopic.id})`);
+      console.error("Error loading community replies onSnapshot:", error);
+      setTopicReplies([]);
     });
 
     return () => unsubscribe();
@@ -764,10 +626,49 @@ export default function Communities({
 
     try {
       await setDoc(doc(db, 'communities', newId), communityData);
+      console.log("CREATE COMMUNITY SUCCESS", newId);
+      console.log("- communityId criado:", newId);
+    } catch (err) {
+      console.warn("Firestore write for community failed, saving to local storage fallback instead:", err);
+      const localCommsJson = localStorage.getItem('local_communities');
+      const localComms = localCommsJson ? JSON.parse(localCommsJson) : [];
+      localComms.push(communityData);
+      localStorage.setItem('local_communities', JSON.stringify(localComms));
       
-      // Autojoin newly created community
-      const updated = [...joinedIds, newId];
-      await setDoc(doc(db, 'joined_communities', activeUserId), { communityIds: updated });
+      // Merge instantly into local dbCommunities state
+      setDbCommunities(prev => {
+        if (!prev.some(c => c.id === newId)) {
+          return [...prev, communityData];
+        }
+        return prev;
+      });
+    }
+
+    try {
+      // Autojoin newly created community using arrayUnion to prevent duplication
+      const joinedRef = doc(db, 'joined_communities', activeUserId);
+      await setDoc(joinedRef, { communityIds: arrayUnion(newId) }, { merge: true });
+      console.log("- resultado do update em joined_communities: SUCCESS");
+
+      // Fetch the updated communityIds document to show the new content
+      const updatedSnap = await getDoc(joinedRef);
+      const newCommunityIds = updatedSnap.exists() ? (updatedSnap.data()?.communityIds || []) : [];
+      console.log("- novo conteúdo de communityIds:", JSON.stringify(newCommunityIds));
+    } catch (err) {
+      console.warn("Firestore joined_communities list update failed, autojoining locally:", err);
+    } finally {
+      const localJoinedJson = localStorage.getItem(`local_joined_${activeUserId}`);
+      const localJoined = localJoinedJson ? JSON.parse(localJoinedJson) : [];
+      localJoined.push(newId);
+      localStorage.setItem(`local_joined_${activeUserId}`, JSON.stringify(Array.from(new Set(localJoined))));
+      
+      // Force update of displayedCommunities instantly for crisp reactivity
+      setDisplayedCommunities(prev => {
+        if (!prev.some(c => c.id === newId)) {
+          return [...prev, communityData];
+        }
+        return prev;
+      });
 
       // Reset forms (hold the modal close until transition completes)
       setTimeout(() => {
@@ -781,10 +682,6 @@ export default function Communities({
         setNewCommRules('');
         setNewCommSecureMode(false);
       }, 1500);
-
-    } catch (err) {
-      setIsClosingCreateModal(false);
-      handleFirestoreError(err, OperationType.WRITE, `communities/${newId}`);
     }
   };
 

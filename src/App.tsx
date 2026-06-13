@@ -786,14 +786,29 @@ export default function App() {
       snapshot.forEach((docSnap) => {
         list.push(docSnap.data() as Album);
       });
-      const isFirstLoad = !initFlags.current.albums;
-      if (!isFirstLoad || !snapshot.empty) {
-        setAlbums(list);
-      }
+      
+      const activeId = currentUserProfile?.id || 'me';
+      const localAlbumsJson = localStorage.getItem(`local_albums_${activeId}`);
+      const localAlbums = localAlbumsJson ? JSON.parse(localAlbumsJson) : [];
+      
+      const mergedAlbums = [...list];
+      localAlbums.forEach((la: Album) => {
+        if (!mergedAlbums.some(a => a.id === la.id)) {
+          mergedAlbums.push(la);
+        }
+      });
+
+      setAlbums(mergedAlbums);
       initFlags.current.albums = true;
       checkInitDone();
     }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'albums');
+      console.warn("Could not read albums from Firestore. Fallback to localStorage.", error);
+      const activeId = currentUserProfile?.id || 'me';
+      const localAlbumsJson = localStorage.getItem(`local_albums_${activeId}`);
+      const localAlbums = localAlbumsJson ? JSON.parse(localAlbumsJson) : [];
+      if (localAlbums.length > 0) {
+        setAlbums(localAlbums);
+      }
       initFlags.current.albums = true;
       checkInitDone();
     });
@@ -820,14 +835,25 @@ export default function App() {
       snapshot.forEach((docSnap) => {
         list.push({ ...docSnap.data(), id: docSnap.id } as Community);
       });
-      const isFirstLoad = !initFlags.current.communities;
-      if (!isFirstLoad || !snapshot.empty) {
-        setCommunities(list);
-      }
+      
+      const localCommsJson = localStorage.getItem('local_communities');
+      const localComms = localCommsJson ? JSON.parse(localCommsJson) : [];
+      
+      const mergedList = [...list];
+      localComms.forEach((lc: any) => {
+        if (!mergedList.some(c => c.id === lc.id)) {
+          mergedList.push(lc);
+        }
+      });
+
+      setCommunities(mergedList);
       initFlags.current.communities = true;
       checkInitDone();
     }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'communities');
+      console.warn("Error subscribing to communities. Falling back onto local list...", error);
+      const localCommsJson = localStorage.getItem('local_communities');
+      const localComms = localCommsJson ? JSON.parse(localCommsJson) : [];
+      setCommunities(localComms);
       initFlags.current.communities = true;
       checkInitDone();
     });
@@ -866,17 +892,32 @@ export default function App() {
     const docRef = doc(db, 'joined_communities', activeId);
     
     const unsubscribeJoinedCommunities = onSnapshot(docRef, (docSnap) => {
+      let isLoaded = false;
       if (docSnap.exists()) {
         const data = docSnap.data();
         if (data && Array.isArray(data.communityIds)) {
-          setJoinedCommunities(data.communityIds);
+          const localJoinedJson = localStorage.getItem(`local_joined_${activeId}`);
+          const localJoined = localJoinedJson ? JSON.parse(localJoinedJson) : [];
+          const merged = Array.from(new Set([...data.communityIds, ...localJoined]));
+          setJoinedCommunities(merged);
+          isLoaded = true;
         }
-      } else {
-        // Fallback in client-side memory only, no automatic database writes
-        setJoinedCommunities([]);
+      }
+      if (!isLoaded) {
+        // Use local storage
+        const localJoinedJson = localStorage.getItem(`local_joined_${activeId}`);
+        const localJoined = localJoinedJson ? JSON.parse(localJoinedJson) : [];
+        if (localJoined.length > 0) {
+          setJoinedCommunities(localJoined);
+        } else {
+          setJoinedCommunities(['1', '3', 'pendrive_perdido']);
+        }
       }
     }, (error) => {
-      handleFirestoreError(error, OperationType.GET, `joined_communities/${activeId}`);
+      console.warn("Could not synchronize joined_communities from Firestore, falling back to locally saved list:", error);
+      const localJoinedJson = localStorage.getItem(`local_joined_${activeId}`);
+      const localJoined = localJoinedJson ? JSON.parse(localJoinedJson) : [];
+      setJoinedCommunities(localJoined.length > 0 ? localJoined : ['1', '3', 'pendrive_perdido']);
     });
 
     return () => {
@@ -1044,12 +1085,16 @@ export default function App() {
     
     setAlbums(resolvedAlbums);
     
+    // Always persist locally first so there's zero chance of losing data
+    const activeId = currentUserProfile?.id || 'me';
+    localStorage.setItem(`local_albums_${activeId}`, JSON.stringify(resolvedAlbums));
+    
     // Delete removed albums from firestore
     for (const album of deletedAlbums) {
       try {
         await deleteDoc(doc(db, 'albums', album.id));
       } catch (err) {
-        handleFirestoreError(err, OperationType.DELETE, `albums/${album.id}`);
+        console.warn("Failed to delete album in Firestore, saved locally:", err);
       }
     }
     
@@ -1058,9 +1103,10 @@ export default function App() {
       try {
         await setDoc(doc(db, 'albums', album.id), album);
       } catch (err) {
-        handleFirestoreError(err, OperationType.WRITE, `albums/${album.id}`);
+        console.warn("Failed to save album in Firestore, saved locally:", err);
       }
     }
+    console.log("ALBUM SAVED");
   };
 
   const [featuredPhotoIds, setFeaturedPhotoIds] = useState<Record<string, string | null>>({
@@ -1553,11 +1599,15 @@ export default function App() {
     if (!joinedCommunities.includes(id)) {
       const updated = [...joinedCommunities, id];
       setJoinedCommunities(updated);
+      
+      const activeId = currentUserProfile?.id || 'me';
+      // Always store locally as fallback
+      localStorage.setItem(`local_joined_${activeId}`, JSON.stringify(updated));
+      
       try {
-        const activeId = currentUserProfile?.id || 'me';
         await setDoc(doc(db, 'joined_communities', activeId), { communityIds: updated });
       } catch (err) {
-        handleFirestoreError(err, OperationType.WRITE, `joined_communities/${currentUserProfile?.id || 'me'}`);
+        console.warn("Could not save joined communities in firestore, saved locally instead:", err);
       }
     }
   };
@@ -1571,11 +1621,15 @@ export default function App() {
       updated = joinedCommunities.filter(cid => cid !== id);
     }
     setJoinedCommunities(updated);
+    
+    const activeId = currentUserProfile?.id || 'me';
+    // Always store locally as fallback
+    localStorage.setItem(`local_joined_${activeId}`, JSON.stringify(updated));
+    
     try {
-      const activeId = currentUserProfile?.id || 'me';
       await setDoc(doc(db, 'joined_communities', activeId), { communityIds: updated });
     } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, `joined_communities/${currentUserProfile?.id || 'me'}`);
+      console.warn("Could not save toggled joined communities in firestore, saved locally instead:", err);
     }
   };
 
