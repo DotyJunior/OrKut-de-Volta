@@ -399,27 +399,20 @@ export default function PhotoAlbums({
 
       const storageRef = ref(storage, filePath);
       const uploadResult = await uploadBytes(storageRef, file);
-      console.log("UPLOAD SUCCESS", uploadResult);
+      console.log("UPLOAD SUCCESS PATH:", filePath);
+      console.log("UPLOAD SUCCESS RESULT:", JSON.stringify({
+        metadata: uploadResult.metadata,
+        ref: uploadResult.ref.fullPath
+      }));
       
       const downloadUrl = await getDownloadURL(storageRef);
-      console.log("DOWNLOAD URL", downloadUrl);
+      console.log("DOWNLOAD URL OBTAINED:", downloadUrl);
 
       setNewPhotoUrl(downloadUrl);
     } catch (err) {
-      console.warn('Error uploading file to Firebase Storage, falling back to local FileReader:', err);
-      // Perfect fallback: read file into Base64 data URL so mock or quota exhausted environments work 100% cleanly
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const base64Url = event.target?.result as string;
-        if (base64Url) {
-          setNewPhotoUrl(base64Url);
-          console.log("Local reader fallback success.");
-        }
-      };
-      reader.onerror = () => {
-        alert('Erro ao processar imagem localmente.');
-      };
-      reader.readAsDataURL(file);
+      console.error('Error uploading file to Firebase Storage:', err);
+      alert('Falha ao enviar arquivo para o Storage! Verifique seu bucket ou conexão.');
+      throw err;
     } finally {
       setIsUploadingLocalPhoto(false);
     }

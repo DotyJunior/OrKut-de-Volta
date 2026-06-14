@@ -1079,6 +1079,17 @@ export default function App() {
   const handleUpdateAlbums = async (newAlbums: Album[] | ((prev: Album[]) => Album[])) => {
     const resolvedAlbums = typeof newAlbums === 'function' ? newAlbums(albums) : newAlbums;
     
+    // Validate sizes of all remaining/updated albums before ANY write occurs to Firestore or local state
+    for (const album of resolvedAlbums) {
+      const payloadSize = new Blob([JSON.stringify(album)]).size;
+      console.log("[ALBUM SIZE]", album.id, payloadSize);
+      if (payloadSize > 900000) {
+        alert("Álbum excede tamanho seguro de armazenamento.");
+        console.error("ABORTING SAVE: Album size too large:", album.id, payloadSize);
+        return; // ABORT COMPLETELY!
+      }
+    }
+
     // Find albums that were deleted
     const newAlbumIds = new Set(resolvedAlbums.map(a => a.id));
     const deletedAlbums = albums.filter(a => !newAlbumIds.has(a.id));
@@ -1103,7 +1114,8 @@ export default function App() {
       try {
         await setDoc(doc(db, 'albums', album.id), album);
       } catch (err) {
-        console.warn("Failed to save album in Firestore, saved locally:", err);
+        console.error("Failed to save album in Firestore:", err);
+        throw err; // DO NOT mask error!
       }
     }
     console.log("ALBUM SAVED");
