@@ -143,16 +143,36 @@ export const playShutterSound = () => {
   }
 };
 
+let activeProcessingAudio: HTMLAudioElement | null = null;
+
 // Play custom dynamic mp3 processing audio asset
 export const playProcessingSound = () => {
   try {
-    const audio = new Audio('/assets/.aistudio/photo_processing.mp3');
+    if (activeProcessingAudio) {
+      activeProcessingAudio.pause();
+      activeProcessingAudio.currentTime = 0;
+    }
+    const audio = new Audio('/assets/.aistudio/Processing_foto.mp3');
     audio.volume = 0.65;
+    activeProcessingAudio = audio;
     audio.play().catch(e => {
       console.log("Audio playback deferred or blocked by browser restriction:", e);
     });
   } catch (err) {
     console.log("Failed to play custom processing audio:", err);
+  }
+};
+
+// Stop custom dynamic mp3 processing audio asset
+export const stopProcessingSound = () => {
+  try {
+    if (activeProcessingAudio) {
+      activeProcessingAudio.pause();
+      activeProcessingAudio.currentTime = 0;
+      activeProcessingAudio = null;
+    }
+  } catch (err) {
+    console.log("Failed to stop processing audio:", err);
   }
 };
 
@@ -247,6 +267,12 @@ export default function PhotoAlbums({
 
   // Handle auto-triggering uploads / custom photo panel actions
   useEffect(() => {
+    return () => {
+      stopProcessingSound();
+    };
+  }, []);
+
+  useEffect(() => {
     if (initialOpenUpload) {
       if (profileAlbums.length > 0) {
         setActiveAlbumId(profileAlbums[0].id);
@@ -278,19 +304,23 @@ export default function PhotoAlbums({
     setLoadingText(textOverride || loaderPhrases[Math.floor(Math.random() * loaderPhrases.length)]);
     playProcessingSound();
 
+    const totalDuration = 3500; // 3.5 seconds precisely
+    const startTime = Date.now();
+
     const interval = setInterval(() => {
-      setLoadingProgress(prev => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          setTimeout(() => {
-            setIsLoading(false);
-            callback();
-          }, 400);
-          return 100;
-        }
-        return prev + Math.floor(Math.random() * 20) + 10;
-      });
-    }, 150);
+      const elapsed = Date.now() - startTime;
+      const progress = Math.min(100, Math.floor((elapsed / totalDuration) * 100));
+      setLoadingProgress(progress);
+
+      if (elapsed >= totalDuration) {
+        clearInterval(interval);
+        stopProcessingSound();
+        setTimeout(() => {
+          setIsLoading(false);
+          callback();
+        }, 100);
+      }
+    }, 50);
   };
 
   const handleOpenAlbum = (id: string) => {
