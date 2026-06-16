@@ -446,6 +446,12 @@ export default function App() {
 
   // Authentication & Session States
   const [currentUserProfile, setCurrentUserProfile] = useState<Profile | null>(null);
+  const currentUserProfileRef = useRef<Profile | null>(null);
+
+  useEffect(() => {
+    currentUserProfileRef.current = currentUserProfile;
+  }, [currentUserProfile]);
+
   const [isAuthLoading, setIsAuthLoading] = useState<boolean>(true);
   const [isAppReady, setIsAppReady] = useState<boolean>(false);
 
@@ -591,6 +597,44 @@ export default function App() {
           me: currentUserProfile
         };
       });
+
+      // Synchronize albums under the active profile's localStorage key
+      setAlbums((prevAlbums) => {
+        const activeId = currentUserProfile.id;
+        const localAlbumsJson = localStorage.getItem(`local_albums_${activeId}`);
+        const localAlbums = localAlbumsJson ? JSON.parse(localAlbumsJson) : [];
+        
+        const merged = [...prevAlbums];
+        localAlbums.forEach((la: Album) => {
+          const dbIndex = merged.findIndex(a => a.id === la.id);
+          if (dbIndex === -1) {
+            merged.push(la);
+          } else {
+            // Merge photos of the same album to avoid losing local-only additions
+            const dbAlbum = merged[dbIndex];
+            const mergedPhotos = [...dbAlbum.photos];
+            la.photos.forEach((lp: any) => {
+              if (!mergedPhotos.some(p => p.id === lp.id)) {
+                mergedPhotos.push(lp);
+              }
+            });
+            merged[dbIndex] = {
+              ...dbAlbum,
+              photos: mergedPhotos
+            };
+          }
+        });
+        return merged;
+      });
+    } else {
+      // Revert/load general/demo profile albums
+      const localAlbumsJson = localStorage.getItem('local_albums_me');
+      const localAlbums = localAlbumsJson ? JSON.parse(localAlbumsJson) : [];
+      if (localAlbums.length > 0) {
+        setAlbums(localAlbums);
+      } else {
+        setAlbums(getInitialAlbums());
+      }
     }
   }, [currentUserProfile]);
 
@@ -787,14 +831,28 @@ export default function App() {
         list.push(docSnap.data() as Album);
       });
       
-      const activeId = currentUserProfile?.id || 'me';
+      const activeId = currentUserProfileRef.current?.id || 'me';
       const localAlbumsJson = localStorage.getItem(`local_albums_${activeId}`);
       const localAlbums = localAlbumsJson ? JSON.parse(localAlbumsJson) : [];
       
       const mergedAlbums = [...list];
       localAlbums.forEach((la: Album) => {
-        if (!mergedAlbums.some(a => a.id === la.id)) {
+        const dbIndex = mergedAlbums.findIndex(a => a.id === la.id);
+        if (dbIndex === -1) {
           mergedAlbums.push(la);
+        } else {
+          // Merge photos of the same album to avoid losing local-only additions
+          const dbAlbum = mergedAlbums[dbIndex];
+          const mergedPhotos = [...dbAlbum.photos];
+          la.photos.forEach((lp: any) => {
+            if (!mergedPhotos.some(p => p.id === lp.id)) {
+              mergedPhotos.push(lp);
+            }
+          });
+          mergedAlbums[dbIndex] = {
+            ...dbAlbum,
+            photos: mergedPhotos
+          };
         }
       });
 
@@ -803,7 +861,7 @@ export default function App() {
       checkInitDone();
     }, (error) => {
       console.warn("Could not read albums from Firestore. Fallback to localStorage.", error);
-      const activeId = currentUserProfile?.id || 'me';
+      const activeId = currentUserProfileRef.current?.id || 'me';
       const localAlbumsJson = localStorage.getItem(`local_albums_${activeId}`);
       const localAlbums = localAlbumsJson ? JSON.parse(localAlbumsJson) : [];
       if (localAlbums.length > 0) {

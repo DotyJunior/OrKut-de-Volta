@@ -48,6 +48,9 @@ async function startServer() {
 
   app.use(express.json());
 
+  // Serve the assets directory, enabling dotfiles like '.aistudio' to be requested
+  app.use("/assets", express.static(path.join(process.cwd(), "assets"), { dotfiles: "allow" }));
+
   // API Route for Orkut Character Simulated Replies (using Gemini 2.5 Flash)
   app.post("/api/reply", async (req, res) => {
     const { characterId, userName, userProfile, text, encrypt } = req.body;

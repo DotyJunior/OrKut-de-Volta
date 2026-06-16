@@ -28,7 +28,8 @@ import {
 } from 'lucide-react';
 import { Album, Photo, PhotoComment } from '../types';
 import SocialActions from './SocialActions';
-import { storage, ref, uploadBytes, getDownloadURL } from '../firebase';
+import { auth } from '../firebase';
+import { supabaseStorageService } from '../supabase';
 
 export const getPhotoEffectClass = (effect?: string) => {
   if (!effect) return '';
@@ -142,6 +143,19 @@ export const playShutterSound = () => {
   }
 };
 
+// Play custom dynamic mp3 processing audio asset
+export const playProcessingSound = () => {
+  try {
+    const audio = new Audio('/assets/.aistudio/photo_processing.mp3');
+    audio.volume = 0.65;
+    audio.play().catch(e => {
+      console.log("Audio playback deferred or blocked by browser restriction:", e);
+    });
+  } catch (err) {
+    console.log("Failed to play custom processing audio:", err);
+  }
+};
+
 export default function PhotoAlbums({
   profileId,
   profileName,
@@ -207,6 +221,7 @@ export default function PhotoAlbums({
   const [showCommentsSection, setShowCommentsSection] = useState(false);
   const [aspectRatio, setAspectRatio] = useState<'1:1' | '4:5'>('1:1');
   const [albumPage, setAlbumPage] = useState<number>(0);
+  const [photoIdToDelete, setPhotoIdToDelete] = useState<string | null>(null);
 
   // Filter profiles albums loaded (only of current viewed profile!)
   const profileAlbums = albums.filter(a => a.profileId === profileId);
@@ -261,7 +276,7 @@ export default function PhotoAlbums({
     setIsLoading(true);
     setLoadingProgress(0);
     setLoadingText(textOverride || loaderPhrases[Math.floor(Math.random() * loaderPhrases.length)]);
-    playShutterSound();
+    playProcessingSound();
 
     const interval = setInterval(() => {
       setLoadingProgress(prev => {
@@ -310,6 +325,11 @@ export default function PhotoAlbums({
       setViewMode('album');
       setSelectedPhotoId(null);
     });
+  };
+
+  const handleClosePhotoDirect = () => {
+    setViewMode('album');
+    setSelectedPhotoId(null);
   };
 
   // Create Album
@@ -379,8 +399,9 @@ export default function PhotoAlbums({
     }, 'Processando cores de filme analógico...');
   };
 
-  // Local File Upload from device (JPG, PNG, WEBP, GIF) uploaded straight to Firebase Storage
+  // Local File Upload from device (JPG, PNG, WEBP, GIF) uploaded straight to Supabase Storage
   const handleLocalFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    console.log("[UPLOAD STEP 1] Input recebeu arquivo:", e.target.files?.length ? e.target.files[0].name : "Nenhum arquivo");
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -390,28 +411,24 @@ export default function PhotoAlbums({
       return;
     }
 
+    console.log("[UPLOAD STEP 2] Arquivo validado:", file.name, "tamanho:", file.size);
     console.log("FILE SIZE", file.size);
     setIsUploadingLocalPhoto(true);
     try {
-      const fileExtension = file.name.split('.').pop() || 'jpg';
-      const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${fileExtension}`;
-      const filePath = `albums/${profileId || 'anonymous'}/${fileName}`;
-
-      const storageRef = ref(storage, filePath);
-      const uploadResult = await uploadBytes(storageRef, file);
-      console.log("UPLOAD SUCCESS PATH:", filePath);
-      console.log("UPLOAD SUCCESS RESULT:", JSON.stringify({
-        metadata: uploadResult.metadata,
-        ref: uploadResult.ref.fullPath
-      }));
+      const userId = auth.currentUser?.uid || profileId || 'anonymous';
       
-      const downloadUrl = await getDownloadURL(storageRef);
+      console.log("[UPLOAD STEP 3] Iniciando upload Supabase para usuário:", userId);
+      // Upload directly into Supabase Storage under the 'scrapbook' context
+      const downloadUrl = await supabaseStorageService.uploadImage(file, userId, 'scrapbook');
+      console.log("[UPLOAD STEP 4] Upload concluído de volta no fluxo principal");
+      console.log("[UPLOAD STEP 5] URL retornada:", downloadUrl);
       console.log("DOWNLOAD URL OBTAINED:", downloadUrl);
 
       setNewPhotoUrl(downloadUrl);
-    } catch (err) {
-      console.error('Error uploading file to Firebase Storage:', err);
-      alert('Falha ao enviar arquivo para o Storage! Verifique seu bucket ou conexão.');
+    } catch (err: any) {
+      console.error("[UPLOAD ERROR] Mensagem completa do erro:", err);
+      console.error('Error uploading file to Supabase Storage:', err);
+      alert('Falha ao enviar arquivo para o Supabase Storage! Verifique seu bucket ou conexão.');
       throw err;
     } finally {
       setIsUploadingLocalPhoto(false);
@@ -507,13 +524,17 @@ export default function PhotoAlbums({
   // Delete photo
   const handleDeletePhoto = (photoId: string) => {
     if (!activeAlbumId) return;
-    if (!confirm('Deseja realmente apagar esta foto do álbum chapa?')) return;
+    setPhotoIdToDelete(photoId);
+  };
+
+  const confirmDeletePhoto = () => {
+    if (!activeAlbumId || !photoIdToDelete) return;
 
     const updatedAlbums = albums.map(a => {
       if (a.id === activeAlbumId) {
         return {
           ...a,
-          photos: a.photos.filter(p => p.id !== photoId)
+          photos: a.photos.filter(p => p.id !== photoIdToDelete)
         };
       }
       return a;
@@ -522,6 +543,11 @@ export default function PhotoAlbums({
     onUpdateAlbums(updatedAlbums);
     setViewMode('album');
     setSelectedPhotoId(null);
+    setPhotoIdToDelete(null);
+  };
+
+  const cancelDeletePhoto = () => {
+    setPhotoIdToDelete(null);
   };
 
   // Update photo caption (editar legenda)
@@ -1138,7 +1164,7 @@ export default function PhotoAlbums({
       {viewMode === 'photo' && activeAlbum && activePhoto && (
         <div 
           className="fixed inset-0 bg-neutral-950/90 z-50 flex items-center justify-center p-4 md:p-8 select-none backdrop-blur-md"
-          onClick={() => handleBackToAlbum()}
+          onClick={() => handleClosePhotoDirect()}
         >
           {/* Main card */}
           <div 
@@ -1147,7 +1173,7 @@ export default function PhotoAlbums({
           >
             {/* Close button top-right */}
             <button
-              onClick={() => handleBackToAlbum()}
+              onClick={() => handleClosePhotoDirect()}
               className="absolute -top-10 right-0 text-neutral-400 hover:text-white flex items-center gap-1.5 text-[10px] uppercase font-mono tracking-wider cursor-pointer font-bold transition-all bg-neutral-900/40 p-1 px-3 rounded-full border border-neutral-800/30"
             >
               [ fechar x ]
@@ -1843,6 +1869,59 @@ export default function PhotoAlbums({
               </div>
 
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* -------------------- DYNAMIC POPUP MODAL: DELETE PHOTO CONFIRMATION -------------------- */}
+      {photoIdToDelete && (
+        <div className="fixed inset-0 m-auto bg-black/80 z-[100] flex items-center justify-center p-4 backdrop-blur-xs select-none">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-[340px] w-full overflow-hidden text-center flex flex-col relative border border-neutral-300">
+            {/* Top Right Off-set X button */}
+            <button
+              onClick={cancelDeletePhoto}
+              className="absolute -top-1 -right-6 text-white hover:text-neutral-300 font-sans font-black text-2xl transition-colors cursor-pointer select-none"
+              title="Fechar"
+            >
+              X
+            </button>
+
+            {/* Red Alert Head Header Section */}
+            <div className="bg-[#dc2626] p-5 pt-6 pb-5 mx-3 mt-3 rounded-xl border border-red-700/20 shadow-md">
+              <h2 className="text-white font-sans font-black uppercase text-base leading-snug tracking-wider">
+                TEM CERTEZA QUE DESEJA<br />EXCLUIR ESTA FOTO?
+              </h2>
+            </div>
+
+            {/* Warning SVG Sign Illustration */}
+            <div className="py-2 flex justify-center items-center">
+              <svg className="w-24 h-24 hover:scale-105 transition-transform duration-300 drop-shadow-sm" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M50 15L12 80H88L50 15Z" fill="#FBBF24" stroke="#000000" strokeWidth="6" strokeLinejoin="round" />
+                <rect x="47" y="38" width="6" height="20" rx="3" fill="#000000" />
+                <circle cx="50" cy="68" r="4.5" fill="#000000" />
+              </svg>
+            </div>
+
+            {/* Custom CTA Action Buttons block */}
+            <div className="flex gap-4 px-6 pb-6 pt-2">
+              {/* Left Action: SIM */}
+              <button
+                type="button"
+                onClick={confirmDeletePhoto}
+                className="flex-1 py-2 px-4 bg-[#dc2626] hover:bg-red-700 active:bg-red-800 text-white font-sans font-black text-sm rounded shadow-md border-b-[3px] border-red-800 hover:border-[#b91c1c] hover:scale-[1.01] active:translate-y-[2px] active:border-b-0 transition-all cursor-pointer text-center uppercase tracking-wide"
+              >
+                SIM
+              </button>
+
+              {/* Right Action: CANCELAR */}
+              <button
+                type="button"
+                onClick={cancelDeletePhoto}
+                className="flex-1 py-2 px-4 bg-[#16a34a] hover:bg-green-700 active:bg-green-800 text-white font-sans font-black text-sm rounded shadow-md border-b-[3px] border-green-800 hover:border-[#15803d] hover:scale-[1.01] active:translate-y-[2px] active:border-b-0 transition-all cursor-pointer text-center uppercase tracking-wide"
+              >
+                CANCELAR
+              </button>
+            </div>
           </div>
         </div>
       )}
