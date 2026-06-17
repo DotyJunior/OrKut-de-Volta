@@ -437,6 +437,7 @@ export default function App() {
 
   // Photo Albums Nostalgic state engine
   const [albums, setAlbums] = useState<Album[]>(() => getInitialAlbums());
+  const rawDbAlbumsRef = useRef<Album[]>([]);
   const [isVisitorMode, setIsVisitorMode] = useState<boolean>(false);
   const [autoOpenUpload, setAutoOpenUpload] = useState<boolean>(false);
   const [sharedMemories, setSharedMemories] = useState<SharedMemory[]>(() => DEFAULT_SHARED_MEMORIES);
@@ -599,33 +600,32 @@ export default function App() {
       });
 
       // Synchronize albums under the active profile's localStorage key
-      setAlbums((prevAlbums) => {
-        const activeId = currentUserProfile.id;
-        const localAlbumsJson = localStorage.getItem(`local_albums_${activeId}`);
-        const localAlbums = localAlbumsJson ? JSON.parse(localAlbumsJson) : [];
-        
-        const merged = [...prevAlbums];
-        localAlbums.forEach((la: Album) => {
-          const dbIndex = merged.findIndex(a => a.id === la.id);
-          if (dbIndex === -1) {
-            merged.push(la);
-          } else {
-            // Merge photos of the same album to avoid losing local-only additions
-            const dbAlbum = merged[dbIndex];
-            const mergedPhotos = [...dbAlbum.photos];
-            la.photos.forEach((lp: any) => {
-              if (!mergedPhotos.some(p => p.id === lp.id)) {
-                mergedPhotos.push(lp);
-              }
-            });
-            merged[dbIndex] = {
-              ...dbAlbum,
-              photos: mergedPhotos
-            };
-          }
-        });
-        return merged;
+      const activeId = currentUserProfile.id;
+      const localAlbumsJson = localStorage.getItem(`local_albums_${activeId}`);
+      const localAlbums = localAlbumsJson ? JSON.parse(localAlbumsJson) : [];
+      
+      const baseAlbums = rawDbAlbumsRef.current.length > 0 ? rawDbAlbumsRef.current : getInitialAlbums();
+      const merged = [...baseAlbums];
+      localAlbums.forEach((la: Album) => {
+        const dbIndex = merged.findIndex(a => a.id === la.id);
+        if (dbIndex === -1) {
+          merged.push(la);
+        } else {
+          // Merge photos of the same album to avoid losing local-only additions
+          const dbAlbum = merged[dbIndex];
+          const mergedPhotos = [...dbAlbum.photos];
+          la.photos.forEach((lp: any) => {
+            if (!mergedPhotos.some(p => p.id === lp.id)) {
+              mergedPhotos.push(lp);
+            }
+          });
+          merged[dbIndex] = {
+            ...dbAlbum,
+            photos: mergedPhotos
+          };
+        }
       });
+      setAlbums(merged);
     } else {
       // Revert/load general/demo profile albums
       const localAlbumsJson = localStorage.getItem('local_albums_me');
@@ -830,6 +830,8 @@ export default function App() {
       snapshot.forEach((docSnap) => {
         list.push(docSnap.data() as Album);
       });
+      
+      rawDbAlbumsRef.current = list;
       
       const activeId = currentUserProfileRef.current?.id || 'me';
       const localAlbumsJson = localStorage.getItem(`local_albums_${activeId}`);
@@ -1158,22 +1160,26 @@ export default function App() {
     const activeId = currentUserProfile?.id || 'me';
     localStorage.setItem(`local_albums_${activeId}`, JSON.stringify(resolvedAlbums));
     
-    // Delete removed albums from firestore
+    // Delete removed albums from firestore (restricted to owned albums)
     for (const album of deletedAlbums) {
-      try {
-        await deleteDoc(doc(db, 'albums', album.id));
-      } catch (err) {
-        console.warn("Failed to delete album in Firestore, saved locally:", err);
+      if (album.profileId === activeId) {
+        try {
+          await deleteDoc(doc(db, 'albums', album.id));
+        } catch (err) {
+          console.warn("Failed to delete album in Firestore, saved locally:", err);
+        }
       }
     }
     
-    // Save/update remaining albums
+    // Save/update remaining albums (restricted to owned albums)
     for (const album of resolvedAlbums) {
-      try {
-        await setDoc(doc(db, 'albums', album.id), album);
-      } catch (err) {
-        console.error("Failed to save album in Firestore:", err);
-        throw err; // DO NOT mask error!
+      if (album.profileId === activeId) {
+        try {
+          await setDoc(doc(db, 'albums', album.id), album);
+        } catch (err) {
+          console.error("Failed to save album in Firestore:", err);
+          throw err; // DO NOT mask error!
+        }
       }
     }
     console.log("ALBUM SAVED");
