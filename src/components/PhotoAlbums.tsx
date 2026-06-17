@@ -1416,7 +1416,7 @@ export default function PhotoAlbums({
                     onClick={() => setShowCommentsSection(!showCommentsSection)}
                     className="text-[9.5px] font-bold text-[#d946ef] hover:underline flex items-center gap-1 cursor-pointer"
                   >
-                    {showCommentsSection ? '▲ Ocultar Scraps' : `▼ Ver Scraps / Scrapbook (${activePhoto.comments.length})`}
+                    {showCommentsSection ? '▲ Ocultar Comentários' : `▼ Ver Comentários (${activePhoto.comments.length})`}
                   </button>
 
                   {activePhoto.song && (

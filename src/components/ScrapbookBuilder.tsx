@@ -53,6 +53,7 @@ const FONTS = [
 
 const BACKGROUNDS = [
   { id: 'solid', label: 'Sólido' },
+  { id: 'orkut-2004', label: 'Orkut 2004 🔵' },
   { id: 'gradient-purple-pink', label: 'Glitter Pink Gradient' },
   { id: 'gradient-blue-teal', label: 'Digital Ocean' },
   { id: 'gradient-black-purple', label: 'Vampire Midnight Gothic' },
@@ -63,6 +64,7 @@ const BACKGROUNDS = [
 ];
 
 const FRAMES = [
+  { id: 'none', label: 'Sem Moldura 🚫' },
   { id: 'neon-pink', label: 'Neon Glow Rosa' },
   { id: 'neon-cyan', label: 'Neon Glow Ciano' },
   { id: 'golden-glitter', label: 'Moldura de Ouro 24k' },
@@ -115,6 +117,7 @@ export default function ScrapbookBuilder({
 
   // AI Generated Image background URL & Ref
   const [aiImageUrl, setAiImageUrl] = useState<string | null>(null);
+  const [aiRenderingMode, setAiRenderingMode] = useState<'normal' | 'sticker' | 'soft_sticker'>('normal');
   const aiImageRef = useRef<HTMLImageElement | null>(null);
 
   useEffect(() => {
@@ -125,10 +128,195 @@ export default function ScrapbookBuilder({
     const img = new Image();
     img.crossOrigin = "anonymous";
     img.onload = () => {
-      aiImageRef.current = img;
+      try {
+        if (aiRenderingMode === 'normal') {
+          // Normal Mode: Keep background from AI intact
+          aiImageRef.current = img;
+          return;
+        }
+
+        // Processing Canvas for Sticker / Soft Sticker with Flood Fill (BFS) segment algorithm
+        const procCanvas = document.createElement('canvas');
+        procCanvas.width = img.width || 500;
+        procCanvas.height = img.height || 350;
+        const pctx = procCanvas.getContext('2d');
+        if (!pctx) {
+          aiImageRef.current = img;
+          return;
+        }
+        pctx.drawImage(img, 0, 0, procCanvas.width, procCanvas.height);
+        
+        const imgData = pctx.getImageData(0, 0, procCanvas.width, procCanvas.height);
+        const data = imgData.data;
+        const w = procCanvas.width;
+        const h = procCanvas.height;
+
+        const colorDistance = (r1: number, g1: number, b1: number, r2: number, g2: number, b2: number) => {
+          return Math.abs(r1 - r2) + Math.abs(g1 - g2) + Math.abs(b1 - b2);
+        };
+
+        const getPixelColor = (x: number, y: number) => {
+          const idx = (y * w + x) * 4;
+          return { r: data[idx], g: data[idx + 1], b: data[idx + 2], a: data[idx + 3] };
+        };
+
+        // Samples from corners to identify the solid background
+        const sampleColors = [
+          getPixelColor(0, 0),
+          getPixelColor(w - 1, 0),
+          getPixelColor(0, h - 1),
+          getPixelColor(w - 1, h - 1)
+        ].filter(s => s.a > 0);
+
+        // BFS Flood Fill initialization starting specifically from external corners
+        const visited = new Uint8Array(w * h);
+        const isBackground = new Uint8Array(w * h);
+        const q: number[] = [];
+
+        // Seed BFS with the 4 corners to find external backdrop
+        const cornerCoords = [
+          { x: 0, y: 0 },
+          { x: w - 1, y: 0 },
+          { x: 0, y: h - 1 },
+          { x: w - 1, y: h - 1 }
+        ];
+
+        for (const pt of cornerCoords) {
+          const idx = pt.y * w + pt.x;
+          visited[idx] = 1;
+          isBackground[idx] = 1;
+          q.push(idx);
+        }
+
+        // Set maximum local distance tolerance based on user explicit rendering modes
+        // sticker mode (recorte total): 64. soft_sticker (recorte inteligente e preservador): 38
+        const maxTolerance = aiRenderingMode === 'sticker' ? 64 : 38;
+
+        let head = 0;
+        while (head < q.length) {
+          const curr = q[head++];
+          const cx = curr % w;
+          const cy = Math.floor(curr / w);
+
+          const neighbors = [
+            { x: cx + 1, y: cy },
+            { x: cx - 1, y: cy },
+            { x: cx, y: cy + 1 },
+            { x: cx, y: cy - 1 }
+          ];
+
+          for (const nb of neighbors) {
+            if (nb.x >= 0 && nb.x < w && nb.y >= 0 && nb.y < h) {
+              const nIdx = nb.y * w + nb.x;
+              if (visited[nIdx] === 0) {
+                visited[nIdx] = 1;
+                
+                const nr = data[nIdx * 4];
+                const ng = data[nIdx * 4 + 1];
+                const nbVal = data[nIdx * 4 + 2];
+                const naColor = data[nIdx * 4 + 3];
+
+                if (naColor > 0) {
+                  // Compute min likeness / distance to our background corner samples
+                  let dist = 999999;
+                  for (const s of sampleColors) {
+                    const d = colorDistance(nr, ng, nbVal, s.r, s.g, s.b);
+                    if (d < dist) dist = d;
+                  }
+
+                  // White color (#ffffff) is also commonly emitted as background color by image models in cutout modes
+                  const isWhiteColorBg = nr > 220 && ng > 220 && nbVal > 220;
+
+                  if (dist < maxTolerance || (aiRenderingMode === 'sticker' && isWhiteColorBg)) {
+                    isBackground[nIdx] = 1;
+                    q.push(nIdx);
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        // Apply Transparency, alpha gradual controls, and edge feathering transitions based on current modes
+        if (aiRenderingMode === 'sticker') {
+          // Feathering pass: 1-2px edge blending around the main boundaries
+          const tempAlpha = new Uint8Array(w * h);
+          for (let idx = 0; idx < w * h; idx++) {
+            tempAlpha[idx] = data[idx * 4 + 3];
+          }
+
+          for (let y = 1; y < h - 1; y++) {
+            for (let x = 1; x < w - 1; x++) {
+              const idx = y * w + x;
+              if (isBackground[idx] === 0) {
+                let bgCount = 0;
+                // Examine immediate 3x3 neighbor pixels
+                for (let dy = -1; dy <= 1; dy++) {
+                  for (let dx = -1; dx <= 1; dx++) {
+                    const nIdx = (y + dy) * w + (x + dx);
+                    if (isBackground[nIdx] === 1) {
+                      bgCount++;
+                    }
+                  }
+                }
+                if (bgCount > 0) {
+                  // Scale alpha for buttery smooth margins
+                  const factor = (9 - bgCount) / 9;
+                  tempAlpha[idx] = Math.max(0, Math.min(255, Math.floor(data[idx * 4 + 3] * factor)));
+                }
+              }
+            }
+          }
+
+          // Force background index alpha to absolute transparent, and objects to feathered alpha
+          for (let idx = 0; idx < w * h; idx++) {
+            if (isBackground[idx] === 1) {
+              data[idx * 4 + 3] = 0;
+            } else {
+              data[idx * 4 + 3] = tempAlpha[idx];
+            }
+          }
+        } else if (aiRenderingMode === 'soft_sticker') {
+          // Gradual Alpha Cutout: soft non-binary alpha blending based on likeness threshold
+          for (let idx = 0; idx < w * h; idx++) {
+            if (isBackground[idx] === 1) {
+              const r = data[idx * 4];
+              const g = data[idx * 4 + 1];
+              const b = data[idx * 4 + 2];
+              
+              let dist = 999999;
+              for (const s of sampleColors) {
+                const d = colorDistance(r, g, b, s.r, s.g, s.b);
+                if (d < dist) dist = d;
+              }
+
+              if (dist < maxTolerance * 0.4) {
+                // Definitely background: fully transparent
+                data[idx * 4 + 3] = 0;
+              } else {
+                // Transitional soft edges: compute linear gradual alpha
+                const ratio = (dist - maxTolerance * 0.4) / (maxTolerance * 0.6);
+                data[idx * 4 + 3] = Math.max(0, Math.min(255, Math.floor(ratio * 255)));
+              }
+            }
+          }
+        }
+
+        pctx.putImageData(imgData, 0, 0);
+
+        // Convert back to ready-to-render image asset
+        const finalImg = new Image();
+        finalImg.onload = () => {
+          aiImageRef.current = finalImg;
+        };
+        finalImg.src = procCanvas.toDataURL();
+      } catch (e) {
+        console.error("Transparent background extractor failed:", e);
+        aiImageRef.current = img;
+      }
     };
     img.src = aiImageUrl;
-  }, [aiImageUrl]);
+  }, [aiImageUrl, aiRenderingMode]);
 
   // Text options
   const [messageText, setMessageText] = useState('✨ PasSeI pRa dEiXaR uM BeQaDo fOfOxO s2 s2 eXcReVe nO mEu tBm bLj kYlYk ✨');
@@ -374,6 +562,9 @@ export default function ScrapbookBuilder({
       if (data.glitterEnabled !== undefined) setGlitterEnabled(data.glitterEnabled);
       if (data.glowIntensity) setGlowIntensity(data.glowIntensity);
       if (data.messageText) setMessageText(data.messageText);
+      if (data.renderingMode) {
+        setAiRenderingMode(data.renderingMode);
+      }
       if (data.aiImageUrl) {
         setAiImageUrl(data.aiImageUrl);
       } else {
@@ -507,14 +698,13 @@ export default function ScrapbookBuilder({
 
       ctx.save();
 
-      if (aiImageUrl && aiImageRef.current) {
-        // Draw real AI generated graphic/image centered and covering the display
-        ctx.drawImage(aiImageRef.current, 0, 0, width, height);
-        // Vignette overlay to preserve retro neon contrast
-        ctx.fillStyle = 'rgba(12, 6, 26, 0.45)';
-        ctx.fillRect(0, 0, width, height);
-      } else if (backgroundStyle === 'solid') {
+      // Primary Background (determined entirely by frontend theme config)
+      if (backgroundStyle === 'solid') {
         ctx.fillStyle = backgroundColor;
+        ctx.fillRect(0, 0, width, height);
+      } else if (backgroundStyle === 'orkut-2004') {
+        // Orkut 2004 classic flat light blue color chapada
+        ctx.fillStyle = '#cbd3df';
         ctx.fillRect(0, 0, width, height);
       } else if (backgroundStyle === 'gradient-purple-pink') {
         const grad = ctx.createLinearGradient(0, 0, width, height);
@@ -598,6 +788,16 @@ export default function ScrapbookBuilder({
         }
       }
 
+      // Draw transparent AI generated isolated cutout asset / sticker onto current backend final theme
+      if (aiImageUrl && aiImageRef.current) {
+        const aspect = aiImageRef.current.width ? (aiImageRef.current.width / aiImageRef.current.height) : (500 / 350);
+        const stickerHeight = height * 0.72; // elegant 72% height spacing
+        const stickerWidth = stickerHeight * aspect;
+        const sx = (width - stickerWidth) / 2;
+        const sy = (height - stickerHeight) / 2;
+        ctx.drawImage(aiImageRef.current, sx, sy, stickerWidth, stickerHeight);
+      }
+
       // 2. Spawn and update sparkle particles
       if (glitterEnabled && frameCountRef.current % 3 === 0) {
         const cap = Math.min(200, Math.floor(sparkleDensity * 1.5));
@@ -660,13 +860,14 @@ export default function ScrapbookBuilder({
       });
 
       // 3. Draw Gloomy Borders / Neon Frames
-      const borderGlow = glowIntensity === 'extreme' ? 30 + glowBonus : glowIntensity === 'high' ? 18 : 8;
-      ctx.strokeStyle = frameStyle === 'neon-pink' ? '#ec4899' : frameStyle === 'neon-cyan' ? '#06b6d4' : '#fbbf24';
-      ctx.shadowColor = ctx.strokeStyle;
-      ctx.shadowBlur = borderGlow;
-      ctx.lineWidth = 4;
+      if (frameStyle !== 'none' && backgroundStyle !== 'orkut-2004') {
+        const borderGlow = glowIntensity === 'extreme' ? 30 + glowBonus : glowIntensity === 'high' ? 18 : 8;
+        ctx.strokeStyle = frameStyle === 'neon-pink' ? '#ec4899' : frameStyle === 'neon-cyan' ? '#06b6d4' : '#fbbf24';
+        ctx.shadowColor = ctx.strokeStyle;
+        ctx.shadowBlur = borderGlow;
+        ctx.lineWidth = 4;
 
-      if (frameStyle === 'neon-pink' || frameStyle === 'neon-cyan') {
+        if (frameStyle === 'neon-pink' || frameStyle === 'neon-cyan') {
         // Double Neon boxes
         ctx.strokeRect(10, 10, width - 20, height - 20);
         ctx.lineWidth = 1.5;
@@ -720,6 +921,7 @@ export default function ScrapbookBuilder({
         ctx.strokeStyle = '#a855f7';
         ctx.strokeRect(16, 16, width - 32, height - 32);
         ctx.setLineDash([]);
+      }
       }
 
       // Cleanup shadow
@@ -1233,6 +1435,42 @@ export default function ScrapbookBuilder({
                 )}
               </button>
             </div>
+
+            {/* Explicit Mode of Output selection */}
+            <div className="mt-4 pt-3 border-t border-indigo-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[11px] bg-slate-900/40 p-2 rounded">
+              <div className="flex flex-col">
+                <span className="text-indigo-300 font-bold flex items-center gap-1">
+                  🎯 Controle de Recorte IA
+                </span>
+                <span className="text-[9px] text-slate-400">
+                  Modo de remoção de fundo para o Scrapbook
+                </span>
+              </div>
+              <div className="flex gap-1">
+                {[
+                  { id: 'normal', name: 'Normal', tooltip: 'IA gera a imagem completa com fundo (sem recorte)' },
+                  { id: 'sticker', name: 'Sticker ✂️', tooltip: 'Recorte total com bordas bem suaves (feather)' },
+                  { id: 'soft_sticker', name: 'Soft Sticker 🌪️', tooltip: 'Recorte inteligente e progressivo (gradual alpha)' },
+                ].map(m => (
+                  <button
+                    key={m.id}
+                    title={m.tooltip}
+                    onClick={() => {
+                      setAiRenderingMode(m.id as any);
+                      triggerBeep(520, 0.08);
+                    }}
+                    type="button"
+                    className={`px-2 py-1 rounded text-[10px] font-bold border cursor-pointer transition-all ${
+                      aiRenderingMode === m.id
+                        ? 'bg-gradient-to-r from-pink-500 to-indigo-600 text-white border-pink-400 font-black shadow-[0_0_12px_rgba(236,72,153,0.5)] scale-103'
+                        : 'bg-slate-950 text-slate-400 border-slate-800/80 hover:text-slate-300 hover:bg-slate-900'
+                    }`}
+                  >
+                    {m.name}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
 
         </div>
@@ -1518,6 +1756,9 @@ export default function ScrapbookBuilder({
                       onClick={() => {
                         triggerBeep(500, 0.08);
                         setBackgroundStyle(bg.id);
+                        if (bg.id === 'orkut-2004') {
+                          setFrameStyle('none');
+                        }
                       }}
                       className={`px-3 py-1.5 border text-left rounded text-[10.5px] font-bold cursor-pointer transition-colors truncate ${
                         backgroundStyle === bg.id 
@@ -1528,6 +1769,27 @@ export default function ScrapbookBuilder({
                       {bg.label}
                     </button>
                   ))}
+                </div>
+              </div>
+
+              {/* OPÇÃO DE COLOCAR GLITTER OU DEIXAR SEM (Quick Toggle in Theme Tab too) */}
+              <div className="bg-[#f0f4f9] p-2 rounded border border-[#a2bfdb]/50 flex items-center justify-between">
+                <div className="leading-tight font-sans">
+                  <span className="font-bold text-[#1b4372] text-[10.5px] block">Glitter / Efeito Brilho ✨</span>
+                  <span className="text-[9.5px] text-neutral-500">Colocar estrelas cintilantes e gradiente móvel</span>
+                </div>
+                <div className="flex items-center gap-1.5 bg-white px-2 py-1 rounded border border-neutral-300 shadow-2xs">
+                  <span className="text-[10px] uppercase font-bold text-[#1b4372]">{glitterEnabled ? "Sim" : "Não"}</span>
+                  <input
+                    id="theme-glitter-quick-toggle"
+                    type="checkbox"
+                    checked={glitterEnabled}
+                    onChange={(e) => {
+                      triggerBeep(520, 0.05);
+                      setGlitterEnabled(e.target.checked);
+                    }}
+                    className="w-4 h-4 text-pink-500 border-neutral-300 rounded cursor-pointer"
+                  />
                 </div>
               </div>
 

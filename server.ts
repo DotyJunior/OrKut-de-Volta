@@ -115,6 +115,69 @@ Crie a resposta do personagem de acordo com as diretrizes indicadas. Responda di
     }
   });
 
+  // Helper to detect rendering modes for Scrapbook Builder AI
+  function detectRenderingMode(promptStr: string = ""): "normal" | "sticker" | "soft_sticker" {
+    const p = promptStr.toLowerCase().trim();
+    
+    // Explicit request for stickers/transparent backgrounds
+    const explicitKeywords = [
+      "sem fundo", 
+      "fundo transparente", 
+      "transparent background", 
+      "transparent bg", 
+      "no background", 
+      "no bg", 
+      "sem background", 
+      "fundo removido", 
+      "background removido",
+      "recortado", 
+      "sem moldura ou fundo", 
+      "sem cenario", 
+      "fundo branco removido",
+      "recorte total",
+      "fundo limpo",
+      "fundo invisivel",
+      "fundo invisível"
+    ];
+    
+    for (const kw of explicitKeywords) {
+      if (p.includes(kw)) {
+        return "sticker";
+      }
+    }
+
+    // Ambiguity keywords (usually things that might be isolated assets, icons, or standalone objects, or when it has words like sticker or icon but no explicit "sem fundo")
+    const ambiguityKeywords = [
+      "sticker", 
+      "adesivo", 
+      "desenho de um", 
+      "desenho de uma", 
+      "figura de", 
+      "ilustração de", 
+      "ilustracao de", 
+      "objeto", 
+      "item", 
+      "png", 
+      "clipart", 
+      "gatinho", 
+      "guitarra", 
+      "coração", 
+      "star", 
+      "estrela",
+      "emoticon",
+      "desenho isolado",
+      "ilustração isolada"
+    ];
+
+    for (const kw of ambiguityKeywords) {
+      if (p.includes(kw)) {
+        return "soft_sticker";
+      }
+    }
+
+    return "normal";
+  }
+
   // API Route for AI Scrapbook Builder (using Gemini 3.5 Flash)
   app.post("/api/scrapbook/generate", async (req, res) => {
     const { prompt } = req.body;
@@ -219,7 +282,18 @@ Escolha as cores hexadecimais de forma que fiquem harmoniosas e tenham excelente
         };
       }
 
-      themeSpec.aiImageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent((prompt || "vintage") + ", nostalgic 2008 Y2K orkut scrapbook glittering background decorative ornament art illustration")}?width=500&height=350&nologo=true`;
+      const mode = detectRenderingMode(prompt);
+      let pollinationsPrompt = prompt || "vintage";
+      if (mode === "sticker") {
+        pollinationsPrompt += ", isolated cutout sticker, 2D vector asset, clear sharp edges, solid white background, no gradients, centered single object, no text";
+      } else if (mode === "soft_sticker") {
+        pollinationsPrompt += ", separate clean graphic asset, isolated look, solid light background, centered";
+      } else {
+        pollinationsPrompt += ", nostalgic 2008 Y2K orkut scrapbook glittering background decorative ornament art illustration";
+      }
+
+      themeSpec.aiImageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(pollinationsPrompt)}?width=500&height=350&nologo=true`;
+      themeSpec.renderingMode = mode;
       return res.json(themeSpec);
     }
 
@@ -300,10 +374,21 @@ Escolha as cores hexadecimais de forma que fiquem harmoniosas e tenham excelente
         }
       });
 
-      // Image generation with gemini-2.5-flash-image SDK call
+      // Image generation with gemini-2.5-flash-image SDK call - configured based on selected rendering mode
+      const mode = detectRenderingMode(prompt);
+      let geminiModelContents = "";
+
+      if (mode === "sticker") {
+        geminiModelContents = `${prompt}. Isolated cutout sticker, 2D vector asset, clear sharp edges, solid white background, no gradients, centered single object, no text, no frame, no background detail.`;
+      } else if (mode === "soft_sticker") {
+        geminiModelContents = `${prompt}. Distinct standalone clean graphic asset, isolated look, solid light background, centered.`;
+      } else {
+        geminiModelContents = `${prompt}. Nostalgic Y2K orkut scrapbook glitter art graphic, retro decorative ornament background. Cute vibrant sticker collage illustration.`;
+      }
+
       const imagePromise = ai.models.generateContent({
         model: "gemini-2.5-flash-image",
-        contents: `${prompt}. Nostalgic Y2K orkut scrapbook glitter art graphic, retro decorative ornament background. Cute vibrant sticker collage illustration.`
+        contents: geminiModelContents
       }).catch(err => {
         console.error("Gemini image generation call failed, using fallback:", err);
         return null;
@@ -336,13 +421,33 @@ Escolha as cores hexadecimais de forma que fiquem harmoniosas e tenham excelente
       }
 
       if (!aiImageUrl) {
-        aiImageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent((prompt || "vintage") + ", nostalgic 2008 Y2K orkut scrapbook glittering background decorative ornament art illustration")}?width=500&height=350&nologo=true`;
+        let pollinationsPrompt = prompt || "vintage";
+        if (mode === "sticker") {
+          pollinationsPrompt += ", isolated cutout sticker, 2D vector asset, clear sharp edges, solid white background, no gradients, centered single object, no text";
+        } else if (mode === "soft_sticker") {
+          pollinationsPrompt += ", separate clean graphic asset, isolated look, solid light background, centered";
+        } else {
+          pollinationsPrompt += ", nostalgic 2008 Y2K orkut scrapbook glittering background decorative ornament art illustration";
+        }
+        aiImageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(pollinationsPrompt)}?width=500&height=350&nologo=true`;
       }
 
       parsedSpec.aiImageUrl = aiImageUrl;
+      parsedSpec.renderingMode = mode;
       return res.json(parsedSpec);
     } catch (err) {
       console.error("Gemini Error generating AI scrapbook:", err);
+      
+      const fallbackMode = detectRenderingMode(prompt);
+      let fallbackPollinationsPrompt = prompt || "vintage";
+      if (fallbackMode === "sticker") {
+        fallbackPollinationsPrompt += ", isolated cutout sticker, 2D vector asset, clear sharp edges, solid white background, no gradients, centered single object, no text";
+      } else if (fallbackMode === "soft_sticker") {
+        fallbackPollinationsPrompt += ", separate clean graphic asset, isolated look, solid light background, centered";
+      } else {
+        fallbackPollinationsPrompt += ", nostalgic 2008 Y2K orkut scrapbook glittering background decorative ornament art illustration";
+      }
+
       // Fallback
       return res.json({
         themeName: "Glitter Emo Cyber (Erro Fallback AI)",
@@ -358,7 +463,8 @@ Escolha as cores hexadecimais de forma que fiquem harmoniosas e tenham excelente
         glowIntensity: "high",
         messageText: "💔 oOh nAaAo, o sErVyDo r dE IA tYvO uM pRoBlEmA... mAx sCrApGoNe sEgUe sEnDo o bEsT fOrEvEr s2 vLw pArCa 💔",
         suggestedStickers: ["heart"],
-        aiImageUrl: `https://image.pollinations.ai/prompt/${encodeURIComponent((prompt || "vintage") + ", nostalgic 2008 Y2K orkut scrapbook glittering background decorative ornament art illustration")}?width=500&height=350&nologo=true`
+        aiImageUrl: `https://image.pollinations.ai/prompt/${encodeURIComponent(fallbackPollinationsPrompt)}?width=500&height=350&nologo=true`,
+        renderingMode: fallbackMode
       });
     }
   });

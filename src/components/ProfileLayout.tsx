@@ -1506,46 +1506,115 @@ export default function ProfileLayout({
         </div>
 
         {/* Album de Fotos Widget Block */}
-        <div 
-          onClick={() => {
-            playShutterSound();
-            onNavigateToTab('photos', true); // Guest Access Mode
-          }}
-          className={`border rounded shadow-sm overflow-hidden text-left transition-all cursor-pointer hover:scale-[1.02] ${themeStyles.cardBg} ${themeStyles.glow} ${themeStyles.borderClass} group hover:border-[#d946ef] mt-1.5`}
-          title="Explorar memórias do perfil (Acesso de Visitante)"
-        >
-          <div className={`px-3 py-1.5 flex justify-between items-center ${themeStyles.accent}`}>
-            <span className="text-[11px] font-bold uppercase flex items-center gap-1.5">
-              📸 Álbum de Fotos
-            </span>
-            <span className="text-[9px] group-hover:translate-x-0.5 transition-transform">explorar →</span>
-          </div>
-          <div className="p-3 bg-transparent font-sans text-[11px] leading-relaxed text-left flex flex-col gap-1.5">
-            <p className="opacity-95">
-              Veja fotos, gifs, memórias e momentos do perfil.
-            </p>
-            <div className="p-1.5 bg-neutral-100/15 border border-neutral-200/20 rounded flex items-center gap-2 text-[10px] text-[#1d4ed8] font-sans">
-              <span>🖼️</span>
-              <span className="italic">"{profile.name} compartilhou lembranças!"</span>
-            </div>
+        {(() => {
+          const profileAlbums = albums.filter(a => a.profileId === profile.id);
+          const allMyPhotos = profileAlbums.reduce<Photo[]>((acc, album) => {
+            if (album.photos && Array.isArray(album.photos)) {
+              return [...acc, ...album.photos];
+            }
+            return acc;
+          }, []);
 
-            {/* Added: Acessar Fotos Button (Visitor Access) */}
-            <div className="mt-2 pt-2 border-t border-dashed border-neutral-300/30">
-              <GlossyRetroButton
-                id="btn-access-photos-visitor"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  playShutterSound();
-                  onNavigateToTab('photos', true); // Guest/Visitor Access Mode
-                }}
-                variant="visitor"
-                className="w-full h-11"
-              >
-                Ver Fotos
-              </GlossyRetroButton>
+          // Sort using date parser
+          const sortedPhotos = [...allMyPhotos].sort((a, b) => {
+            const parseDate = (dStr: string) => {
+              if (!dStr) return 0;
+              const parts = dStr.split('/');
+              if (parts.length === 3) {
+                const day = parseInt(parts[0], 10);
+                const month = parseInt(parts[1], 10) - 1;
+                const year = parseInt(parts[2], 10);
+                return new Date(year, month, day).getTime();
+              }
+              return Date.parse(dStr) || 0;
+            };
+            return parseDate(b.date) - parseDate(a.date);
+          });
+
+          // Fallback to reversed order of the original array (where newer photos are appended at the end of the array)
+          const displayPhotosList = sortedPhotos.every(p => !p.date) 
+            ? [...allMyPhotos].reverse() 
+            : sortedPhotos;
+
+          const recentPhotosToShow = displayPhotosList.slice(0, 3);
+
+          return (
+            <div 
+              onClick={() => {
+                playShutterSound();
+                onNavigateToTab('photos', true); // Guest Access Mode
+              }}
+              className={`border rounded shadow-sm overflow-hidden text-left transition-all cursor-pointer hover:scale-[1.02] ${themeStyles.cardBg} ${themeStyles.glow} ${themeStyles.borderClass} group hover:border-[#d946ef] mt-1.5`}
+              title="Explorar memórias do perfil (Acesso de Visitante)"
+            >
+              <div className={`px-3 py-1.5 flex justify-between items-center ${themeStyles.accent}`}>
+                <span className="text-[11px] font-bold uppercase flex items-center gap-1.5">
+                  📸 Álbum de Fotos
+                </span>
+                <span className="text-[9px] group-hover:translate-x-0.5 transition-transform">explorar →</span>
+              </div>
+              <div className="p-3 bg-transparent font-sans text-[11px] leading-relaxed text-left flex flex-col gap-1.5">
+                <p className="opacity-95">
+                  Veja fotos, gifs, memórias e momentos do perfil.
+                </p>
+                <div className="p-1.5 bg-neutral-100/15 border border-neutral-200/20 rounded flex items-center gap-2 text-[10px] text-[#1d4ed8] font-sans">
+                  <span>🖼️</span>
+                  <span className="italic">"{profile.name} compartilhou lembranças!"</span>
+                </div>
+
+                {/* Miniaturas de pelo menos 3 fotos mais recentes postadas */}
+                {recentPhotosToShow.length > 0 ? (
+                  <div className="grid grid-cols-3 gap-2 my-2">
+                    {recentPhotosToShow.map((ph, idx) => (
+                      <div 
+                        key={ph.id || idx}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          playShutterSound();
+                          onNavigateToTab('photos', true); // Visit full album/photo tab
+                        }}
+                        className="relative aspect-square border border-neutral-300 rounded overflow-hidden shadow-xs hover:border-[#1d4ed8] transition-all hover:scale-105 group/thumb bg-white"
+                        title={ph.caption || `Foto Recente`}
+                      >
+                        <img 
+                          src={ph.url} 
+                          alt={ph.caption || "Miniatura"} 
+                          className="w-full h-full object-cover select-none" 
+                          referrerPolicy="no-referrer"
+                        />
+                        {ph.caption && (
+                          <div className="absolute inset-x-0 bottom-0 bg-black/60 text-[8px] text-white py-0.5 px-1 truncate opacity-0 group-hover/thumb:opacity-100 transition-opacity">
+                            {ph.caption}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex gap-2 my-1.5 justify-center py-2 bg-neutral-100/10 rounded border border-dashed border-neutral-300/30">
+                    <span className="text-[10px] text-neutral-500 italic">Nenhuma foto postada ainda</span>
+                  </div>
+                )}
+
+                {/* Added: Acessar Fotos Button (Visitor Access) */}
+                <div className="mt-2 pt-2 border-t border-dashed border-neutral-300/30">
+                  <GlossyRetroButton
+                    id="btn-access-photos-visitor"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      playShutterSound();
+                      onNavigateToTab('photos', true); // Guest/Visitor Access Mode
+                    }}
+                    variant="visitor"
+                    className="w-full h-11"
+                  >
+                    Ver Fotos
+                  </GlossyRetroButton>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
+          );
+        })()}
 
         {/* Sugestões: Amigos de amigos widget */}
         {friendsOfFriends.length > 0 && (
