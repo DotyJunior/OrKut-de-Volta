@@ -34,6 +34,22 @@ const getFontStyleClass = (style?: string) => {
   }
 };
 
+const safeJsonParse = (str: string | null, fallback: any = []) => {
+  if (!str) return fallback;
+  try {
+    const val = JSON.parse(str);
+    if (val === undefined || val === null) return fallback;
+    if (Array.isArray(fallback) && !Array.isArray(val)) {
+      console.warn("safeJsonParse Communities: Expected an array format, but loaded:", typeof val, ". Falling back.");
+      return fallback;
+    }
+    return val;
+  } catch (e) {
+    console.warn("JSON parse failed, using fallback in Communities:", e);
+    return fallback;
+  }
+};
+
 interface CommunitiesProps {
   communities: Community[]; // unused except as reference/fallback
   onJoinCommunity?: (id: string) => void; // fallback
@@ -148,7 +164,7 @@ export default function Communities({
 
       // Merge userCommIds with localStorage local_joined_${targetProfileId}
       const localJoinedJson = localStorage.getItem(`local_joined_${targetProfileId}`);
-      const localJoined = localJoinedJson ? JSON.parse(localJoinedJson) : [];
+      const localJoined = safeJsonParse(localJoinedJson);
       const mergedCommIds = Array.from(new Set([...userCommIds, ...localJoined]));
 
       const isOwner = activeUserId === targetProfileId;
@@ -172,7 +188,7 @@ export default function Communities({
       else if (targetProfileId === 'hacker') fallbackIds = ['1', 'hacker_guild'];
 
       const localJoinedJson = localStorage.getItem(`local_joined_${targetProfileId}`);
-      const localJoined = localJoinedJson ? JSON.parse(localJoinedJson) : [];
+      const localJoined = safeJsonParse(localJoinedJson);
       const mergedCommIds = Array.from(new Set([...fallbackIds, ...localJoined]));
 
       const isOwner = activeUserId === targetProfileId;
@@ -289,7 +305,7 @@ export default function Communities({
       console.log("DB COMMUNITIES IDS", list.map(c => c.id));
       
       const localCommsJson = localStorage.getItem('local_communities');
-      const localComms = localCommsJson ? JSON.parse(localCommsJson) : [];
+      const localComms = safeJsonParse(localCommsJson);
       
       const mergedList = [...list];
       localComms.forEach((lc: any) => {
@@ -311,7 +327,7 @@ export default function Communities({
     }, (error) => {
       console.error("Error loading communities onSnapshot, falling back to local storage:", error);
       const localCommsJson = localStorage.getItem('local_communities');
-      const localComms = localCommsJson ? JSON.parse(localCommsJson) : [];
+      const localComms = safeJsonParse(localCommsJson);
       setDbCommunities(localComms);
     });
 
@@ -631,7 +647,7 @@ export default function Communities({
     } catch (err) {
       console.warn("Firestore write for community failed, saving to local storage fallback instead:", err);
       const localCommsJson = localStorage.getItem('local_communities');
-      const localComms = localCommsJson ? JSON.parse(localCommsJson) : [];
+      const localComms = safeJsonParse(localCommsJson);
       localComms.push(communityData);
       localStorage.setItem('local_communities', JSON.stringify(localComms));
       
@@ -658,7 +674,7 @@ export default function Communities({
       console.warn("Firestore joined_communities list update failed, autojoining locally:", err);
     } finally {
       const localJoinedJson = localStorage.getItem(`local_joined_${activeUserId}`);
-      const localJoined = localJoinedJson ? JSON.parse(localJoinedJson) : [];
+      const localJoined = safeJsonParse(localJoinedJson);
       localJoined.push(newId);
       localStorage.setItem(`local_joined_${activeUserId}`, JSON.stringify(Array.from(new Set(localJoined))));
       

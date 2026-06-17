@@ -27,15 +27,43 @@ export default function SearchResults({
 }: SearchResultsProps) {
   const normalizedQuery = query.toLowerCase().trim();
 
-  // 1. Filter Profiles
-  const matchedProfiles = Object.entries(profiles).filter(([id, profile]) => {
-    return (
-      profile.name.toLowerCase().includes(normalizedQuery) ||
-      profile.aboutMe.toLowerCase().includes(normalizedQuery) ||
-      profile.location.toLowerCase().includes(normalizedQuery) ||
-      profile.passions.toLowerCase().includes(normalizedQuery)
-    );
+  // 1. Deduplicate & Filter Profiles
+  const uniqueProfiles: Record<string, Profile> = {};
+  Object.entries(profiles).forEach(([key, profile]) => {
+    const realId = profile.id;
+    if (key === 'me') {
+      if (realId && realId !== 'me') {
+        if (!uniqueProfiles[realId]) {
+          uniqueProfiles[realId] = profile;
+        }
+      } else {
+        uniqueProfiles['me'] = profile;
+      }
+    } else {
+      uniqueProfiles[key] = profile;
+    }
   });
+
+  const matchedProfiles = Object.entries(uniqueProfiles).filter(([id, profile]) => {
+    const nameMatch = profile.name ? profile.name.toLowerCase().includes(normalizedQuery) : false;
+    const aboutMatch = profile.aboutMe ? profile.aboutMe.toLowerCase().includes(normalizedQuery) : false;
+    const locMatch = profile.location ? profile.location.toLowerCase().includes(normalizedQuery) : false;
+    const passionMatch = profile.passions ? profile.passions.toLowerCase().includes(normalizedQuery) : false;
+    const usernameMatch = profile.username ? profile.username.toLowerCase().includes(normalizedQuery) : false;
+    const idMatch = id.toLowerCase().includes(normalizedQuery) || (profile.id && profile.id.toLowerCase().includes(normalizedQuery));
+
+    return nameMatch || aboutMatch || locMatch || passionMatch || usernameMatch || idMatch;
+  });
+
+  // Task 6: Temporary logs showing details of searched term and matched users
+  React.useEffect(() => {
+    console.log("🔍 [Audit Pesquisa] Termo pesquisado:", query);
+    console.log("👤 [Audit Pesquisa] Usuários correspondentes encontrados:", matchedProfiles.map(([id, p]) => ({
+      id,
+      name: p.name,
+      username: p.username || 'N/A'
+    })));
+  }, [query, matchedProfiles]);
 
   // 2. Filter Communities
   const matchedCommunities = communities.filter(c => {

@@ -23,6 +23,22 @@ import OrkutLogin from './components/OrkutLogin';
 import { collection, doc, setDoc, onSnapshot, getDoc, getDocFromServer, addDoc, deleteDoc, query, where, or, getDocs } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType } from './firebase';
 
+const safeJsonParse = (str: string | null, fallback: any = []) => {
+  if (!str) return fallback;
+  try {
+    const val = JSON.parse(str);
+    if (val === undefined || val === null) return fallback;
+    if (Array.isArray(fallback) && !Array.isArray(val)) {
+      console.warn("safeJsonParse: Expected an array format, but loaded:", typeof val, ". Falling back.");
+      return fallback;
+    }
+    return val;
+  } catch (e) {
+    console.warn("JSON parse failed, using fallback:", e);
+    return fallback;
+  }
+};
+
 const DEFAULT_PROFILES: Record<string, Profile> = {
   me: {
     id: 'me',
@@ -448,6 +464,7 @@ export default function App() {
   // Authentication & Session States
   const [currentUserProfile, setCurrentUserProfile] = useState<Profile | null>(null);
   const currentUserProfileRef = useRef<Profile | null>(null);
+  const profilesRef = useRef<Record<string, Profile>>({});
 
   useEffect(() => {
     currentUserProfileRef.current = currentUserProfile;
@@ -602,7 +619,7 @@ export default function App() {
       // Synchronize albums under the active profile's localStorage key
       const activeId = currentUserProfile.id;
       const localAlbumsJson = localStorage.getItem(`local_albums_${activeId}`);
-      const localAlbums = localAlbumsJson ? JSON.parse(localAlbumsJson) : [];
+      const localAlbums = safeJsonParse(localAlbumsJson);
       
       const baseAlbums = rawDbAlbumsRef.current.length > 0 ? rawDbAlbumsRef.current : getInitialAlbums();
       const merged = [...baseAlbums];
@@ -613,8 +630,10 @@ export default function App() {
         } else {
           // Merge photos of the same album to avoid losing local-only additions
           const dbAlbum = merged[dbIndex];
-          const mergedPhotos = [...dbAlbum.photos];
-          la.photos.forEach((lp: any) => {
+          const dbPhotos = Array.isArray(dbAlbum?.photos) ? dbAlbum.photos : [];
+          const mergedPhotos = [...dbPhotos];
+          const localPhotos = Array.isArray(la?.photos) ? la.photos : [];
+          localPhotos.forEach((lp: any) => {
             if (!mergedPhotos.some(p => p.id === lp.id)) {
               mergedPhotos.push(lp);
             }
@@ -629,7 +648,7 @@ export default function App() {
     } else {
       // Revert/load general/demo profile albums
       const localAlbumsJson = localStorage.getItem('local_albums_me');
-      const localAlbums = localAlbumsJson ? JSON.parse(localAlbumsJson) : [];
+      const localAlbums = safeJsonParse(localAlbumsJson);
       if (localAlbums.length > 0) {
         setAlbums(localAlbums);
       } else {
@@ -722,7 +741,31 @@ export default function App() {
     const unsubscribeProfiles = onSnapshot(collection(db, 'profiles'), (snapshot) => {
       const fetched: Record<string, Profile> = {};
       snapshot.forEach((docSnap) => {
-        fetched[docSnap.id] = docSnap.data() as Profile;
+        const data = docSnap.data();
+        fetched[docSnap.id] = {
+          id: docSnap.id,
+          name: data.name || '',
+          avatar: data.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
+          location: data.location || 'Paraná, Brasil',
+          relationship: data.relationship || 'Solteiro',
+          humor: data.humor || 'Sempre Alegre',
+          hereFor: data.hereFor || 'Fazer Amizades',
+          fashion: data.fashion || 'Clássico 2004',
+          religion: data.religion || 'Universal',
+          ethnicity: data.ethnicity || 'Brasileiro',
+          languages: data.languages || 'Português',
+          hometown: data.hometown || 'Curitiba',
+          webpage: data.webpage || '',
+          passions: data.passions || 'Música retro, scraps seguros',
+          aboutMe: data.aboutMe || 'Oi, acabei de criar minha conta!',
+          trusty: data.trusty ?? 3,
+          cool: data.cool ?? 3,
+          sexy: data.sexy ?? 3,
+          fans: data.fans ?? 0,
+          username: data.username || docSnap.id,
+          theme: data.theme || 'default',
+          ...data
+        } as Profile;
       });
 
       setProfiles((prev) => {
@@ -752,15 +795,46 @@ export default function App() {
       const list = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
       setUsers(list);
       
-      const fetched: Record<string, Profile> = {};
-      list.forEach((u: any) => {
-        fetched[u.id] = { id: u.id, ...u } as Profile;
+      setProfiles((prev) => {
+        const updated = { ...prev };
+        list.forEach((u: any) => {
+          const uId = u.id;
+          if (updated[uId]) {
+            // Merge carefully: do not overwrite established profile traits
+            updated[uId] = {
+              ...updated[uId],
+              ...u
+            };
+          } else {
+            // Fallback safe default profile
+            updated[uId] = {
+              id: uId,
+              name: u.name || '',
+              avatar: u.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
+              location: u.location || 'Paraná, Brasil',
+              relationship: u.relationship || 'Solteiro',
+              humor: u.humor || 'Sempre Alegre',
+              hereFor: u.hereFor || 'Fazer Amizades',
+              fashion: u.fashion || 'Clássico 2004',
+              religion: u.religion || 'Universal',
+              ethnicity: u.ethnicity || 'Brasileiro',
+              languages: u.languages || 'Português',
+              hometown: u.hometown || 'Curitiba',
+              webpage: u.webpage || '',
+              passions: u.passions || 'Música retro, scraps seguros',
+              aboutMe: u.aboutMe || 'Oi, acabei de criar minha conta!',
+              trusty: u.trusty ?? 3,
+              cool: u.cool ?? 3,
+              sexy: u.sexy ?? 3,
+              fans: u.fans ?? 0,
+              username: u.username || uId,
+              theme: u.theme || 'default',
+              ...u
+            };
+          }
+        });
+        return updated;
       });
-      
-      setProfiles((prev) => ({
-        ...prev,
-        ...fetched
-      }));
       initFlags.current.users = true;
       checkInitDone();
     }, (error) => {
@@ -835,7 +909,7 @@ export default function App() {
       
       const activeId = currentUserProfileRef.current?.id || 'me';
       const localAlbumsJson = localStorage.getItem(`local_albums_${activeId}`);
-      const localAlbums = localAlbumsJson ? JSON.parse(localAlbumsJson) : [];
+      const localAlbums = safeJsonParse(localAlbumsJson);
       
       const mergedAlbums = [...list];
       localAlbums.forEach((la: Album) => {
@@ -845,8 +919,10 @@ export default function App() {
         } else {
           // Merge photos of the same album to avoid losing local-only additions
           const dbAlbum = mergedAlbums[dbIndex];
-          const mergedPhotos = [...dbAlbum.photos];
-          la.photos.forEach((lp: any) => {
+          const dbPhotos = Array.isArray(dbAlbum?.photos) ? dbAlbum.photos : [];
+          const mergedPhotos = [...dbPhotos];
+          const localPhotos = Array.isArray(la?.photos) ? la.photos : [];
+          localPhotos.forEach((lp: any) => {
             if (!mergedPhotos.some(p => p.id === lp.id)) {
               mergedPhotos.push(lp);
             }
@@ -865,7 +941,7 @@ export default function App() {
       console.warn("Could not read albums from Firestore. Fallback to localStorage.", error);
       const activeId = currentUserProfileRef.current?.id || 'me';
       const localAlbumsJson = localStorage.getItem(`local_albums_${activeId}`);
-      const localAlbums = localAlbumsJson ? JSON.parse(localAlbumsJson) : [];
+      const localAlbums = safeJsonParse(localAlbumsJson);
       if (localAlbums.length > 0) {
         setAlbums(localAlbums);
       }
@@ -897,7 +973,7 @@ export default function App() {
       });
       
       const localCommsJson = localStorage.getItem('local_communities');
-      const localComms = localCommsJson ? JSON.parse(localCommsJson) : [];
+      const localComms = safeJsonParse(localCommsJson);
       
       const mergedList = [...list];
       localComms.forEach((lc: any) => {
@@ -912,7 +988,7 @@ export default function App() {
     }, (error) => {
       console.warn("Error subscribing to communities. Falling back onto local list...", error);
       const localCommsJson = localStorage.getItem('local_communities');
-      const localComms = localCommsJson ? JSON.parse(localCommsJson) : [];
+      const localComms = safeJsonParse(localCommsJson);
       setCommunities(localComms);
       initFlags.current.communities = true;
       checkInitDone();
@@ -957,7 +1033,7 @@ export default function App() {
         const data = docSnap.data();
         if (data && Array.isArray(data.communityIds)) {
           const localJoinedJson = localStorage.getItem(`local_joined_${activeId}`);
-          const localJoined = localJoinedJson ? JSON.parse(localJoinedJson) : [];
+          const localJoined = safeJsonParse(localJoinedJson);
           const merged = Array.from(new Set([...data.communityIds, ...localJoined]));
           setJoinedCommunities(merged);
           isLoaded = true;
@@ -966,7 +1042,7 @@ export default function App() {
       if (!isLoaded) {
         // Use local storage
         const localJoinedJson = localStorage.getItem(`local_joined_${activeId}`);
-        const localJoined = localJoinedJson ? JSON.parse(localJoinedJson) : [];
+        const localJoined = safeJsonParse(localJoinedJson);
         if (localJoined.length > 0) {
           setJoinedCommunities(localJoined);
         } else {
@@ -976,7 +1052,7 @@ export default function App() {
     }, (error) => {
       console.warn("Could not synchronize joined_communities from Firestore, falling back to locally saved list:", error);
       const localJoinedJson = localStorage.getItem(`local_joined_${activeId}`);
-      const localJoined = localJoinedJson ? JSON.parse(localJoinedJson) : [];
+      const localJoined = safeJsonParse(localJoinedJson);
       setJoinedCommunities(localJoined.length > 0 ? localJoined : ['1', '3', 'pendrive_perdido']);
     });
 
@@ -1036,11 +1112,33 @@ export default function App() {
 
       if (hash.startsWith('#/profile/')) {
         const parts = hash.substring('#/profile/'.length).split('/');
-        const profileId = parts[0];
+        const rawProfileId = parts[0];
         const subTab = parts[1]; // e.g. 'communities'
 
-        if (profileId) {
-          setActiveProfileId(profileId);
+        if (rawProfileId) {
+          // Check if rawProfileId matches a username or nickname in profiles, otherwise find by name
+          const currentProfilesList = Object.values(profilesRef.current || {}) as Profile[];
+          
+          let resolvedId = rawProfileId;
+          const matchedByUsername = currentProfilesList.find(
+            (p) => p.username?.toLowerCase() === rawProfileId.toLowerCase()
+          );
+          const matchedByName = currentProfilesList.find(
+            (p) => p.name ? p.name.toLowerCase().replace(/\s+/g, '') === rawProfileId.toLowerCase().replace(/\s+/g, '') : false
+          );
+          
+          if (matchedByUsername) {
+            resolvedId = matchedByUsername.id;
+          } else if (matchedByName) {
+            resolvedId = matchedByName.id;
+          }
+
+          const myRealId = currentUserProfileRef.current?.id;
+          const finalId = (resolvedId === 'me' || (myRealId && resolvedId === myRealId)) ? 'me' : resolvedId;
+
+          console.log("🗺️ [Rota Gerada - HashMatch] Resolvido:", rawProfileId, "-> ID:", finalId);
+
+          setActiveProfileId(finalId);
           if (subTab === 'communities') {
             setCurrentTab('communities');
           } else {
@@ -1316,6 +1414,10 @@ export default function App() {
     }
   });
 
+  useEffect(() => {
+    profilesRef.current = profiles;
+  }, [profiles]);
+
   // Dynamic Friends list getter
   const getFriendsForProfile = (uid: string) => {
     const myRealId = currentUserProfile?.id || 'me';
@@ -1571,7 +1673,10 @@ export default function App() {
 
   // Switch visited profile
   const handleNavigateToFriend = (id: string) => {
-    setActiveProfileId(id);
+    const myRealId = currentUserProfile?.id;
+    const finalId = (id === 'me' || (myRealId && id === myRealId)) ? 'me' : id;
+    console.log("🗺️ [Rota Gerada] Navegando para o perfil ID:", finalId, `(Roteamento Hash: #/profile/${finalId})`);
+    setActiveProfileId(finalId);
     setCurrentTab('profile');
   };
 
@@ -1709,6 +1814,19 @@ export default function App() {
     }
   };
 
+  const currentViewedProfile = profiles[activeProfileId] || profiles.me || DEFAULT_PROFILES.me;
+
+  useEffect(() => {
+    if (currentViewedProfile) {
+      console.log("📖 [Perfil Carregado] Dados carregados:", {
+        id: currentViewedProfile.id,
+        name: currentViewedProfile.name,
+        username: currentViewedProfile.username,
+        theme: currentViewedProfile.theme
+      });
+    }
+  }, [currentViewedProfile]);
+
   // Loading state during session check and app bootstrap
   if (isAuthLoading || !initDone) {
     return (
@@ -1741,13 +1859,14 @@ export default function App() {
     );
   }
 
-  const currentViewedProfile = profiles[activeProfileId] || profiles.me || DEFAULT_PROFILES.me;
   const themeStyles = getThemeStyles(currentViewedProfile.theme);
   const friends = getFriendsForProfile(currentViewedProfile.id);
 
+  const isOwnProfile = activeProfileId === 'me' || (currentUserProfile && activeProfileId === currentUserProfile.id);
+
   // Filter communities joined by the visited profile applying privacy rules
   const visitorId = currentUserProfile?.id || 'me';
-  const isOwner = visitorId === activeProfileId;
+  const isOwner = visitorId === activeProfileId || isOwnProfile;
   const friendsPool = ["me", "lucas", "alexandre", "orkut", "hacker"];
   const isFriend = friendsPool.includes(visitorId) && friendsPool.includes(activeProfileId);
 
@@ -1784,7 +1903,7 @@ export default function App() {
       {/* 2. Main content container */}
       <main className="flex-1 max-w-6xl w-full mx-auto px-4 py-6 font-sans">
         {/* If viewing a friend's profile, show a nice retro ribbon allowing return to my own profile */}
-        {activeProfileId !== 'me' && (
+        {!isOwnProfile && (
           <div className="bg-[#fffbeb] border border-amber-200 rounded p-3 mb-5 flex justify-between items-center text-xs text-amber-800">
             <span className="font-semibold font-sans">
               🔍 Você está visualizando o perfil seguro de: <strong>{currentViewedProfile.name}</strong>
@@ -1805,7 +1924,7 @@ export default function App() {
             profile={currentViewedProfile}
             friends={friends}
             communities={filteredVisitedCommunities}
-            isOwnProfile={activeProfileId === 'me'}
+            isOwnProfile={isOwnProfile}
             onSaveProfile={handleSaveProfile}
             onNavigateToFriend={handleNavigateToFriend}
             onNavigateToTab={(tab, forceVisitor = false, autoTriggerUpload = false, communityId) => {
@@ -1845,7 +1964,7 @@ export default function App() {
             profileName={currentViewedProfile.name}
             profileAvatar={currentViewedProfile.avatar}
             albums={albums}
-            isOwnProfile={activeProfileId === 'me' && !isVisitorMode}
+            isOwnProfile={isOwnProfile && !isVisitorMode}
             isVisitorMode={isVisitorMode}
             onUpdateAlbums={handleUpdateAlbums}
             featuredPhotoId={featuredPhotoIds[currentViewedProfile.id] || null}
@@ -1866,7 +1985,7 @@ export default function App() {
             scraps={scraps}
             onAddScrap={handleAddScrap}
             activeProfile={currentViewedProfile}
-            isOwnProfile={activeProfileId === 'me'}
+            isOwnProfile={isOwnProfile}
             currentUser={{ id: currentUserProfile?.id || profiles.me.id || 'me', name: profiles.me.name, avatar: profiles.me.avatar }}
             onLikeScrap={handleLikeScrap}
             onShareToFeed={handleAddNewShare}
@@ -1888,7 +2007,7 @@ export default function App() {
             testimonials={testimonials}
             onAddTestimonial={handleAddTestimonial}
             activeProfile={currentViewedProfile}
-            isOwnProfile={activeProfileId === 'me'}
+            isOwnProfile={isOwnProfile}
             currentUser={{ id: currentUserProfile?.id || profiles.me.id || 'me', name: profiles.me.name, avatar: profiles.me.avatar }}
             onLikeTestimonial={handleLikeTestimonial}
             onShareToFeed={handleAddNewShare}
