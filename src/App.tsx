@@ -670,26 +670,45 @@ export default function App() {
     const listenEvents = ['mousemove', 'keydown', 'mousedown', 'scroll', 'touchstart'];
     listenEvents.forEach(ev => window.addEventListener(ev, handleActive, { passive: true }));
 
+    // Determine initial state to only trigger update on real transition
+    let initialState: 'online' | 'away' | 'offline' = 'online';
+    if (currentUserProfile.statusOnline?.includes("Offline")) {
+      initialState = 'offline';
+    } else if (currentUserProfile.statusOnline?.includes("Ausente")) {
+      initialState = 'away';
+    }
+
+    let currentSavedState = initialState;
+
     const interval = setInterval(async () => {
       const now = Date.now();
       const diff = now - lastActive;
       const isAway = diff > 40000; // 40s
       const isOf = diff > 90000; // 90s
 
-      let targetStatus = "● Online Agora";
+      let nextState: 'online' | 'away' | 'offline' = 'online';
       if (isOf) {
-        const timeStr = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-        targetStatus = `⚫ Offline desde ${timeStr}`;
+        nextState = 'offline';
       } else if (isAway) {
-        targetStatus = "● Ausente da máquina";
+        nextState = 'away';
       }
 
-      if (currentUserProfile.statusOnline !== targetStatus) {
+      if (currentSavedState !== nextState) {
+        let targetStatus = "● Online Agora";
+        if (nextState === 'offline') {
+          const timeStr = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+          targetStatus = `⚫ Offline desde ${timeStr}`;
+        } else if (nextState === 'away') {
+          targetStatus = "● Ausente da máquina";
+        }
+
         try {
+          console.log(`Presence transition writing in Firestore: ${currentSavedState} -> ${nextState} (status: ${targetStatus})`);
           await setDoc(doc(db, 'profiles', currentUserProfile.id), {
             ...currentUserProfile,
             statusOnline: targetStatus
           });
+          currentSavedState = nextState;
         } catch (e) {
           console.error("Auto heartbeat update failed: ", e);
         }
@@ -1269,14 +1288,23 @@ export default function App() {
       }
     }
     
-    // Save/update remaining albums (restricted to owned albums)
+    // Save/update remaining albums (restricted to owned albums, only write if changed)
+    const existingAlbumsMap = new Map((albums || []).map(a => [a.id, a]));
     for (const album of resolvedAlbums) {
       if (album.profileId === activeId) {
-        try {
-          await setDoc(doc(db, 'albums', album.id), album);
-        } catch (err) {
-          console.error("Failed to save album in Firestore:", err);
-          throw err; // DO NOT mask error!
+        const existing = existingAlbumsMap.get(album.id);
+        const hasChanged = !existing || JSON.stringify(existing) !== JSON.stringify(album);
+        
+        if (hasChanged) {
+          try {
+            console.log(`Writing new/modified album ${album.id} to Firestore`);
+            await setDoc(doc(db, 'albums', album.id), album);
+          } catch (err) {
+            console.error("Failed to save album in Firestore:", err);
+            throw err; // DO NOT mask error!
+          }
+        } else {
+          console.log(`Album ${album.id} unchanged, skipping Firestore write.`);
         }
       }
     }

@@ -617,7 +617,22 @@ export default function Communities({
   // Action: Create New Community
   const handleCreateCommunity = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newCommName.trim()) return;
+    console.log("Botão Salvar clicado");
+
+    if (!newCommName.trim()) {
+      console.warn("Validação falhou: nome da comunidade vazio");
+      return;
+    }
+
+    const creatorUid = auth.currentUser?.uid;
+    if (!creatorUid) {
+      console.error("CREATE COMMUNITY ERROR: No authenticated Firebase user UID found!");
+      alert("Você precisa estar autenticado no Firebase para criar uma comunidade.");
+      return;
+    }
+
+    console.log("Validação passou");
+    console.log("Iniciando criação da comunidade para o UID autenticado:", creatorUid);
 
     // Start 1.5s transition immediately
     setIsClosingCreateModal(true);
@@ -634,18 +649,24 @@ export default function Communities({
       language: newCommLang,
       type: newCommType,
       secureMode: newCommSecureMode,
-      ownerId: activeUserId,
-      moderators: [activeUserId],
+      ownerId: creatorUid,
+      moderators: [creatorUid],
       createdAt: new Date().toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' }).replace('.', ''),
       rules: newCommRules || '1. Respeite todos os membros.\n2. Sem spam.'
     };
 
     try {
+      console.log("AUTH UID:", creatorUid);
+      console.log("OWNER ID:", communityData.ownerId);
+      console.log("COMMUNITY DATA TO WRITE:", communityData);
+      console.log("Escrevendo documento de comunidade no Firestore para ID:", newId);
       await setDoc(doc(db, 'communities', newId), communityData);
       console.log("CREATE COMMUNITY SUCCESS", newId);
       console.log("- communityId criado:", newId);
-    } catch (err) {
-      console.warn("Firestore write for community failed, saving to local storage fallback instead:", err);
+      console.log("Documento enviado ao Firestore");
+    } catch (error) {
+      console.error("CREATE COMMUNITY ERROR:", error);
+      console.warn("Firestore write for community failed, saving to local storage fallback instead:", error);
       const localCommsJson = localStorage.getItem('local_communities');
       const localComms = safeJsonParse(localCommsJson);
       localComms.push(communityData);
@@ -662,7 +683,7 @@ export default function Communities({
 
     try {
       // Autojoin newly created community using arrayUnion to prevent duplication
-      const joinedRef = doc(db, 'joined_communities', activeUserId);
+      const joinedRef = doc(db, 'joined_communities', creatorUid);
       await setDoc(joinedRef, { communityIds: arrayUnion(newId) }, { merge: true });
       console.log("- resultado do update em joined_communities: SUCCESS");
 
@@ -673,10 +694,10 @@ export default function Communities({
     } catch (err) {
       console.warn("Firestore joined_communities list update failed, autojoining locally:", err);
     } finally {
-      const localJoinedJson = localStorage.getItem(`local_joined_${activeUserId}`);
+      const localJoinedJson = localStorage.getItem(`local_joined_${creatorUid}`);
       const localJoined = safeJsonParse(localJoinedJson);
       localJoined.push(newId);
-      localStorage.setItem(`local_joined_${activeUserId}`, JSON.stringify(Array.from(new Set(localJoined))));
+      localStorage.setItem(`local_joined_${creatorUid}`, JSON.stringify(Array.from(new Set(localJoined))));
       
       // Force update of displayedCommunities instantly for crisp reactivity
       setDisplayedCommunities(prev => {
@@ -1595,12 +1616,8 @@ export default function Communities({
                             setActiveTopic(topic);
                             setIsPostingTopic(false);
                             setRepliesPage(1);
-                            // Increment views count in database
-                            updateDoc(doc(db, 'community_topics', topic.id), {
-                              views: (topic.views || 0) + 1
-                            }).catch(err => {
-                              handleFirestoreError(err, OperationType.WRITE, `community_topics/${topic.id}`);
-                            });
+                            // Increment views count in database TEMPORARILY DISABLED to preserve Firestore write quota
+                            console.log("Topic view count update temporarily skipped to save write quota:", topic.id);
                           }}
                           className={`p-3 flex items-start gap-3 hover:bg-neutral-50 cursor-pointer transition-colors ${
                             topic.isPinned ? 'bg-yellow-50/70 border-l-4 border-yellow-400' : ''
