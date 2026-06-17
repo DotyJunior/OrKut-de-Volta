@@ -1542,10 +1542,10 @@ export default function ProfileLayout({
             <div 
               onClick={() => {
                 playShutterSound();
-                onNavigateToTab('photos', true); // Guest Access Mode
+                onNavigateToTab('photos', !isOwnProfile);
               }}
               className={`border rounded shadow-sm overflow-hidden text-left transition-all cursor-pointer hover:scale-[1.02] ${themeStyles.cardBg} ${themeStyles.glow} ${themeStyles.borderClass} group hover:border-[#d946ef] mt-1.5`}
-              title="Explorar memórias do perfil (Acesso de Visitante)"
+              title={isOwnProfile ? "Explorar meus álbuns de fotos chapa!" : "Explorar memórias do perfil (Acesso de Visitante)"}
             >
               <div className={`px-3 py-1.5 flex justify-between items-center ${themeStyles.accent}`}>
                 <span className="text-[11px] font-bold uppercase flex items-center gap-1.5">
@@ -1571,7 +1571,7 @@ export default function ProfileLayout({
                         onClick={(e) => {
                           e.stopPropagation();
                           playShutterSound();
-                          onNavigateToTab('photos', true); // Visit full album/photo tab
+                          onNavigateToTab('photos', !isOwnProfile); // Visit full album/photo tab
                         }}
                         className="relative aspect-square border border-neutral-300 rounded overflow-hidden shadow-xs hover:border-[#1d4ed8] transition-all hover:scale-105 group/thumb bg-white"
                         title={ph.caption || `Foto Recente`}
@@ -1603,9 +1603,9 @@ export default function ProfileLayout({
                     onClick={(e) => {
                       e.stopPropagation();
                       playShutterSound();
-                      onNavigateToTab('photos', true); // Guest/Visitor Access Mode
+                      onNavigateToTab('photos', !isOwnProfile);
                     }}
-                    variant="visitor"
+                    variant={isOwnProfile ? "default" : "visitor"}
                     className="w-full h-11"
                   >
                     Ver Fotos

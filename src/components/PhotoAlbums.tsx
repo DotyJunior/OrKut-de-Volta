@@ -239,6 +239,7 @@ export default function PhotoAlbums({
   // States for simplified expanded photo view and album pagination
   const [showPhotoDropdown, setShowPhotoDropdown] = useState(false);
   const [showCommentsSection, setShowCommentsSection] = useState(false);
+  const [showCaptionBubble, setShowCaptionBubble] = useState(false);
   const [aspectRatio, setAspectRatio] = useState<'1:1' | '4:5'>('1:1');
   const [albumPage, setAlbumPage] = useState<number>(0);
   const [photoIdToDelete, setPhotoIdToDelete] = useState<string | null>(null);
@@ -339,6 +340,7 @@ export default function PhotoAlbums({
       setIsSongPlaying(true); // Auto play visualizer song of the moment!
       setShowCommentsSection(false);
       setShowPhotoDropdown(false);
+      setShowCaptionBubble(false);
     }, 'Abrindo registro de imagem e tocando trilha...');
   };
 
@@ -360,6 +362,7 @@ export default function PhotoAlbums({
   const handleClosePhotoDirect = () => {
     setViewMode('album');
     setSelectedPhotoId(null);
+    setShowCaptionBubble(false);
   };
 
   // Create Album
@@ -1191,291 +1194,562 @@ export default function PhotoAlbums({
         </motion.div>
       )}
 
-      {viewMode === 'photo' && activeAlbum && activePhoto && (
-        <div 
-          className="fixed inset-0 bg-neutral-950/90 z-50 flex items-center justify-center p-4 md:p-8 select-none backdrop-blur-md"
-          onClick={() => handleClosePhotoDirect()}
-        >
-          {/* Main card */}
-          <div 
-            className="relative max-w-2xl w-full flex flex-col items-center gap-3 animate-fadeIn"
-            onClick={(e) => e.stopPropagation()} // Prevent close on card click
-          >
-            {/* Close button top-right */}
-            <button
-              onClick={() => handleClosePhotoDirect()}
-              className="absolute -top-10 right-0 text-neutral-400 hover:text-white flex items-center gap-1.5 text-[10px] uppercase font-mono tracking-wider cursor-pointer font-bold transition-all bg-neutral-900/40 p-1 px-3 rounded-full border border-neutral-800/30"
-            >
-              [ fechar x ]
-            </button>
+      {viewMode === 'photo' && activeAlbum && activePhoto && (() => {
+        const currentIndex = activeAlbum.photos.findIndex(p => p.id === activePhoto.id);
 
-            {/* Left and Right navigation buttons */}
-            {activeAlbum.photos.length > 1 && (
-              <>
+        return (
+          <div 
+            className="fixed inset-0 bg-[#2d3238]/95 z-50 flex items-center justify-center p-4 md:p-8 select-none backdrop-blur-md overflow-y-auto"
+            onClick={() => handleClosePhotoDirect()}
+            id="photo-viewer-overlay"
+          >
+            {/* Wrapper for responsive layout (Desktop: Side-by-side photo + comments/caption, Mobile: Stacked) */}
+            <div 
+              className="relative flex flex-col xl:flex-row items-center xl:items-stretch justify-center gap-6 max-w-7xl w-full mx-auto"
+              onClick={(e) => e.stopPropagation()} // Stop propagation from closing
+              id="photo-viewer-wrapper"
+            >
+              {/* CLOSE BUTTON (✖️) - OUTSIDE THE MODAL CARD FOR MOBILE */}
+              <button
+                onClick={() => handleClosePhotoDirect()}
+                className="absolute -top-12 right-2 xl:hidden border-none text-white hover:text-fuchsia-400 font-black text-3xl cursor-pointer hover:scale-110 active:scale-95 transition-all z-50 p-2 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]"
+                id="photo-viewer-close-button-mobile"
+                title="Fechar"
+              >
+                ✖️
+              </button>
+
+              {/* LEFT NAVIGATION SLIDER CHEVRON (Visible on Desktop/Mobile around the card) */}
+              {activeAlbum.photos.length > 1 && (
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    const currentIndex = activeAlbum.photos.findIndex(p => p.id === activePhoto.id);
                     const prevIndex = (currentIndex - 1 + activeAlbum.photos.length) % activeAlbum.photos.length;
                     setSelectedPhotoId(activeAlbum.photos[prevIndex].id);
                     setShowPhotoDropdown(false);
                   }}
-                  className="absolute -left-3 md:-left-16 top-1/2 -translate-y-1/2 p-2 bg-neutral-900/60 hover:bg-neutral-805/90 text-neutral-400 hover:text-white border border-neutral-805/45 rounded-full cursor-pointer hover:scale-110 active:scale-95 transition-all z-35 shadow-lg"
-                  title="Foto Anterior chapa"
+                  className="absolute -left-3 md:-left-16 xl:-left-[14px] top-1/2 -translate-y-1/2 w-12 h-12 bg-[#c7cace]/50 hover:bg-[#c7cace]/80 text-white border-2 border-cyan-400 rounded-full cursor-pointer hover:scale-110 active:scale-95 transition-all z-35 flex items-center justify-center shadow-lg hover:shadow-cyan-400/40"
+                  id="photo-viewer-nav-prev"
+                  title="Foto Anterior"
                 >
-                  <ChevronLeft size={20} />
+                  <span className="text-xl font-bold text-slate-800">{"<"}</span>
                 </button>
-
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    const currentIndex = activeAlbum.photos.findIndex(p => p.id === activePhoto.id);
-                    const nextIndex = (currentIndex + 1) % activeAlbum.photos.length;
-                    setSelectedPhotoId(activeAlbum.photos[nextIndex].id);
-                    setShowPhotoDropdown(false);
-                  }}
-                  className="absolute -right-3 md:-right-16 top-1/2 -translate-y-1/2 p-2 bg-neutral-900/60 hover:bg-neutral-805/90 text-neutral-400 hover:text-white border border-neutral-805/45 rounded-full cursor-pointer hover:scale-110 active:scale-95 transition-all z-35 shadow-lg"
-                  title="Próxima Foto chapa"
-                >
-                  <ChevronRight size={20} />
-                </button>
-              </>
-            )}
-
-            {/* Lightbox viewport frame */}
-            <div className="w-full bg-black/95 rounded-lg overflow-hidden border border-neutral-800/65 shadow-2xl flex flex-col relative">
-              {activeThemeStyles.scanlines && (
-                <div className="absolute inset-0 bg-[#000]/06 pointer-events-none bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[size:100%_4px,6px_100%] z-40 pointer-events-none" />
               )}
 
-              {/* Photo Area */}
-              <div className="w-full relative flex items-center justify-center bg-black select-none max-h-[60vh] overflow-hidden" style={{ minHeight: '260px' }}>
-                <img
-                  src={activePhoto.url}
-                  alt={activePhoto.caption}
-                  className={`max-w-full max-h-[60vh] object-contain mx-auto ${getPhotoEffectClass(activePhoto.effect)}`}
-                  referrerPolicy="no-referrer"
-                />
+              {/* MAIN PHOTOGRAPH CARD CONTAINER */}
+              <div className="relative w-full max-w-[700px] flex-shrink-0" id="photo-viewer-desktop-wrapper">
+                {/* CLOSE BUTTON (X) FOR DESKTOP - POSITIONED OUTSIDE THE MODAL ON THE TOP-RIGHT CORNER */}
+                <button
+                  onClick={() => handleClosePhotoDirect()}
+                  className="hidden xl:flex absolute -top-10 -right-12 items-center justify-center border-none bg-transparent hover:opacity-80 font-sans cursor-pointer transition-all hover:scale-110 active:scale-95 z-55"
+                  style={{ color: '#38fdad', fontSize: '40px', lineHeight: '40px', fontWeight: 'bold' }}
+                  id="photo-viewer-close-button"
+                  title="Fechar (X)"
+                >
+                  X
+                </button>
 
-                {/* Theme overlays & watermark tags for gifs */}
-                {activeAlbum.theme === 'vhs' && (
-                  <div className="absolute top-3 left-3 z-30 text-rose-500 font-mono text-[9px] bg-black/75 p-1 px-1.5 tracking-wider animate-pulse border border-rose-950/40">
-                    PLAY 0:12:44
+                <div 
+                  className="w-full bg-white border-[3px] border-sky-400 rounded-3xl shadow-2xl flex flex-col justify-between overflow-hidden relative"
+                  id="photo-viewer-main-card"
+                >
+                {/* TOPO DO MODAL (Inside Main Card) */}
+                <div 
+                  className="bg-gradient-to-r from-sky-800 via-sky-600 to-sky-500 py-3 px-4 flex justify-between items-center text-white border-b border-sky-300/40"
+                  id="photo-viewer-header"
+                >
+                  <div className="flex flex-col text-left">
+                    <span className="text-sm font-extrabold uppercase tracking-tight leading-tight line-clamp-1">
+                      {activeAlbum.name}
+                    </span>
+                    <span className="text-[10px] text-sky-200 uppercase tracking-widest font-mono">
+                      Título do Álbum
+                    </span>
                   </div>
-                )}
-                {activePhoto.gifUrl && (
-                  <span className="absolute bottom-2 right-2 bg-pink-600 text-white font-mono text-[8px] font-bold px-1.5 py-0.5 rounded shadow border border-pink-400 uppercase tracking-widest scale-90">
-                    GIF NOSTÁLGICO
+
+                  {/* Contador de fotos (e.g. 3 de 45) */}
+                  <span className="text-xs font-black font-sans bg-black/25 px-2.5 py-0.5 rounded-full border border-white/10">
+                    {currentIndex + 1} de {activeAlbum.photos.length}
                   </span>
-                )}
-              </div>
 
-              {/* Aggregated bottom information area - extremely minimalist & elegant */}
-              <div className="w-full p-4 bg-neutral-950 border-t border-neutral-900 font-sans text-left text-neutral-200">
-                
-                {/* HUD Row: Título, data, curtidas e compartilhamento grouped on the base */}
-                <div className="flex items-center justify-between text-neutral-400 border-b border-neutral-900 pb-2.5 mb-2.5">
-                  <div className="flex items-center gap-5">
-                    {/* Curtidas with Heart button */}
-                    <button
-                      onClick={handleLikePhoto}
-                      className="flex items-center gap-1 hover:text-pink-500 transition-colors cursor-pointer text-[11px] font-semibold"
-                      title="Curtir foto chapa!"
-                    >
-                      <Heart 
-                        size={12} 
-                        fill={activePhoto.likedByMe ? '#ec4899' : 'none'} 
-                        className={`transition-transform ${activePhoto.likedByMe ? 'text-pink-500 scale-110' : 'text-neutral-500'}`} 
-                      />
-                      <span className="font-mono text-[10px]">{activePhoto.likes}</span>
-                    </button>
-
-                    {/* Compartilhar Button */}
-                    <button
-                      onClick={() => {
-                        if (onShareToFeed) {
-                          onShareToFeed(`Foto: ${activePhoto.caption}`, 'photo');
-                          alert('Foto compartilhada no Painel de Recados chapa! 🚀');
-                        } else {
-                          navigator.clipboard.writeText(activePhoto.url);
-                          alert('Link da imagem copiado chapa! 📋');
-                        }
-                      }}
-                      className="flex items-center gap-1 hover:text-[#d946ef] transition-colors cursor-pointer text-[10px] font-bold uppercase tracking-wider"
-                    >
-                      <Share2 size={11} className="text-neutral-500" />
-                      <span>Compartilhar</span>
-                    </button>
-                  </div>
-
-                  {/* Options Menu dropdown ⋮ */}
+                  {/* Três pontinhos ⁝ toggle */}
                   <div className="relative">
                     <button
                       onClick={() => setShowPhotoDropdown(!showPhotoDropdown)}
-                      className="p-1 px-2.5 rounded hover:bg-neutral-900 border border-neutral-805/40 text-neutral-400 hover:text-white transition-colors cursor-pointer font-bold text-xs"
+                      className="p-1 px-3 rounded hover:bg-white/15 border border-white/20 text-white transition-all cursor-pointer font-black text-lg focus:outline-none flex items-center justify-center"
+                      id="photo-viewer-dropdown-trigger"
                       title="Opções"
                     >
-                      ⋮
+                      ⁝
                     </button>
 
-                    {showPhotoDropdown && (
-                      <div className="absolute right-0 bottom-full mb-2 bg-neutral-900 border border-neutral-800 rounded shadow-2xl py-1.5 w-36 z-50 text-left font-sans text-[11px]">
-                        {isOwnProfile && (
-                          <>
-                            <button
-                              onClick={() => {
-                                setShowPhotoDropdown(false);
-                                setShowEditCaption(true);
-                              }}
-                              className="w-full px-3 py-1.5 hover:bg-neutral-800 text-neutral-300 hover:text-white font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
-                            >
-                              🖊️ Editar Legenda
-                            </button>
-                            <button
-                              onClick={() => {
-                                setShowPhotoDropdown(false);
-                                handleDeletePhoto(activePhoto.id);
-                              }}
-                              className="w-full px-3 py-1.5 hover:bg-red-950 hover:text-red-300 text-red-400 font-bold flex items-center gap-1.5 transition-colors cursor-pointer border-t border-neutral-800/40"
-                            >
-                              <Trash2 size={10} />
-                              Excluir Foto
-                            </button>
-                          </>
-                        )}
-                        <button
-                          onClick={() => {
-                            setShowPhotoDropdown(false);
-                            navigator.clipboard.writeText(activePhoto.url);
-                            alert('Link copiado chapa! 🔗');
-                          }}
-                          className={`w-full px-3 py-1.5 hover:bg-neutral-800 text-neutral-300 hover:text-white flex items-center gap-1.5 transition-colors cursor-pointer ${
-                            isOwnProfile ? 'border-t border-neutral-800/40' : ''
+                    {/* THREE DOTS DROPDOWN LIST (Owner vs Visitor filters) */}
+                    {showPhotoDropdown && (() => {
+                      const isTrulyOwner = isOwnProfile || profileId === 'me';
+                      return (
+                        <div 
+                          className={`absolute right-0 top-full mt-2 rounded-xl shadow-2xl py-2 w-44 z-55 text-left font-sans text-xs ${
+                            isTrulyOwner 
+                              ? 'bg-white/70 backdrop-blur-md border-2 border-slate-500/80 text-black font-extrabold' 
+                              : 'bg-[#1b1c22]/98 border-2 border-sky-400 text-white'
                           }`}
+                          id="photo-viewer-dropdown-menu"
                         >
-                          <LinkIcon size={10} />
-                          Copiar Link
-                        </button>
-                      </div>
-                    )}
+                          {isTrulyOwner ? (
+                            <>
+                              {/* OWNER CONTENT: White container 70% opacity, Black text */}
+                              <button
+                                onClick={() => {
+                                  setShowPhotoDropdown(false);
+                                  setShowCaptionBubble(!showCaptionBubble);
+                                }}
+                                className="w-full px-4 py-2 hover:bg-black/10 text-black font-extrabold transition-colors cursor-pointer text-left uppercase tracking-wider"
+                              >
+                                LEGENDA
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setShowPhotoDropdown(false);
+                                  if (onShareToFeed) {
+                                    onShareToFeed(`Compartilhou Foto: ${activePhoto.caption}`, 'photo');
+                                    alert('Foto compartilhada com orgulho no mural! 🚀');
+                                  } else {
+                                    navigator.clipboard.writeText(activePhoto.url);
+                                    alert('Link copiado para compartilhar! 📋');
+                                  }
+                                }}
+                                className="w-full px-4 py-2 hover:bg-black/10 text-black font-extrabold transition-colors cursor-pointer text-left uppercase tracking-wider"
+                              >
+                                COMPARTILHAR
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setShowPhotoDropdown(false);
+                                  setShowEditCaption(true);
+                                }}
+                                className="w-full px-4 py-2 hover:bg-black/10 text-black font-extrabold transition-colors cursor-pointer text-left uppercase tracking-wider"
+                              >
+                                EDITAR
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setShowPhotoDropdown(false);
+                                  handleDeletePhoto(activePhoto.id);
+                                }}
+                                className="w-full px-4 py-2 hover:bg-red-500/20 text-black hover:text-red-700 font-extrabold transition-colors cursor-pointer text-left uppercase tracking-wider border-t border-black/10"
+                              >
+                                EXCLUIR
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              {/* VISITOR CONTENT: Dark layout */}
+                              <button
+                                onClick={() => {
+                                  setShowPhotoDropdown(false);
+                                  setShowCaptionBubble(!showCaptionBubble);
+                                }}
+                                className="w-full px-4 py-2 hover:bg-sky-950 hover:text-cyan-300 text-slate-200 transition-colors cursor-pointer text-left font-bold uppercase tracking-wider"
+                              >
+                                VER LEGENDA
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setShowPhotoDropdown(false);
+                                  if (onShareToFeed) {
+                                    onShareToFeed(`Compartilhou pág: ${activePhoto.caption}`, 'photo');
+                                    alert('Link compartilhado no Feed! 🚀');
+                                  } else {
+                                    navigator.clipboard.writeText(activePhoto.url);
+                                    alert('Endereço da imagem copiado! 🔗');
+                                  }
+                                }}
+                                className="w-full px-4 py-2 hover:bg-sky-950 hover:text-cyan-300 text-slate-200 transition-colors cursor-pointer text-left font-bold uppercase tracking-wider"
+                              >
+                                COMPARTILHAR
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setShowPhotoDropdown(false);
+                                  alert('Denúncia recebida com sucesso chapa! Nossa moderação do Orkut analisará nas próximas horas. 💻');
+                                }}
+                                className="w-full px-4 py-2 hover:bg-red-950 hover:text-red-300 text-red-500 transition-colors cursor-pointer text-left font-bold uppercase tracking-wider border-t border-sky-500/10"
+                              >
+                                DENUNCIAR
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
 
-                {/* Title & Caption */}
-                <div className="space-y-1">
-                  {showEditCaption ? (
-                    <div className="flex flex-col gap-1.5 p-2 bg-neutral-900 border border-neutral-800 rounded font-sans text-[11px]">
-                      <span className="text-[9px] uppercase tracking-wider font-extrabold text-pink-500">🖊️ Atualizar legenda:</span>
+                {/* FOTO MEIO: PROTAGONISTA SEMPRE (Fundo com a cor exata #c7cace, evitando preto) */}
+                <div 
+                  className="w-full relative flex items-center justify-center select-none overflow-hidden" 
+                  style={{ backgroundColor: '#c7cace', minHeight: '340px' }}
+                  id="photo-viewer-stage"
+                >
+                  <img
+                    src={activePhoto.url}
+                    alt={activePhoto.caption || "Foto"}
+                    className={`max-w-full max-h-[55vh] object-contain mx-auto ${getPhotoEffectClass(activePhoto.effect)}`}
+                    referrerPolicy="no-referrer"
+                    id="photo-viewer-active-image"
+                  />
+
+                  {/* Retro Watermark VHS or GIF labels */}
+                  {activeAlbum.theme === 'vhs' && (
+                    <div className="absolute top-4 left-4 z-30 text-rose-500 font-mono text-[9px] bg-black/75 p-1 px-1.5 tracking-wider animate-pulse border border-rose-950/40">
+                      PLAY 0:12:44
+                    </div>
+                  )}
+                  {activePhoto.gifUrl && (
+                    <span className="absolute bottom-4 left-4 bg-pink-600 text-white font-mono text-[9px] font-bold px-2 py-0.5 rounded shadow border border-pink-400 uppercase tracking-widest scale-90 z-40">
+                      GIF NOSTÁLGICO
+                    </span>
+                  )}
+
+
+
+                  {/* SLIDER DOT CAROUSEL (Absolute Overlay on image stage for ultra-prominence) */}
+                  {activeAlbum.photos.length > 1 && (
+                    <div 
+                      className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-1.5 bg-black/60 backdrop-blur-xs px-2.5 py-1 rounded-full border border-white/20 z-45 shadow-lg"
+                      id="photo-viewer-carousel-dots"
+                    >
+                      {activeAlbum.photos.map((p, idx) => {
+                        const isActive = p.id === activePhoto.id;
+                        return (
+                          <button
+                            key={p.id}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedPhotoId(p.id);
+                              setShowPhotoDropdown(false);
+                              setShowCaptionBubble(false);
+                            }}
+                            className={`w-2.5 h-2.5 rounded-full border border-sky-400 transition-all cursor-pointer ${
+                              isActive 
+                                ? 'bg-sky-400 scale-110 shadow-[0_0_4px_rgba(56,189,248,0.8)]' 
+                                : 'bg-white/40 hover:bg-white/80'
+                            }`}
+                            title={`Ver foto ${idx + 1}`}
+                            type="button"
+                          />
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* BASE INFERIOR (Footer Panel styled gray-brown in orkut look - Narrow Vertical Space) */}
+                <div 
+                  className="w-full py-1.5 px-3.5 bg-[#736f6d] border-t border-sky-500/30 flex flex-col gap-1 relative text-left"
+                  id="photo-viewer-footer"
+                >
+                  
+                  {/* ACTION TOOLBAR sits directly under the image stage */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4 text-white font-sans text-xs">
+                      {/* Amei button (Hot Pink Heart) */}
+                      <button
+                        onClick={handleLikePhoto}
+                        className="flex items-center gap-1.5 hover:text-pink-300 transition-colors cursor-pointer font-bold bg-[#8b8989]/30 hover:bg-[#8b8989]/50 p-1 px-2.5 rounded-full border border-white/5"
+                        id="photo-action-like"
+                        title="Amei!"
+                      >
+                        <span className="text-sm">💖</span>
+                        <span className="font-mono text-xs">{activePhoto.likes}</span>
+                      </button>
+
+                      {/* Curtir button (Thumbs up) */}
+                      <button
+                        onClick={handleLikePhoto}
+                        className="flex items-center gap-1.5 hover:text-cyan-300 transition-colors cursor-pointer font-bold bg-[#8b8989]/30 hover:bg-[#8b8989]/50 p-1 px-2.5 rounded-full border border-white/5"
+                        id="photo-action-thumbs"
+                        title="Curtir!"
+                      >
+                        <span className="text-sm">👍</span>
+                        <span className="font-mono text-xs">{activePhoto.likes + 2}</span>
+                      </button>
+
+                      {/* Comentários button (Balloon) */}
+                      <button
+                        onClick={() => setShowCommentsSection(!showCommentsSection)}
+                        className={`flex items-center gap-1.5 transition-colors cursor-pointer font-bold p-1 px-2.5 rounded-full border border-white/5 ${
+                          showCommentsSection 
+                            ? 'bg-sky-600 hover:bg-sky-500 text-white' 
+                            : 'bg-[#8b8989]/30 hover:bg-[#8b8989]/50 text-white'
+                        }`}
+                        id="photo-action-comment-toggle"
+                        title="Ver Comentários"
+                      >
+                        <span className="text-sm">💬</span>
+                        <span className="font-mono text-xs">{activePhoto.comments.length}</span>
+                      </button>
+                    </div>
+
+                    {/* Compartilhar Button (Fast Link Copy / Share icon) */}
+                    <button
+                      onClick={() => {
+                        if (onShareToFeed) {
+                          onShareToFeed(`Legenda: ${activePhoto.caption}`, 'photo');
+                          alert('Mural de Recados atualizado com sucesso! 🚀');
+                        } else {
+                          navigator.clipboard.writeText(activePhoto.url);
+                          alert('Endereço da foto salvo na área de transferência! chapa 📎');
+                        }
+                      }}
+                      className="flex items-center justify-center p-1.5 bg-violet-700 hover:bg-violet-600 text-white rounded-full transition-all cursor-pointer border border-violet-500 hover:scale-105"
+                      title="Compartilhar foto no Orkut"
+                    >
+                      <Share2 size={13} />
+                    </button>
+                  </div>
+
+                  {/* INLINE EDIT CAPTION MODE ON MAIN CARD */}
+                  {showEditCaption && (
+                    <div className="mt-2.5 p-3 bg-[#1e1e1e] border-2 border-sky-400 rounded-2xl font-sans text-xs text-white">
+                      <span className="text-[10px] uppercase tracking-wider font-extrabold text-pink-400 block mb-1">
+                        🖊️ Atualizar legenda da foto:
+                      </span>
                       <textarea
                         value={editedCaption}
                         onChange={(e) => setEditedCaption(e.target.value)}
-                        className="w-full text-xs p-1 rounded bg-neutral-950 border border-neutral-700 text-white font-sans focus:outline-none"
+                        className="w-full text-xs p-2 rounded bg-black border border-neutral-700 text-white font-sans focus:outline-none placeholder-slate-500"
                         rows={2}
                       />
-                      <div className="flex gap-2 justify-end">
+                      <div className="flex gap-2 justify-end mt-2">
                         <button
                           type="button"
                           onClick={() => {
                             setShowEditCaption(false);
                             setEditedCaption(activePhoto.caption);
                           }}
-                          className="px-2 py-0.5 text-[9px] bg-neutral-700 hover:bg-neutral-600 text-white rounded cursor-pointer"
+                          className="px-3 py-1 text-[10px] bg-neutral-700 hover:bg-neutral-600 text-white rounded-md cursor-pointer"
                         >
                           Cancelar
                         </button>
                         <button
                           type="button"
-                          onClick={handleUpdateCaption}
-                          className="px-2 py-0.5 text-[9px] bg-pink-600 hover:bg-pink-700 text-white font-bold rounded cursor-pointer"
+                          onClick={() => {
+                            handleUpdateCaption();
+                            setShowEditCaption(false);
+                          }}
+                          className="px-3 py-1 text-[10px] bg-pink-600 hover:bg-pink-700 text-white font-bold rounded-md cursor-pointer"
                         >
                           Salvar
                         </button>
                       </div>
                     </div>
-                  ) : (
-                    <p className="text-xs font-semibold text-white leading-relaxed tracking-tight">
-                      {activePhoto.caption}
-                    </p>
                   )}
+                </div>
+              </div>
+            </div>
+
+              {/* RIGHT NAVIGATION SLIDER CHEVRON */}
+              {activeAlbum.photos.length > 1 && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const nextIndex = (currentIndex + 1) % activeAlbum.photos.length;
+                    setSelectedPhotoId(activeAlbum.photos[nextIndex].id);
+                    setShowPhotoDropdown(false);
+                  }}
+                  className="absolute -right-3 md:-right-16 xl:-right-[14px] top-1/2 -translate-y-1/2 w-12 h-12 bg-[#c7cace]/50 hover:bg-[#c7cace]/80 text-white border-2 border-cyan-400 rounded-full cursor-pointer hover:scale-110 active:scale-95 transition-all z-35 flex items-center justify-center shadow-lg hover:shadow-cyan-400/40"
+                  id="photo-viewer-nav-next"
+                  title="Próxima Foto"
+                >
+                  <span className="text-xl font-bold text-slate-800">{">"}</span>
+                </button>
+              )}
+
+              {/* LEGENDA POPUP CARD (speech bubble next to the photo) */}
+              {showCaptionBubble && (
+                <div 
+                  className="relative xl:absolute xl:left-[585px] xl:top-12 w-full max-w-[340px] bg-[#dcefed]/95 border-2 border-sky-400 rounded-3xl shadow-2xl p-5 font-sans text-neutral-800 animate-fadeIn z-40 self-center"
+                  id="photo-viewer-caption-bubble"
+                >
+                  {/* Speech bubble arrow pointer facing left on Desktop */}
+                  <div className="hidden xl:block absolute -left-3 top-10 w-4 h-4 bg-[#dcefed] border-l-2 border-b-2 border-sky-400 rotate-45" />
+
+                  {/* Header title & close */}
+                  <div className="flex justify-between items-center pb-2 border-b border-sky-400/30 mb-2">
+                    <span className="font-extrabold text-sky-900 tracking-tight text-xs flex items-center gap-1">
+                      📂 Legenda do Registro
+                    </span>
+                    <button
+                      onClick={() => setShowCaptionBubble(false)}
+                      className="text-[#73706d] hover:text-black font-black text-xs cursor-pointer focus:outline-none p-1"
+                      title="Fechar balão"
+                    >
+                      X
+                    </button>
+                  </div>
+
+                  {/* Caption Content */}
+                  <div className="max-h-60 overflow-y-auto pr-1 text-xs leading-relaxed text-left font-medium text-slate-800 whitespace-pre-wrap break-words">
+                    {activePhoto.caption || (
+                      <span className="text-slate-500 italic">Nenhuma legenda descrita para esta foto nostálgica.</span>
+                    )}
+                  </div>
                   
-                  {/* Fine Date badge & optional nostalgic accompanying song */}
-                  <div className="text-[9.5px] text-neutral-500 font-mono flex items-center justify-between pt-0.5">
+                  {/* Fine Date badge / Nostalgic song footer info inside balloon */}
+                  <div className="mt-3 pt-2 border-t border-sky-400/20 flex flex-wrap gap-2 justify-between items-center text-[10px] text-slate-500 font-mono">
                     <span>{activePhoto.date || new Date().toLocaleDateString('pt-BR')}</span>
                     {activePhoto.song && (
-                      <span className="text-cyan-400 font-sans text-[9px] flex items-center gap-1 uppercase tracking-wide">
+                      <span className="text-sky-700 font-sans font-bold flex items-center gap-0.5">
                         🎵 {activePhoto.song.split('-')[1]?.trim() || activePhoto.song}
                       </span>
                     )}
                   </div>
                 </div>
+              )}
 
-                {/* Completely hidden scraps and CD playlist under discreet accordion so as to never clutter the viewport layout */}
-                <div className="mt-3.5 pt-2 border-t border-neutral-900/50 flex flex-wrap gap-2 justify-between items-center">
-                  <button
-                    type="button"
-                    onClick={() => setShowCommentsSection(!showCommentsSection)}
-                    className="text-[9.5px] font-bold text-[#d946ef] hover:underline flex items-center gap-1 cursor-pointer"
+              {/* COMENTÁRIOS EXPANSIVE DRAWER (DESKTOP: RIGHT SIDE OF THE MODAL CARD, MOBILE: UNDER CARD) */}
+              {showCommentsSection && (
+                <>
+                  {/* Desktop view comments */}
+                  <div 
+                    className="hidden xl:flex flex-col w-[360px] bg-[#1a1c22]/95 border-[3px] border-sky-400 rounded-3xl p-5 text-white shadow-2xl animate-slideLeft shrink-0 justify-between self-stretch relative text-left"
+                    id="photo-viewer-comments-desktop"
                   >
-                    {showCommentsSection ? '▲ Ocultar Comentários' : `▼ Ver Comentários (${activePhoto.comments.length})`}
-                  </button>
+                    <div>
+                      {/* Comments Header */}
+                      <div className="flex items-center justify-between pb-3 border-b border-neutral-700/60 mb-3">
+                        <span className="text-xs font-black uppercase tracking-widest text-[#00f0ff] flex items-center gap-1.5">
+                          💬 Comentarios
+                        </span>
+                        <span className="text-[10px] text-neutral-400 bg-[#c7cace]/10 px-2 py-0.5 rounded-full font-mono">
+                          {activePhoto.comments.length} recados
+                        </span>
+                      </div>
 
-                  {activePhoto.song && (
-                    <button
-                      type="button"
-                      onClick={() => setIsSongPlaying(!isSongPlaying)}
-                      className="text-[9px] text-neutral-400 hover:text-white font-mono bg-neutral-900/40 border border-neutral-800 px-2 py-0.5 rounded cursor-pointer flex items-center gap-1"
-                    >
-                      {isSongPlaying ? <Pause size={9} /> : <Play size={9} />}
-                      {isSongPlaying ? 'Mutar Música chapa' : 'Ouvir Trilha'}
-                    </button>
-                  )}
-                </div>
+                      {/* Message Input box */}
+                      <form onSubmit={handlePostComment} className="flex flex-col gap-2 mb-4 bg-slate-900/40 p-2.5 rounded-xl border border-neutral-800/40">
+                        <span className="text-[10px] font-bold text-sky-400">Deixe uma mensagem:</span>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={commentInput}
+                            onChange={(e) => setCommentInput(e.target.value)}
+                            placeholder="Deixe um recado legal..."
+                            className="flex-1 px-3 py-1.5 text-xs rounded bg-black border border-neutral-800 text-white outline-none focus:border-sky-500 font-sans"
+                            maxLength={150}
+                            required
+                          />
+                          <button
+                            type="submit"
+                            className="px-4 py-1.5 bg-gradient-to-r from-sky-600 to-indigo-700 hover:from-sky-500 hover:to-indigo-600 text-white font-extrabold rounded-lg text-xs uppercase cursor-pointer transition-all border border-sky-400/30"
+                          >
+                            Enviar
+                          </button>
+                        </div>
+                      </form>
 
-                {/* Scraps collapsible board drawer */}
-                {showCommentsSection && (
-                  <div className="mt-2.5 bg-neutral-950 p-3 border border-neutral-900 rounded space-y-2.5 animate-fadeIn">
-                    <div className="max-h-24 overflow-y-auto pr-1 space-y-1.5 custom-scrollbar">
+                      {/* Comments Scrollable List */}
+                      <div className="space-y-3.5 max-h-[380px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-sky-500/20">
+                        {activePhoto.comments.length === 0 ? (
+                          <div className="text-center py-8">
+                            <span className="text-xl block mb-2">🎈</span>
+                            <p className="text-xs text-neutral-400 italic font-mono">Nenhum depoimento ainda. Seja o primeiro chapa!</p>
+                          </div>
+                        ) : (
+                          activePhoto.comments.map(c => (
+                            <div key={c.id} className="text-xs flex flex-col gap-1.5">
+                              <div className="flex gap-2 items-center">
+                                <img 
+                                  src={c.authorAvatar || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120"} 
+                                  alt={c.authorName} 
+                                  className="w-5 h-5 rounded-full object-cover shrink-0 border border-sky-400/25" 
+                                />
+                                <span className="font-extrabold text-[#00f0ff]">{c.authorName}</span>
+                                <span className="text-[9px] text-neutral-500 font-mono ml-auto">{c.date || "recent"}</span>
+                              </div>
+                              <p className="text-neutral-200 pl-7 text-left leading-relaxed break-words">{c.text}</p>
+                              <div className="border-b border-dashed border-neutral-700/50 pt-2 w-full" />
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Nostalgic song controller if available */}
+                    {activePhoto.song && (
+                      <div className="mt-4 pt-3 border-t border-neutral-800 flex items-center justify-between text-[10px] text-neutral-400">
+                        <span className="truncate max-w-[200px]">Trilha: {activePhoto.song}</span>
+                        <button
+                          type="button"
+                          onClick={() => setIsSongPlaying(!isSongPlaying)}
+                          className="px-2.5 py-1 text-[9px] bg-sky-950 font-bold border border-sky-500/30 rounded-md text-sky-400 cursor-pointer flex items-center gap-1 hover:bg-sky-900 transition-colors"
+                        >
+                          {isSongPlaying ? 'Mutar' : 'Tocar'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Mobile view comments */}
+                  <div 
+                    className="block xl:hidden w-full bg-[#1a1c22]/95 border-[3px] border-sky-400 rounded-3xl p-4 text-white shadow-xl mt-2 animate-slideDown text-left"
+                    id="photo-viewer-comments-mobile"
+                  >
+                    <div className="flex items-center justify-between pb-2 border-b border-neutral-700/60 mb-2">
+                      <span className="text-xs font-black uppercase tracking-wider text-[#00f0ff]">
+                        💬 Comentários
+                      </span>
+                      <span className="text-[10px] text-neutral-400 bg-white/5 px-2 rounded-full font-mono">
+                        {activePhoto.comments.length}
+                      </span>
+                    </div>
+
+                    <form onSubmit={handlePostComment} className="flex flex-col gap-2 mb-3 bg-slate-900/60 p-2 rounded-xl">
+                      <span className="text-[10px] text-sky-300 font-bold">Deixe uma mensagem:</span>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={commentInput}
+                          onChange={(e) => setCommentInput(e.target.value)}
+                          placeholder="Fale alguma coisa..."
+                          className="flex-1 px-2.5 py-1 text-xs rounded bg-black border border-neutral-800 text-white outline-none font-sans"
+                          maxLength={150}
+                          required
+                        />
+                        <button
+                          type="submit"
+                          className="px-3 py-1 bg-gradient-to-r from-sky-600 to-indigo-700 text-white font-bold rounded-lg text-xs cursor-pointer"
+                        >
+                          Enviar
+                        </button>
+                      </div>
+                    </form>
+
+                    <div className="space-y-3 max-h-48 overflow-y-auto pr-1">
                       {activePhoto.comments.length === 0 ? (
-                        <p className="text-[10px] text-neutral-500 italic text-center py-2">Sem recados nesta foto chapa. Comente abaixo!</p>
+                        <p className="text-[10px] text-neutral-400 italic text-center py-4 font-mono">Nenhum recado ainda.</p>
                       ) : (
                         activePhoto.comments.map(c => (
-                          <div key={c.id} className="text-[10px] pb-1.5 border-b border-neutral-900/40 last:border-0 flex gap-2 items-start text-left">
-                            <img src={c.authorAvatar} alt={c.authorName} className="w-4 h-4 rounded-full object-cover shrink-0 mt-0.5" />
-                            <div className="flex-1 min-w-0">
-                              <span className="font-extrabold text-indigo-400">{c.authorName}: </span>
-                              <span className="text-neutral-300 break-all">{c.text}</span>
+                          <div key={c.id} className="text-[11px] flex flex-col gap-1 pb-1.5 last:pb-0">
+                            <div className="flex gap-1.5 items-center">
+                              <img src={c.authorAvatar} alt={c.authorName} className="w-4 h-4 rounded-full object-cover shrink-0" />
+                              <span className="font-extrabold text-[#00f0ff]">{c.authorName}</span>
+                              <span className="text-[8px] text-neutral-500 ml-auto">{c.date || "recent"}</span>
                             </div>
+                            <p className="text-neutral-300 pl-5 text-left">{c.text}</p>
+                            <div className="border-b border-dashed border-neutral-700/30 pt-1 w-full" />
                           </div>
                         ))
                       )}
                     </div>
-
-                    {/* Write comment */}
-                    <form onSubmit={handlePostComment} className="flex gap-1.5 border-t border-neutral-900 pt-2">
-                      <input
-                        type="text"
-                        value={commentInput}
-                        onChange={(e) => setCommentInput(e.target.value)}
-                        placeholder="Deixe um recado legal..."
-                        className="flex-1 px-2.5 py-1 text-[10px] rounded bg-black border border-neutral-800 text-neutral-250 outline-none font-sans"
-                        maxLength={150}
-                        required
-                      />
-                      <button
-                        type="submit"
-                        className="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded text-[9.5px] uppercase cursor-pointer transition-colors"
-                      >
-                        Enviar
-                      </button>
-                    </form>
                   </div>
-                )}
-
-              </div>
+                </>
+              )}
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* -------------------- POPUP MODAL: CREATE ALBUM -------------------- */}
       {showCreateAlbum && (
