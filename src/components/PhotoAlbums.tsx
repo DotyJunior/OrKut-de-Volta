@@ -24,7 +24,10 @@ import {
   Film,
   Smile,
   Info,
-  Upload
+  Upload,
+  Instagram,
+  Send,
+  MessageCircle
 } from 'lucide-react';
 import { Album, Photo, PhotoComment } from '../types';
 import SocialActions from './SocialActions';
@@ -240,6 +243,7 @@ export default function PhotoAlbums({
   const [showPhotoDropdown, setShowPhotoDropdown] = useState(false);
   const [showCommentsSection, setShowCommentsSection] = useState(false);
   const [showCaptionBubble, setShowCaptionBubble] = useState(false);
+  const [showShareMenu, setShowShareMenu] = useState(false);
   const [aspectRatio, setAspectRatio] = useState<'1:1' | '4:5'>('1:1');
   const [albumPage, setAlbumPage] = useState<number>(0);
   const [photoIdToDelete, setPhotoIdToDelete] = useState<string | null>(null);
@@ -334,14 +338,13 @@ export default function PhotoAlbums({
   };
 
   const handleOpenPhoto = (photoId: string) => {
-    triggerNostalgicLoading(() => {
-      setSelectedPhotoId(photoId);
-      setViewMode('photo');
-      setIsSongPlaying(true); // Auto play visualizer song of the moment!
-      setShowCommentsSection(false);
-      setShowPhotoDropdown(false);
-      setShowCaptionBubble(false);
-    }, 'Abrindo registro de imagem e tocando trilha...');
+    setSelectedPhotoId(photoId);
+    setViewMode('photo');
+    setIsSongPlaying(true); // Auto play visualizer song of the moment!
+    setShowCommentsSection(false);
+    setShowPhotoDropdown(false);
+    setShowCaptionBubble(false);
+    setShowShareMenu(false);
   };
 
   const handleBackToAlbums = () => {
@@ -349,20 +352,21 @@ export default function PhotoAlbums({
       setViewMode('list');
       setActiveAlbumId(null);
       setSelectedPhotoId(null);
+      setShowShareMenu(false);
     });
   };
 
   const handleBackToAlbum = () => {
-    triggerNostalgicLoading(() => {
-      setViewMode('album');
-      setSelectedPhotoId(null);
-    });
+    setViewMode('album');
+    setSelectedPhotoId(null);
+    setShowShareMenu(false);
   };
 
   const handleClosePhotoDirect = () => {
     setViewMode('album');
     setSelectedPhotoId(null);
     setShowCaptionBubble(false);
+    setShowShareMenu(false);
   };
 
   // Create Album
@@ -1227,6 +1231,7 @@ export default function PhotoAlbums({
                     const prevIndex = (currentIndex - 1 + activeAlbum.photos.length) % activeAlbum.photos.length;
                     setSelectedPhotoId(activeAlbum.photos[prevIndex].id);
                     setShowPhotoDropdown(false);
+                    setShowShareMenu(false);
                   }}
                   className="absolute -left-3 md:-left-16 xl:-left-[14px] top-1/2 -translate-y-1/2 w-12 h-12 bg-[#c7cace]/50 hover:bg-[#c7cace]/80 text-white border-2 border-cyan-400 rounded-full cursor-pointer hover:scale-110 active:scale-95 transition-all z-35 flex items-center justify-center shadow-lg hover:shadow-cyan-400/40"
                   id="photo-viewer-nav-prev"
@@ -1336,7 +1341,8 @@ export default function PhotoAlbums({
                                   setShowPhotoDropdown(false);
                                   handleDeletePhoto(activePhoto.id);
                                 }}
-                                className="w-full px-4 py-2 hover:bg-red-500/20 text-black hover:text-red-700 font-extrabold transition-colors cursor-pointer text-left uppercase tracking-wider border-t border-black/10"
+                                className="w-full px-4 py-2 hover:bg-red-500/20 hover:text-red-700 font-extrabold transition-colors cursor-pointer text-left uppercase tracking-wider border-t border-black/10"
+                                style={{ color: '#ce1616' }}
                               >
                                 EXCLUIR
                               </button>
@@ -1491,19 +1497,14 @@ export default function PhotoAlbums({
                       </button>
                     </div>
 
-                    {/* Compartilhar Button (Fast Link Copy / Share icon) */}
+                    {/* Compartilhar Button (Toggle Share Menu) */}
                     <button
                       onClick={() => {
-                        if (onShareToFeed) {
-                          onShareToFeed(`Legenda: ${activePhoto.caption}`, 'photo');
-                          alert('Mural de Recados atualizado com sucesso! 🚀');
-                        } else {
-                          navigator.clipboard.writeText(activePhoto.url);
-                          alert('Endereço da foto salvo na área de transferência! chapa 📎');
-                        }
+                        setShowShareMenu(!showShareMenu);
                       }}
                       className="flex items-center justify-center p-1.5 bg-violet-700 hover:bg-violet-600 text-white rounded-full transition-all cursor-pointer border border-violet-500 hover:scale-105"
-                      title="Compartilhar foto no Orkut"
+                      title="Compartilhar foto"
+                      id="photo-action-share-toggle"
                     >
                       <Share2 size={13} />
                     </button>
@@ -1547,6 +1548,75 @@ export default function PhotoAlbums({
                   )}
                 </div>
               </div>
+
+              {/* SHARE SOCIAL MENU - Rendered below the main modal card */}
+              {showShareMenu && (
+                <div 
+                  className="w-full flex justify-center items-center gap-4 mt-5 p-3.5 bg-neutral-900/70 backdrop-blur-md rounded-2xl border-2 border-white/10 shadow-2xl animate-fadeIn z-45" 
+                  id="photo-viewer-share-social-menu"
+                >
+                  {/* Instagran */}
+                  <a
+                    href="https://instagram.com"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-12 h-12 rounded-full bg-gradient-to-tr from-yellow-500 via-pink-500 to-purple-600 flex items-center justify-center text-white border-2 border-white/20 hover:border-white hover:scale-110 active:scale-95 transition-all shadow-lg hover:shadow-pink-500/40"
+                    title="Compartilhar no Instagram"
+                  >
+                    <Instagram size={22} />
+                  </a>
+
+                  {/* Telegram */}
+                  <a
+                    href={`https://t.me/share/url?url=${encodeURIComponent(window.location.href)}&text=${encodeURIComponent(activePhoto.caption || 'Olha essa foto!')}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-12 h-12 rounded-full bg-[#0088cc] flex items-center justify-center text-white border-2 border-white/20 hover:border-white hover:scale-110 active:scale-95 transition-all shadow-lg hover:shadow-sky-500/40"
+                    title="Compartilhar no Telegram"
+                  >
+                    <Send size={22} className="mr-0.5 mt-0.5" />
+                  </a>
+
+                  {/* Whatsapp */}
+                  <a
+                    href={`https://api.whatsapp.com/send?text=${encodeURIComponent((activePhoto.caption || 'Olha essa foto!') + ' ' + window.location.href)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-12 h-12 rounded-full bg-[#25D366] flex items-center justify-center text-white border-2 border-white/20 hover:border-white hover:scale-110 active:scale-95 transition-all shadow-lg hover:shadow-green-500/40"
+                    title="Compartilhar no WhatsApp"
+                  >
+                    <MessageCircle size={22} />
+                  </a>
+
+                  {/* Mensagem no privado */}
+                  <button
+                    onClick={() => {
+                      if (onShareToFeed) {
+                        onShareToFeed(`Compartilhou privado: ${activePhoto.caption}`, 'photo');
+                        alert('Mensagem enviada com sucesso no privado do mural! 🚀');
+                      } else {
+                        alert('Mensagem enviada no chat privado!');
+                      }
+                    }}
+                    className="w-12 h-12 rounded-full bg-neutral-800 border-2 border-white/20 hover:border-white flex items-center justify-center text-white hover:scale-110 active:scale-95 transition-all shadow-lg hover:shadow-white/20 cursor-pointer"
+                    title="Mensagem no Privado"
+                  >
+                    <MessageSquare size={22} />
+                  </button>
+
+                  {/* Link */}
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(window.location.href + '?photo=' + activePhoto.id);
+                      alert('Link de compartilhamento copiado na área de transferência! chapa 📎');
+                    }}
+                    className="w-12 h-12 rounded-full bg-teal-600 border-2 border-white/20 hover:border-white flex items-center justify-center text-white hover:scale-110 active:scale-95 transition-all shadow-lg hover:shadow-teal-500/40 cursor-pointer"
+                    title="Copiar Link"
+                  >
+                    <LinkIcon size={22} />
+                  </button>
+                </div>
+              )}
             </div>
 
               {/* RIGHT NAVIGATION SLIDER CHEVRON */}
@@ -1557,6 +1627,7 @@ export default function PhotoAlbums({
                     const nextIndex = (currentIndex + 1) % activeAlbum.photos.length;
                     setSelectedPhotoId(activeAlbum.photos[nextIndex].id);
                     setShowPhotoDropdown(false);
+                    setShowShareMenu(false);
                   }}
                   className="absolute -right-3 md:-right-16 xl:-right-[14px] top-1/2 -translate-y-1/2 w-12 h-12 bg-[#c7cace]/50 hover:bg-[#c7cace]/80 text-white border-2 border-cyan-400 rounded-full cursor-pointer hover:scale-110 active:scale-95 transition-all z-35 flex items-center justify-center shadow-lg hover:shadow-cyan-400/40"
                   id="photo-viewer-nav-next"
