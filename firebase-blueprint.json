@@ -384,6 +384,23 @@
         "createdAt": { "type": "integer" }
       },
       "required": ["id", "senderId", "receiverId", "status", "createdAt"]
+    },
+    "SharedPhoto": {
+      "title": "SharedPhoto",
+      "description": "Private photo shared between friends",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "photoId": { "type": "string" },
+        "photoUrl": { "type": "string" },
+        "albumId": { "type": "string" },
+        "senderId": { "type": "string" },
+        "receiverId": { "type": "string" },
+        "message": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "viewed": { "type": "boolean" }
+      },
+      "required": ["id", "photoId", "senderId", "receiverId", "createdAt"]
     }
   },
   "firestore": {
@@ -430,6 +447,10 @@
     "/friend_requests/{requestId}": {
       "schema": "FriendRequest",
       "description": "All friendship connection states and pending requests"
+    },
+    "/shared_photos/{shareId}": {
+      "schema": "SharedPhoto",
+      "description": "Photos shared privately between friends"
     }
   }
 }

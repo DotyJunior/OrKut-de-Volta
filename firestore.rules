@@ -175,5 +175,22 @@ service cloud.firestore {
         resource.data.receiverId == request.auth.uid
       );
     }
+
+    // Shared Photos Collection
+    match /shared_photos/{shareId} {
+      allow read: if !isAuthenticated() || (
+        resource.data.senderId == request.auth.uid || 
+        resource.data.receiverId == request.auth.uid
+      );
+      allow create: if shareId != null && shareId.size() <= 128 && (
+        (isAuthenticated() && request.resource.data.senderId == request.auth.uid) ||
+        (request.auth == null)
+      );
+      allow update: if shareId != null && shareId.size() <= 128 && (
+        (isAuthenticated() && (resource.data.senderId == request.auth.uid || resource.data.receiverId == request.auth.uid)) ||
+        (request.auth == null)
+      );
+      allow delete: if (isAuthenticated() && (resource.data.senderId == request.auth.uid || resource.data.receiverId == request.auth.uid)) || (request.auth == null);
+    }
   }
 }

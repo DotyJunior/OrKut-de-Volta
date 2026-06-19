@@ -38,3 +38,17 @@ body {
   animation: shake 0.4s ease-in-out;
 }
 
+/* Disable browser scrollbar visible UI tracks and arrows on mobile to enforce native swiping / sliding gestures */
+@media (max-width: 1024px) {
+  ::-webkit-scrollbar {
+    width: 0px !important;
+    height: 0px !important;
+    background: transparent !important;
+    display: none !important;
+  }
+  * {
+    scrollbar-width: none !important; /* Firefox */
+    -ms-overflow-style: none !important; /* IE 10+ */
+  }
+}
+

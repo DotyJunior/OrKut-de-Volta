@@ -10,6 +10,9 @@ interface ChatMessage {
   text: string;
   timestamp: string; // e.g. "14:32"
   createdAt: number; // raw epoch Ms for the 48-hour auto-deletion
+  type?: 'photo' | 'text';
+  photoUrl?: string;
+  photoCaption?: string;
 }
 
 interface SecretChatProps {
@@ -475,7 +478,33 @@ export default function SecretChat({
                       : 'self-start bg-[#1e2d42] text-[#c8ddf5] rounded-bl-[4px] border border-[#00d4ff]/12'
                   }`}
                 >
-                  <p className="whitespace-pre-line font-sans font-medium">{msg.text}</p>
+                  {(() => {
+                    const isPhoto = msg.text.startsWith('📸 [Foto Anexada]');
+                    if (isPhoto) {
+                      const urlMatch = msg.text.match(/\((https?:\/\/[^\s]+)\)/);
+                      const photoUrl = urlMatch ? urlMatch[1] : '';
+                      const captionMatch = msg.text.match(/Referência: (.*) \(/);
+                      const photoCaption = captionMatch ? captionMatch[1] : 'Foto';
+                      const actualText = msg.text.replace('📸 [Foto Anexada] ', '').replace(/ - Referência: .*\(.*\)/, '');
+                      
+                      return (
+                        <div className="flex flex-col gap-2">
+                           <p className="font-bold">📸 Foto Compartilhada</p>
+                           {photoUrl && (
+                             <a href={photoUrl} target="_blank" rel="noopener noreferrer" className="block overflow-hidden rounded-lg">
+                                <img src={photoUrl} alt={photoCaption} loading="lazy" className="max-w-full h-auto" />
+                             </a>
+                           )}
+                           <p className="font-semibold text-xs">{photoCaption}</p>
+                           {actualText && <p className="whitespace-pre-line font-sans font-medium">"{actualText}"</p>}
+                           <a href={photoUrl} target="_blank" rel="noopener noreferrer" className="text-[10px] text-blue-400 hover:underline cursor-pointer">
+                              Abrir Foto
+                           </a>
+                        </div>
+                      );
+                    }
+                    return <p className="whitespace-pre-line font-sans font-medium">{msg.text}</p>;
+                  })()}
                   <span 
                     className="bubble-time text-[8px] text-[#6b7fa0] block mt-1 tracking-wider"
                     style={{

@@ -29,9 +29,21 @@ import {
   Send,
   MessageCircle
 } from 'lucide-react';
-import { Album, Photo, PhotoComment } from '../types';
+import { Album, Photo, PhotoComment, Friend } from '../types';
 import SocialActions from './SocialActions';
-import { auth } from '../firebase';
+import { auth, db, handleFirestoreError, OperationType } from '../firebase';
+import { 
+  collection, 
+  doc, 
+  onSnapshot, 
+  setDoc, 
+  addDoc, 
+  query, 
+  where, 
+  getDocs,
+  updateDoc,
+  deleteDoc
+} from 'firebase/firestore';
 import { supabaseStorageService } from '../supabase';
 
 export const getPhotoEffectClass = (effect?: string) => {
@@ -71,6 +83,9 @@ interface PhotoAlbumsProps {
   onShareToFeed: (itemTitle: string, itemType: string) => void;
   initialOpenUpload?: boolean;
   onResetUploadTrigger?: () => void;
+  currentUserId?: string;
+  currentUserName?: string;
+  currentUserFriends?: Friend[];
 }
 
 // Preset visual suggestion options for rich user experience
@@ -192,12 +207,158 @@ export default function PhotoAlbums({
   onShareToFeed,
   initialOpenUpload = false,
   onResetUploadTrigger,
+  currentUserId = 'me',
+  currentUserName = 'orkut',
+  currentUserFriends = []
 }: PhotoAlbumsProps) {
   const [activeAlbumId, setActiveAlbumId] = useState<string | null>(null);
   const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(null);
   
+  // Sharing & Received Photos States
+  const [showFriendsShareModal, setShowFriendsShareModal] = useState(false);
+  const [selectedFriends, setSelectedFriends] = useState<string[]>([]);
+  const [shareMessageText, setShareMessageText] = useState('Olha essa foto 😂');
+  const [isSharingInProgress, setIsSharingInProgress] = useState(false);
+  const [receivedPhotosList, setReceivedPhotosList] = useState<any[]>([]);
+  const [activeAlbumsTab, setActiveAlbumsTab] = useState<'my-albums' | 'received-photos'>('my-albums');
+  const [shareSuccessData, setShareSuccessData] = useState<{
+    names: string[];
+    lastRecipientId: string;
+  } | null>(null);
+
+  const getUserIdByNameAndAvatar = (name: string, avatar: string): string => {
+    if (name === 'Lucas Santos') return 'lucas';
+    if (name === 'Alexandre Curi') return 'alexandre';
+    if (name === 'Orkut Büyükkökten' || name === 'Orkut') return 'orkut';
+    if (name === 'H3_Elit3_Hacker') return 'hacker';
+    if (name === profileName) return profileId;
+    if (name === currentUserName) return currentUserId || 'me';
+    return 'me';
+  };
+
+  const handleUserClick = (uid: string) => {
+    handleClosePhotoDirect();
+    window.location.hash = `#/profile/${uid}`;
+  };
+
+  // Real-time synchronization of shared photos with robust local storage fallback
+  useEffect(() => {
+    if (!db || !currentUserId) return;
+    
+    const getLocalShared = (): any[] => {
+      const localPhotosKey = `orkut_local_shared_photos_${currentUserId}`;
+      const existingLocal = localStorage.getItem(localPhotosKey);
+      if (existingLocal) {
+        try {
+          return JSON.parse(existingLocal);
+        } catch (e) {}
+      }
+      return [];
+    };
+
+    const q = query(
+      collection(db, 'shared_photos'),
+      where('receiverId', '==', currentUserId)
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const dbList: any[] = [];
+      snapshot.forEach((docSnap) => {
+        dbList.push({ id: docSnap.id, ...docSnap.data() });
+      });
+
+      const localList = getLocalShared();
+      const combined = [...dbList];
+
+      localList.forEach(localItem => {
+        if (!combined.some(dbItem => dbItem.id === localItem.id)) {
+          combined.push(localItem);
+        }
+      });
+
+      // Sort by createdAt descending
+      combined.sort((a, b) => {
+        const ad = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const bd = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return bd - ad;
+      });
+      setReceivedPhotosList(combined);
+    }, (error) => {
+      console.error("Error loading shared photos, using local fallback only:", error);
+      const localList = getLocalShared();
+      localList.sort((a, b) => {
+        const ad = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const bd = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return bd - ad;
+      });
+      setReceivedPhotosList(localList);
+    });
+
+    return () => unsubscribe();
+  }, [currentUserId]);
+
+  const [senderProfiles, setSenderProfiles] = useState<{[uid: string]: any}>({});
+
+  useEffect(() => {
+    if (!db || receivedPhotosList.length === 0) return;
+    
+    // Find unloaded distinct senders
+    const unloadedSenders = ([...new Set(receivedPhotosList.map(item => (item.senderId || '') as string))] as string[])
+      .filter(id => id && !senderProfiles[id]);
+      
+    if (unloadedSenders.length === 0) return;
+    
+    unloadedSenders.forEach(async (senderId) => {
+      try {
+        const docSnap = await getDocs(query(collection(db, 'profiles'), where('id', '==', senderId)));
+        if (!docSnap.empty) {
+          const data = docSnap.docs[0].data();
+          setSenderProfiles(prev => ({
+            ...prev,
+            [senderId]: data
+          }));
+        } else {
+          // Fallback profiles
+          const defaultNames: {[uid: string]: string} = {
+            'lucas': 'Lucas Santos',
+            'alexandre': 'Alexandre Curi',
+            'orkut': 'Orkut Büyükkökten',
+            'hacker': 'H3_Elit3_Hacker'
+          };
+          const defaultAvatars: {[uid: string]: string} = {
+            'lucas': 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
+            'alexandre': 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=150',
+            'orkut': 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150',
+            'hacker': 'https://images.unsplash.com/photo-1544197150-b99a580bb7a8?w=150'
+          };
+          setSenderProfiles(prev => ({
+            ...prev,
+            [senderId]: {
+              name: defaultNames[senderId] || `Amigo #${senderId.substring(0, 5)}`,
+              avatar: defaultAvatars[senderId] || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150'
+            }
+          }));
+        }
+      } catch (err) {
+        console.error("Error loading sender profile details:", err);
+      }
+    });
+  }, [receivedPhotosList, senderProfiles]);
+
   // View states: 'list' | 'album' | 'photo'
   const [viewMode, setViewMode] = useState<'list' | 'album' | 'photo'>('list');
+
+  // Prevent background scrolling when viewing a photo in full screen modal overlay
+  useEffect(() => {
+    if (viewMode === 'photo') {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [viewMode]);
 
   // Edit Caption states
   const [showEditCaption, setShowEditCaption] = useState(false);
@@ -808,6 +969,37 @@ export default function PhotoAlbums({
             )}
           </div>
 
+          {/* Sub Tab Navigation for Owner Mode */}
+          {isOwnProfile && (
+            <div className="bg-[#dee7f4]/40 border-b border-neutral-300 px-4 pt-2.5 flex items-center gap-1.5 bg-gradient-to-r from-slate-100 to-slate-200/50">
+              <button
+                onClick={() => setActiveAlbumsTab('my-albums')}
+                className={`px-4 py-2 text-xs font-bold rounded-t-xl transition-all cursor-pointer flex items-center gap-1.5 border-t border-x ${
+                  activeAlbumsTab === 'my-albums'
+                    ? 'bg-[#fffdfa] border-neutral-300 text-[#1d4ed8] -mb-[1px] shadow-xs font-black z-10'
+                    : 'bg-transparent border-transparent text-neutral-600 hover:text-neutral-950 font-semibold'
+                }`}
+              >
+                📁 Meus Álbuns ({profileAlbums.length})
+              </button>
+              <button
+                onClick={() => setActiveAlbumsTab('received-photos')}
+                className={`px-4 py-2 text-xs font-bold rounded-t-xl transition-all cursor-pointer flex items-center gap-1.5 border-t border-x ${
+                  activeAlbumsTab === 'received-photos'
+                    ? 'bg-[#fffdfa] border-neutral-300 text-[#1d4ed8] -mb-[1px] shadow-xs font-black z-10'
+                    : 'bg-transparent border-transparent text-neutral-600 hover:text-neutral-950 font-semibold'
+                }`}
+              >
+                📩 Fotos Recebidas
+                {receivedPhotosList.length > 0 && (
+                  <span className="bg-pink-600 text-white rounded-full px-2 py-0.5 text-[9px] font-mono font-bold animate-pulse">
+                    {receivedPhotosList.length}
+                  </span>
+                )}
+              </button>
+            </div>
+          )}
+
           {isVisitorMode && (
             <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 text-[11px] text-amber-800 font-sans flex items-center justify-between shadow-xs">
               <span className="flex items-center gap-1.5 font-medium">
@@ -823,7 +1015,115 @@ export default function PhotoAlbums({
           )}
 
           <div className="p-4 bg-transparent min-h-[380px]">
-            {profileAlbums.length === 0 ? (
+            {activeAlbumsTab === 'received-photos' && isOwnProfile ? (
+              receivedPhotosList.length === 0 ? (
+                <div className="text-center py-16 text-neutral-400 italic font-sans flex flex-col items-center justify-center gap-2">
+                  <span className="text-3xl">✉️</span>
+                  <span className="font-bold text-neutral-500">Nenhuma foto compartilhada com você ainda.</span>
+                  <p className="text-[10px] text-neutral-400">Peça para seus amigos enviarem fotos nostálgicas no seu privado e elas aparecerão aqui! chapa 🚀</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                  {receivedPhotosList.map(item => {
+                    const sender = senderProfiles[item.senderId] || {
+                      name: `Amigo #${item.senderId.substring(0, 5)}`,
+                      avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150'
+                    };
+                    
+                    return (
+                      <div
+                        key={item.id}
+                        className="border border-neutral-200 rounded-2xl overflow-hidden bg-white hover:shadow-md transition-all flex flex-col text-left shadow-xs justify-between group"
+                      >
+                        {/* Sender card header */}
+                        <div className="p-3 bg-gradient-to-r from-slate-50 to-[#dee7f4]/30 border-b border-neutral-100 flex items-center justify-between">
+                          <div className="flex items-center gap-2.5">
+                            <img
+                              src={sender.avatar}
+                              alt={sender.name}
+                              className="w-8 h-8 rounded-full border border-neutral-255 object-cover"
+                              referrerPolicy="no-referrer"
+                            />
+                            <div className="flex flex-col">
+                              <span className="text-xs font-bold text-neutral-800 leading-tight">{sender.name}</span>
+                              <span className="text-[8px] text-neutral-400 font-mono">
+                                {item.createdAt ? new Date(item.createdAt).toLocaleString('pt-BR') : 'recentemente'}
+                              </span>
+                            </div>
+                          </div>
+
+                          <button
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              if (confirm('Deseja apagar esse compartilhamento recebido chapa? 🗑️')) {
+                                const removeLocal = () => {
+                                  const localPhotosKey = `orkut_local_shared_photos_${currentUserId}`;
+                                  const existingLocal = localStorage.getItem(localPhotosKey);
+                                  if (existingLocal) {
+                                    try {
+                                      const filtered = JSON.parse(existingLocal).filter((it: any) => it.id !== item.id);
+                                      localStorage.setItem(localPhotosKey, JSON.stringify(filtered));
+                                    } catch (err) {}
+                                  }
+                                  setReceivedPhotosList(prev => prev.filter(it => it.id !== item.id));
+                                };
+
+                                try {
+                                  await deleteDoc(doc(db, 'shared_photos', item.id));
+                                  removeLocal();
+                                  alert('Compartilhamento removido com sucesso!');
+                                } catch (err) {
+                                  console.error("Falha ao deletar do Firestore:", err);
+                                  removeLocal();
+                                  alert('Compartilhamento removido localmente!');
+                                }
+                              }
+                            }}
+                            className="p-1 px-2 text-[10px] bg-red-50 hover:bg-red-100 text-red-600 rounded border border-red-200/50 cursor-pointer"
+                            title="Apagar foto"
+                          >
+                            🗑️ Apagar
+                          </button>
+                        </div>
+
+                        {/* Image section */}
+                        <div className="h-44 bg-neutral-900 flex items-center justify-center overflow-hidden relative">
+                          <img
+                            src={item.photoUrl}
+                            alt="Foto compartilhada"
+                            className="w-full h-full object-cover group-hover:scale-102 transition-transform scale-100"
+                            referrerPolicy="no-referrer"
+                          />
+                          
+                          {/* Quick overlay to view */}
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                            <button
+                              onClick={() => {
+                                // Direct load fullscreen view
+                                setActiveAlbumId(item.albumId || null);
+                                setSelectedPhotoId(item.photoId);
+                                setViewMode('photo');
+                              }}
+                              className="px-3.5 py-1.5 bg-violet-600 hover:bg-violet-700 text-white font-bold rounded-lg text-xs transition-all hover:scale-105 shadow-md flex items-center gap-1.5 cursor-pointer"
+                            >
+                              👀 Visualizar Grande
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Message text bubble details */}
+                        <div className="p-3 bg-neutral-50 font-sans text-xs text-neutral-700 italic border-t border-neutral-100 flex-1 leading-relaxed whitespace-pre-wrap">
+                          <span className="text-[9px] uppercase tracking-wider font-extrabold text-violet-600 not-italic block mb-0.5">
+                            ✉️ recado do companheiro:
+                          </span>
+                          "{item.message}"
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )
+            ) : profileAlbums.length === 0 ? (
               <div className="text-center py-16 text-neutral-400 italic font-sans flex flex-col items-center justify-center gap-2">
                 <ImageIcon size={36} className="text-neutral-300" />
                 <span>Nenhum álbum foi compilado para este perfil de segurança ainda.</span>
@@ -1233,11 +1533,11 @@ export default function PhotoAlbums({
                     setShowPhotoDropdown(false);
                     setShowShareMenu(false);
                   }}
-                  className="absolute -left-3 md:-left-16 xl:-left-[14px] top-1/2 -translate-y-1/2 w-12 h-12 bg-[#c7cace]/50 hover:bg-[#c7cace]/80 text-white border-2 border-cyan-400 rounded-full cursor-pointer hover:scale-110 active:scale-95 transition-all z-35 flex items-center justify-center shadow-lg hover:shadow-cyan-400/40"
+                  className="absolute -left-3 md:-left-16 xl:-left-[14px] top-1/2 -translate-y-1/2 w-12 h-12 bg-black/70 hover:bg-white text-white hover:text-black border-2 border-cyan-400 rounded-full cursor-pointer opacity-30 hover:opacity-100 hover:scale-115 active:scale-95 transition-all z-35 flex items-center justify-center shadow-lg hover:shadow-cyan-400/50 group"
                   id="photo-viewer-nav-prev"
                   title="Foto Anterior"
                 >
-                  <span className="text-xl font-bold text-slate-800">{"<"}</span>
+                  <span className="text-xl font-black select-none pointer-events-none">◀</span>
                 </button>
               )}
 
@@ -1556,19 +1856,19 @@ export default function PhotoAlbums({
                   id="photo-viewer-share-social-menu"
                 >
                   {/* Instagran */}
-                  <a
-                    href="https://instagram.com"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="w-12 h-12 rounded-full bg-gradient-to-tr from-yellow-500 via-pink-500 to-purple-600 flex items-center justify-center text-white border-2 border-white/20 hover:border-white hover:scale-110 active:scale-95 transition-all shadow-lg hover:shadow-pink-500/40"
+                  <button
+                    onClick={() => {
+                      alert('O Instagram não permite compartilhamento manual direto via link de imagem. Chapa, copie o link direto da foto no botão azul de link ou compartilhe no privado dos seus amigos! 📸');
+                    }}
+                    className="w-12 h-12 rounded-full bg-gradient-to-tr from-yellow-500 via-pink-500 to-purple-600 flex items-center justify-center text-white border-2 border-white/20 hover:border-white hover:scale-110 active:scale-95 transition-all shadow-lg hover:shadow-pink-500/40 cursor-pointer"
                     title="Compartilhar no Instagram"
                   >
                     <Instagram size={22} />
-                  </a>
+                  </button>
 
                   {/* Telegram */}
                   <a
-                    href={`https://t.me/share/url?url=${encodeURIComponent(window.location.href)}&text=${encodeURIComponent(activePhoto.caption || 'Olha essa foto!')}`}
+                    href={`https://t.me/share/url?url=${encodeURIComponent(activePhoto.url)}&text=${encodeURIComponent(activePhoto.caption || 'Olha essa foto retrô do orkut!')}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="w-12 h-12 rounded-full bg-[#0088cc] flex items-center justify-center text-white border-2 border-white/20 hover:border-white hover:scale-110 active:scale-95 transition-all shadow-lg hover:shadow-sky-500/40"
@@ -1579,7 +1879,7 @@ export default function PhotoAlbums({
 
                   {/* Whatsapp */}
                   <a
-                    href={`https://api.whatsapp.com/send?text=${encodeURIComponent((activePhoto.caption || 'Olha essa foto!') + ' ' + window.location.href)}`}
+                    href={`https://api.whatsapp.com/send?text=${encodeURIComponent((activePhoto.caption || 'Olha essa foto retrô do orkut!') + ' ' + activePhoto.url)}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="w-12 h-12 rounded-full bg-[#25D366] flex items-center justify-center text-white border-2 border-white/20 hover:border-white hover:scale-110 active:scale-95 transition-all shadow-lg hover:shadow-green-500/40"
@@ -1588,18 +1888,17 @@ export default function PhotoAlbums({
                     <MessageCircle size={22} />
                   </a>
 
-                  {/* Mensagem no privado */}
+                  {/* Mensagem no privado (Send to Friends Panel Toggle) */}
                   <button
                     onClick={() => {
-                      if (onShareToFeed) {
-                        onShareToFeed(`Compartilhou privado: ${activePhoto.caption}`, 'photo');
-                        alert('Mensagem enviada com sucesso no privado do mural! 🚀');
-                      } else {
-                        alert('Mensagem enviada no chat privado!');
-                      }
+                      setShowFriendsShareModal(!showFriendsShareModal);
                     }}
-                    className="w-12 h-12 rounded-full bg-neutral-800 border-2 border-white/20 hover:border-white flex items-center justify-center text-white hover:scale-110 active:scale-95 transition-all shadow-lg hover:shadow-white/20 cursor-pointer"
-                    title="Mensagem no Privado"
+                    className={`w-12 h-12 rounded-full border-2 hover:border-white flex items-center justify-center text-white hover:scale-110 active:scale-95 transition-all shadow-lg cursor-pointer ${
+                      showFriendsShareModal 
+                        ? 'bg-pink-600 border-pink-400 hover:shadow-pink-500/40' 
+                        : 'bg-neutral-800 border-white/20 hover:shadow-white/20'
+                    }`}
+                    title="Compartilhar com Amigos no Privado"
                   >
                     <MessageSquare size={22} />
                   </button>
@@ -1607,8 +1906,8 @@ export default function PhotoAlbums({
                   {/* Link */}
                   <button
                     onClick={() => {
-                      navigator.clipboard.writeText(window.location.href + '?photo=' + activePhoto.id);
-                      alert('Link de compartilhamento copiado na área de transferência! chapa 📎');
+                      navigator.clipboard.writeText(activePhoto.url);
+                      alert('O link público da foto foi copiado para a área de transferência! chapa 📎');
                     }}
                     className="w-12 h-12 rounded-full bg-teal-600 border-2 border-white/20 hover:border-white flex items-center justify-center text-white hover:scale-110 active:scale-95 transition-all shadow-lg hover:shadow-teal-500/40 cursor-pointer"
                     title="Copiar Link"
@@ -1629,11 +1928,11 @@ export default function PhotoAlbums({
                     setShowPhotoDropdown(false);
                     setShowShareMenu(false);
                   }}
-                  className="absolute -right-3 md:-right-16 xl:-right-[14px] top-1/2 -translate-y-1/2 w-12 h-12 bg-[#c7cace]/50 hover:bg-[#c7cace]/80 text-white border-2 border-cyan-400 rounded-full cursor-pointer hover:scale-110 active:scale-95 transition-all z-35 flex items-center justify-center shadow-lg hover:shadow-cyan-400/40"
+                  className="absolute -right-3 md:-right-16 xl:-right-[14px] top-1/2 -translate-y-1/2 w-12 h-12 bg-black/70 hover:bg-white text-white hover:text-black border-2 border-cyan-400 rounded-full cursor-pointer opacity-30 hover:opacity-100 hover:scale-115 active:scale-95 transition-all z-35 flex items-center justify-center shadow-lg hover:shadow-cyan-400/50 group"
                   id="photo-viewer-nav-next"
                   title="Próxima Foto"
                 >
-                  <span className="text-xl font-bold text-slate-800">{">"}</span>
+                  <span className="text-xl font-black select-none pointer-events-none">▶</span>
                 </button>
               )}
 
@@ -1731,12 +2030,18 @@ export default function PhotoAlbums({
                           activePhoto.comments.map(c => (
                             <div key={c.id} className="text-xs flex flex-col gap-1.5">
                               <div className="flex gap-2 items-center">
-                                <img 
-                                  src={c.authorAvatar || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120"} 
-                                  alt={c.authorName} 
-                                  className="w-5 h-5 rounded-full object-cover shrink-0 border border-sky-400/25" 
-                                />
-                                <span className="font-extrabold text-[#00f0ff]">{c.authorName}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleUserClick(getUserIdByNameAndAvatar(c.authorName, c.authorAvatar))}
+                                  className="flex gap-2 items-center text-[#00f0ff] hover:underline hover:text-cyan-300 text-left cursor-pointer group focus:outline-none"
+                                >
+                                  <img 
+                                    src={c.authorAvatar || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120"} 
+                                    alt={c.authorName} 
+                                    className="w-5 h-5 rounded-full object-cover shrink-0 border border-sky-400/25 group-hover:border-cyan-400 transition-colors" 
+                                  />
+                                  <span className="font-extrabold">{c.authorName}</span>
+                                </button>
                                 <span className="text-[9px] text-neutral-500 font-mono ml-auto">{c.date || "recent"}</span>
                               </div>
                               <p className="text-neutral-200 pl-7 text-left leading-relaxed break-words">{c.text}</p>
@@ -1804,8 +2109,14 @@ export default function PhotoAlbums({
                         activePhoto.comments.map(c => (
                           <div key={c.id} className="text-[11px] flex flex-col gap-1 pb-1.5 last:pb-0">
                             <div className="flex gap-1.5 items-center">
-                              <img src={c.authorAvatar} alt={c.authorName} className="w-4 h-4 rounded-full object-cover shrink-0" />
-                              <span className="font-extrabold text-[#00f0ff]">{c.authorName}</span>
+                              <button
+                                type="button"
+                                onClick={() => handleUserClick(getUserIdByNameAndAvatar(c.authorName, c.authorAvatar))}
+                                className="flex gap-1.5 items-center text-[#00f0ff] hover:underline hover:text-cyan-300 text-left cursor-pointer group focus:outline-none"
+                              >
+                                <img src={c.authorAvatar} alt={c.authorName} className="w-4 h-4 rounded-full object-cover shrink-0 border border-sky-400/25 group-hover:border-cyan-400" />
+                                <span className="font-extrabold">{c.authorName}</span>
+                              </button>
                               <span className="text-[8px] text-neutral-500 ml-auto">{c.date || "recent"}</span>
                             </div>
                             <p className="text-neutral-300 pl-5 text-left">{c.text}</p>
@@ -1816,6 +2127,248 @@ export default function PhotoAlbums({
                     </div>
                   </div>
                 </>
+              )}
+
+              {/* COMPARTILHAR COM AMIGOS RESPONSIVE SIDE PANEL */}
+              {showFriendsShareModal && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  className="w-full xl:w-[350px] bg-[#1a1c22]/95 border-[3px] border-violet-500 rounded-3xl p-5 text-white shadow-2xl flex flex-col shrink-0 self-stretch relative text-left"
+                  id="photo-viewer-share-social-panel"
+                >
+                  <div className="flex flex-col h-full justify-between">
+                    {shareSuccessData ? (
+                      <div className="flex flex-col items-center justify-center py-8 text-center px-4 my-auto">
+                        <div className="w-16 h-16 bg-emerald-500/20 border-2 border-emerald-400 rounded-full flex items-center justify-center text-emerald-400 text-3xl mb-4 animate-bounce">
+                          ✓
+                        </div>
+                        <p className="text-sm font-bold text-emerald-400 mb-2">Mensagem enviada!</p>
+                        <p className="text-xs text-neutral-300 leading-relaxed mb-6 font-mono">
+                          Foto compartilhada com: <strong>{shareSuccessData.names.join(', ')}</strong>.
+                        </p>
+                        
+                        <div className="flex flex-col gap-2.5 w-full">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              // Send the message block and open chat with last friend
+                              window.dispatchEvent(new CustomEvent('open-secret-chat', {
+                                detail: { friendId: shareSuccessData.lastRecipientId }
+                              }));
+                              handleClosePhotoDirect();
+                              setShowFriendsShareModal(false);
+                              setShareSuccessData(null);
+                            }}
+                            className="w-full py-2 bg-gradient-to-r from-violet-600 to-indigo-700 text-white font-extrabold text-xs cursor-pointer rounded-xl hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-1.5 shadow-lg shadow-violet-500/30 border-0"
+                          >
+                            💬 Abrir conversa
+                          </button>
+                          
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShareSuccessData(null);
+                              setShowFriendsShareModal(false);
+                              setSelectedFriends([]);
+                            }}
+                            className="w-full py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 font-bold text-xs cursor-pointer rounded-xl transition-colors border border-neutral-700"
+                          >
+                            Voltar para o Álbum
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div>
+                          {/* Header */}
+                          <div className="flex items-center justify-between pb-3 border-b border-neutral-700/60 mb-3">
+                            <span className="text-xs font-black uppercase tracking-widest text-[#d946ef] flex items-center gap-1.5">
+                              💬 Compartilhar com Amigos
+                            </span>
+                            <button
+                              onClick={() => {
+                                setShowFriendsShareModal(false);
+                                setSelectedFriends([]);
+                              }}
+                              className="text-neutral-400 hover:text-white font-extrabold text-xs cursor-pointer focus:outline-none p-1 bg-neutral-800 rounded-full w-5 h-5 flex items-center justify-center border border-neutral-700 hover:bg-neutral-700"
+                              title="Fechar painel"
+                            >
+                              X
+                            </button>
+                          </div>
+
+                          {/* Friends List */}
+                          <div className="max-h-[220px] overflow-y-auto pr-1 flex flex-col gap-1.5 scrollbar-thin scrollbar-thumb-neutral-800">
+                            {currentUserFriends.length === 0 ? (
+                              <div className="text-center py-6 text-neutral-500 text-xs italic">
+                                Nenhum amigo encontrado na rede chapa!
+                              </div>
+                            ) : (
+                              currentUserFriends.map(friend => {
+                                const isSelected = selectedFriends.includes(friend.id);
+                                return (
+                                  <div
+                                    key={friend.id}
+                                    onClick={() => {
+                                      if (isSelected) {
+                                        setSelectedFriends(selectedFriends.filter(id => id !== friend.id));
+                                      } else {
+                                        setSelectedFriends([...selectedFriends, friend.id]);
+                                      }
+                                    }}
+                                    className={`flex items-center justify-between p-2 rounded-xl border transition-all cursor-pointer select-none ${
+                                      isSelected 
+                                        ? 'bg-violet-900/30 border-violet-500' 
+                                        : 'bg-neutral-800/40 border-neutral-700/50 hover:bg-neutral-800/75'
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      <img
+                                        src={friend.avatar}
+                                        alt={friend.name}
+                                        className="w-8 h-8 rounded-full border border-white/10 object-cover"
+                                        referrerPolicy="no-referrer"
+                                      />
+                                      <div className="flex flex-col">
+                                        <span className="text-xs font-bold leading-tight line-clamp-1">
+                                          {friend.name}
+                                        </span>
+                                        <span className="text-[9px] text-neutral-400 font-mono">{friend.location}</span>
+                                      </div>
+                                    </div>
+                                    <div className={`w-5 h-5 rounded-full border flex items-center justify-center transition-all text-xs font-bold ${
+                                      isSelected 
+                                        ? 'bg-violet-600 border-violet-400 text-white' 
+                                        : 'border-neutral-600 text-transparent'
+                                    }`}>
+                                      ✓
+                                    </div>
+                                  </div>
+                                );
+                              })
+                            )}
+                          </div>
+
+                          {/* Message Field */}
+                          <div className="mt-4">
+                            <label className="text-[10px] font-black uppercase tracking-widest text-[#00f0ff] block mb-1">
+                              Mensagem Privada (Opcional):
+                            </label>
+                            <textarea
+                              value={shareMessageText}
+                              onChange={(e) => setShareMessageText(e.target.value)}
+                              placeholder="Olha essa foto 😂"
+                              className="w-full text-xs p-2 rounded-xl bg-black border border-neutral-700 text-white font-sans focus:border-violet-500 focus:outline-none placeholder-neutral-600 resize-none"
+                              rows={2}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Bottom Actions */}
+                        <div className="flex gap-2 justify-end mt-4 pt-3 border-t border-neutral-700/60">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowFriendsShareModal(false);
+                              setSelectedFriends([]);
+                            }}
+                            className="px-4 py-1.5 text-xs bg-neutral-800 hover:bg-neutral-700 text-neutral-300 font-bold rounded-lg cursor-pointer transition-colors border border-neutral-700"
+                          >
+                            Cancelar
+                          </button>
+                          <button
+                            type="button"
+                            disabled={selectedFriends.length === 0 || isSharingInProgress}
+                            onClick={async () => {
+                              if (selectedFriends.length === 0) return;
+                              setIsSharingInProgress(true);
+                              try {
+                                for (const recipientId of selectedFriends) {
+                                  const shareId = 'share_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
+                                  const record = {
+                                    id: shareId,
+                                    photoId: activePhoto.id,
+                                    photoUrl: activePhoto.url,
+                                    albumId: activeAlbumId || '',
+                                    senderId: currentUserId,
+                                    receiverId: recipientId,
+                                    message: shareMessageText || 'Olha essa foto 😂',
+                                    createdAt: new Date().toISOString(),
+                                    viewed: false
+                                  };
+                                  try {
+                                    await setDoc(doc(db, 'shared_photos', shareId), record);
+                                  } catch (err) {
+                                    console.warn("Firestore error when sharing, utilizing offline fallback:", err);
+                                  }
+
+                                  // Persistent offline fallback list for shared photos
+                                  const localPhotosKey = `orkut_local_shared_photos_${recipientId}`;
+                                  const existingLocal = localStorage.getItem(localPhotosKey);
+                                  let localList = [];
+                                  if (existingLocal) {
+                                    try { localList = JSON.parse(existingLocal); } catch (e) {}
+                                  }
+                                  localList.push(record);
+                                  localStorage.setItem(localPhotosKey, JSON.stringify(localList));
+
+                                  // Append message directly into secret chat local history too!
+                                  const storageKey = `orkut_secure_secret_chat_${recipientId}`;
+                                  const saved = localStorage.getItem(storageKey);
+                                  let currentMsgs: any[] = [];
+                                  if (saved) {
+                                    try { currentMsgs = JSON.parse(saved); } catch (e) {}
+                                  }
+                                  const now = new Date();
+                                  const timeStr = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+                                  const sharedMsg = shareMessageText.trim() || 'Olha essa foto 😂';
+                                  currentMsgs.push({
+                                    id: 'msg_photo_lbl_' + Math.random().toString(36).substr(2, 9),
+                                    senderId: 'me',
+                                    senderName: currentUserName || 'Você',
+                                    text: `📸 [Foto Anexada] ${sharedMsg} - Referência: ${activePhoto.caption || 'Foto'} (${activePhoto.url})`,
+                                    timestamp: timeStr,
+                                    createdAt: Date.now()
+                                  });
+                                  localStorage.setItem(storageKey, JSON.stringify(currentMsgs));
+                                }
+
+                                if (onShareToFeed) {
+                                  onShareToFeed(`Compartilhou privado: "${activePhoto.caption || ''}" com amigos`, 'photo');
+                                }
+
+                                const sharedFriendNames = selectedFriends.map(friendId => {
+                                  const friendObj = currentUserFriends.find(f => f.id === friendId);
+                                  return friendObj ? friendObj.name : friendId;
+                                });
+
+                                setShareSuccessData({
+                                  names: sharedFriendNames,
+                                  lastRecipientId: selectedFriends[selectedFriends.length - 1]
+                                });
+
+                              } catch (err) {
+                                console.error("Falha ao salvar compartilhamento de foto:", err);
+                                alert("Desculpe chapa, falha ao salvar compartilhamento de foto no banco.");
+                              } finally {
+                                setIsSharingInProgress(false);
+                              }
+                            }}
+                            className={`px-4 py-1.5 text-xs font-bold rounded-lg cursor-pointer transition-all flex items-center gap-1 ${
+                              selectedFriends.length === 0 || isSharingInProgress
+                                ? 'bg-neutral-700 text-neutral-500 cursor-not-allowed border border-neutral-800'
+                                : 'bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white shadow-lg hover:shadow-violet-600/30 border border-violet-400'
+                            }`}
+                          >
+                            {isSharingInProgress ? 'Enviando...' : 'Enviar'}
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </motion.div>
               )}
             </div>
           </div>

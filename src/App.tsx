@@ -1180,8 +1180,18 @@ export default function App() {
     window.addEventListener('hashchange', handleHashChange);
     handleHashChange(); // Trigger on mount
 
+    const handleOpenSecretChatEvent = (e: Event) => {
+      const customEvent = e as CustomEvent<{ friendId: string }>;
+      if (customEvent.detail && customEvent.detail.friendId) {
+        setSecretChatFriendId(customEvent.detail.friendId);
+        setIsSecretChatOpen(true);
+      }
+    };
+    window.addEventListener('open-secret-chat', handleOpenSecretChatEvent);
+
     return () => {
       window.removeEventListener('hashchange', handleHashChange);
+      window.removeEventListener('open-secret-chat', handleOpenSecretChatEvent);
     };
   }, []);
 
@@ -2005,6 +2015,9 @@ export default function App() {
             onShareToFeed={handleAddNewShare}
             initialOpenUpload={autoOpenUpload}
             onResetUploadTrigger={() => setAutoOpenUpload(false)}
+            currentUserId={currentUserProfile?.id || 'me'}
+            currentUserName={currentUserProfile?.name || 'orkut'}
+            currentUserFriends={getFriendsForProfile(currentUserProfile?.id || 'me')}
           />
         )}
 
