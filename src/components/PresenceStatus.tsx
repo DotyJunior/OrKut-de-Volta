@@ -277,22 +277,34 @@ export default function PresenceStatus({ profileId, isOwnProfile, profileName }:
           }
         }}
       >
-        <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded border border-neutral-300/40 bg-neutral-100/40 hover:bg-neutral-200/40 transition-colors text-[11px]`}>
+        <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded border transition-colors text-[11px] ${
+          presence === 'online'
+            ? 'bg-[#107e45] border-[#50fe6b] text-[#39ffc1] hover:bg-[#128e4e] hover:border-[#5efe7a]'
+            : 'border-neutral-300/40 bg-neutral-100/40 text-neutral-700 hover:bg-neutral-200/40'
+        }`}>
           
           {/* Dot container with pulse option */}
           <div className="relative flex items-center justify-center w-2.5 h-2.5">
             {pulse && (
-              <span className="absolute animate-ping inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+              <span className={`absolute animate-ping inline-flex h-full w-full rounded-full opacity-75 ${
+                presence === 'online' ? 'bg-[#16fc4b]' : 'bg-emerald-400'
+              }`} />
             )}
-            <span className={`relative inline-flex rounded-full h-2 w-2 ${colorClass}`} />
+            <span className={`relative inline-flex rounded-full h-2 w-2 ${
+              presence === 'online' ? 'bg-[#16fc4b] shadow-[0_0_10px_rgba(22,252,75,0.8)]' : colorClass
+            }`} />
           </div>
 
-          <span className="font-sans font-medium text-neutral-700 tracking-tight">
+          <span className={`font-sans font-medium tracking-tight ${
+            presence === 'online' ? 'text-[#39ffc1]' : 'text-neutral-700'
+          }`}>
             {label}
           </span>
           
           {isOwnProfile && (
-            <ChevronDown size={11} className="text-neutral-400 group-hover:text-neutral-600 transition-colors" />
+            <ChevronDown size={11} className={`transition-colors ${
+              presence === 'online' ? 'text-[#f3f6f3]' : 'text-neutral-400 group-hover:text-neutral-600'
+            }`} />
           )}
         </div>
 

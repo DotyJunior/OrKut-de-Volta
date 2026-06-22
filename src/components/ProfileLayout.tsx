@@ -1,5 +1,5 @@
 import React, { useState, FormEvent, useEffect, useRef, ChangeEvent, MouseEvent } from 'react';
-import { Eye, Edit, Save, ShieldCheck, Heart, IceCream, Smile, Star, MapPin, Sparkles, KeyRound, Palette, RefreshCw, Send, MessageSquare, Camera, Trash2, Bell, UserPlus } from 'lucide-react';
+import { Eye, Edit, Save, ShieldCheck, Heart, IceCream, Smile, Star, MapPin, Sparkles, KeyRound, Palette, RefreshCw, Send, MessageSquare, Camera, Trash2, Bell, UserPlus, Settings, Cog } from 'lucide-react';
 import { Profile, Friend, Community, Album, Photo, SharedMemory, FriendRequest } from '../types';
 import { getThemeStyles } from '../lib/theme';
 import SocialSidebar from './SocialSidebar';
@@ -7,6 +7,8 @@ import IdentityWizard from './IdentityWizard';
 import SocialActions from './SocialActions';
 import PresenceStatus from './PresenceStatus';
 import GlossyRetroButton from './GlossyRetroButton';
+import { ThemeSelector } from './ThemeSelector';
+import { RainOverlay } from './RainOverlay';
 import { motion, AnimatePresence } from 'motion/react';
 
 const getFontStyleClass = (style?: string) => {
@@ -62,7 +64,9 @@ interface ProfileLayoutProps {
   onAddFriend?: (receiverId: string) => Promise<void>;
   onAcceptFriendRequest?: (requestId: string) => Promise<void>;
   onRejectFriendRequest?: (requestId: string) => Promise<void>;
+  onRemoveFriend?: (receiverId: string) => Promise<void>;
   profiles?: Record<string, Profile>;
+  loggedInUserId?: string;
 }
 
 export default function ProfileLayout({
@@ -86,7 +90,9 @@ export default function ProfileLayout({
   onAddFriend,
   onAcceptFriendRequest,
   onRejectFriendRequest,
+  onRemoveFriend,
   profiles = {},
+  loggedInUserId,
 }: ProfileLayoutProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [showIdentityWizard, setShowIdentityWizard] = useState(false);
@@ -94,10 +100,11 @@ export default function ProfileLayout({
   const [isPendingLocal, setIsPendingLocal] = useState(false);
   const [isRequestsModalOpen, setIsRequestsModalOpen] = useState(false);
 
-  const getLoggedInUserId = () => {
-    return localStorage.getItem('orkut_demo_me_id') || 'me';
-  };
-  const loggedInUid = getLoggedInUserId();
+  const [isFriendDropdownOpen, setIsFriendDropdownOpen] = useState(false);
+  const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
+  const [isRemovingFriend, setIsRemovingFriend] = useState(false);
+
+  const loggedInUid = loggedInUserId;
 
   // Determine friendship status
   const isAlreadyFriend = friends.some(f => f.id === loggedInUid) || 
@@ -105,14 +112,14 @@ export default function ProfileLayout({
 
   const isFriends = isAlreadyFriend || friendRequests.some(req => 
     req.status === 'accepted' && 
-    ((req.senderId === loggedInUid && req.receiverId === profile.id) || 
-     (req.senderId === profile.id && req.receiverId === loggedInUid))
+    ((req.fromUserId === loggedInUid && req.toUserId === profile.id) || 
+     (req.fromUserId === profile.id && req.toUserId === loggedInUid))
   );
 
   const pendingRequest = friendRequests.find(req => 
     req.status === 'pending' && 
-    ((req.senderId === loggedInUid && req.receiverId === profile.id) || 
-     (req.senderId === profile.id && req.receiverId === loggedInUid))
+    ((req.fromUserId === loggedInUid && req.toUserId === profile.id) || 
+     (req.fromUserId === profile.id && req.toUserId === loggedInUid))
   );
 
   // Compute "Amigos de amigos / Sugestões" that are clickable and load the profile
@@ -125,9 +132,11 @@ export default function ProfileLayout({
   );
 
   // Pending received requests FOR the logged-in user to show in the Bell icon notification!
+  // Fallback to checking toUserId as well in case of mapping inconsistencies.
   const pendingReceivedRequests = friendRequests.filter(req => 
-    req.status === 'pending' && req.receiverId === loggedInUid
+    req.status === 'pending' && req.toUserId === loggedInUid
   );
+  
   const hasPendingRequests = pendingReceivedRequests.length > 0;
 
   const handleAddFriendClick = async () => {
@@ -458,6 +467,7 @@ export default function ProfileLayout({
 
   return (
     <div className={`grid grid-cols-1 lg:grid-cols-12 gap-5 p-1 transition-all rounded ${themeStyles.font}`}>
+      {profile.theme === 'gotico-retro' && <RainOverlay />}
       {/* Identity Creator call to action banner for own profile */}
       {isOwnProfile && (!profile.username || profile.username === 'me') && (
         <div className="lg:col-span-12 bg-gradient-to-r from-pink-500 via-purple-600 to-indigo-600 text-white rounded-lg p-4 shadow-sm flex flex-col sm:flex-row justify-between items-center gap-3">
@@ -544,7 +554,13 @@ export default function ProfileLayout({
         {/* Profile Details Container Below Photo */}
         <div className={`border rounded p-4 text-center transition-all ${themeStyles.cardBg} ${themeStyles.glow} ${themeStyles.borderClass} space-y-3.5`}>
           <div className="py-1">
-            <h2 className={`text-base md:text-lg font-bold flex items-center justify-center gap-1.5 break-all tracking-wide text-neutral-800 ${displayNameClass}`}>
+            <h2 className={`text-base md:text-lg font-bold flex items-center justify-center gap-1.5 break-all tracking-wide ${
+              profile.theme === 'gotico-retro' 
+                ? 'text-[#aaa857]' 
+                : profile.theme === 'emo-2008'
+                  ? 'text-[#f6339a] [text-shadow:1px_1px_2px_rgba(0,0,0,0.8)]'
+                  : 'text-neutral-800'
+            } ${displayNameClass}`}>
               {displayNameText}
               {isOwnProfile && (
                 <button 
@@ -557,13 +573,15 @@ export default function ProfileLayout({
               )}
             </h2>
             {profile.username && (
-              <p className="text-xs font-mono text-neutral-500 opacity-95 mt-1 tracking-normal">
+              <span className="inline-block text-xs font-mono font-bold text-[#c4d1db] bg-[#0f0f1d] px-1.5 py-0.5 rounded border border-[#c4d1db]/20 shadow-sm mt-1.5 tracking-normal">
                 @{profile.username}
-              </p>
+              </span>
             )}
             
-            <p className="text-[12px] md:text-[13px] font-medium font-sans flex items-center justify-center gap-1.5 mt-2.5 text-neutral-700 tracking-wider uppercase">
-              <MapPin size={14} className="text-pink-600 shrink-0" />
+            <p className={`text-[12px] md:text-[13px] font-medium font-sans flex items-center justify-center gap-1.5 mt-2.5 tracking-wider uppercase ${
+              profile.theme === 'emo-2008' ? 'text-[#be2efd]' : 'text-neutral-700'
+            }`}>
+              <MapPin size={14} className={profile.theme === 'emo-2008' ? 'text-[#be2efd] shrink-0' : 'text-pink-600 shrink-0'} />
               {profile.location}
             </p>
           </div>
@@ -591,7 +609,7 @@ export default function ProfileLayout({
                   onNavigateToTab('photos', false, true); // Owner Mode with auto photo upload panel trigger
                 }}
                 variant="action"
-                className="w-full h-11"
+                className="w-full h-11 text-[#1a011a]"
               >
                 Add Fotos
               </GlossyRetroButton>
@@ -612,7 +630,7 @@ export default function ProfileLayout({
                 }
               }}
               variant="action"
-              className="w-full h-11 bg-pink-600 hover:bg-pink-700 text-white"
+              className="w-full h-11 bg-pink-600 hover:bg-pink-700 text-[#1a011a]"
             >
               💬 Mensagem
             </GlossyRetroButton>
@@ -625,15 +643,35 @@ export default function ProfileLayout({
                 Rede de Amigos
               </div>
               {isFriends ? (
-                <GlossyRetroButton
-                  id="sidebar-btn-friends"
-                  onClick={() => {}}
-                  disabled={true}
-                  variant="action"
-                  className="w-full h-11 bg-neutral-100 border border-neutral-300 text-neutral-500 cursor-default font-sans font-bold flex items-center justify-center gap-1"
-                >
-                  ✓ Amigos
-                </GlossyRetroButton>
+                <div className="relative">
+                  <GlossyRetroButton
+                    id="sidebar-btn-friends"
+                    onClick={() => setIsFriendDropdownOpen(!isFriendDropdownOpen)}
+                    variant="action"
+                    className="w-full h-11 bg-neutral-100 hover:bg-neutral-200 border border-neutral-300 hover:border-neutral-400 text-neutral-800 font-sans font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                  >
+                    ✓ Amigos ▼
+                  </GlossyRetroButton>
+                  
+                  {isFriendDropdownOpen && (
+                    <div className="absolute top-12 left-0 w-full bg-white border border-neutral-350 rounded shadow-md z-30 py-1 text-left font-sans text-xs">
+                      <div className="px-3 py-1 font-bold text-neutral-400 select-none uppercase text-[9px] tracking-wider">
+                        Opções de Amizade
+                      </div>
+                      <div className="border-t border-neutral-200 my-1"></div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsFriendDropdownOpen(false);
+                          setShowRemoveConfirm(true);
+                        }}
+                        className="w-full text-left px-3 py-2 text-red-650 hover:bg-red-50 hover:text-red-750 font-bold transition-colors cursor-pointer flex items-center gap-1.5"
+                      >
+                        ❌ Remover Amizade
+                      </button>
+                    </div>
+                  )}
+                </div>
               ) : (
                 <GlossyRetroButton
                   id="sidebar-btn-add-friend"
@@ -662,6 +700,12 @@ export default function ProfileLayout({
           communities={communities}
           onNavigateToFriend={onNavigateToFriend}
           themeStyles={themeStyles}
+          friendRequests={friendRequests}
+          loggedInUserId={loggedInUserId}
+          onAcceptFriendRequest={onAcceptFriendRequest}
+          onRejectFriendRequest={onRejectFriendRequest}
+          profiles={profiles}
+          theme={profile.theme || 'default'}
         />
 
         {/* Digital Signature Card */}
@@ -685,73 +729,13 @@ export default function ProfileLayout({
       <div className="lg:col-span-6 flex flex-col gap-4">
         {/* Dynamic Name Header Box */}
         <div className={`border rounded p-4 transition-all ${themeStyles.cardBg} ${themeStyles.glow} ${themeStyles.borderClass} text-left`}>
-          <div className="flex justify-between items-start border-b border-dashed border-neutral-350 pb-2 mb-3">
-            <div>
-              <div className="flex flex-wrap items-baseline gap-2">
-                <h1 className={`text-2xl font-bold flex items-center gap-2 break-all ${displayNameClass}`}>
-                  {displayNameText}
-                  <Sparkles className="text-pink-500 shrink-0" size={18} />
-                </h1>
-                {profile.username && (
-                  <span className="text-xs font-mono font-bold text-neutral-500 bg-neutral-200/50 px-1.5 rounded">
-                    @{profile.username}
-                  </span>
-                )}
-              </div>
-              
-              {/* Presence and status row (MSN/Orkut modern style) */}
-              <div className="flex flex-col gap-1.5 mt-2">
-                <div className="flex flex-wrap items-center gap-3">
-                  <PresenceStatus
-                    profileId={profile.id}
-                    isOwnProfile={isOwnProfile}
-                    profileName={displayNameText}
-                  />
-
-                  <span className="text-[10px] text-neutral-400 font-mono">
-                    orky.net/{profile.username || 'me'}
-                  </span>
-                </div>
-
-                {/* Status personalizado secundário */}
-                {(() => {
-                  const rawStatus = profile.statusOnline || '';
-                  const cleanStatus = rawStatus.replace(/^●\s*/, '').trim();
-                  if (!cleanStatus || cleanStatus === 'offline') return null;
-
-                  let statusIcon = '✏️';
-                  const lowercaseStatus = cleanStatus.toLowerCase();
-                  if (lowercaseStatus.includes('ouvindo') || lowercaseStatus.includes('linkin') || lowercaseStatus.includes('música') || lowercaseStatus.includes('music')) {
-                    statusIcon = '🎵';
-                  } else if (lowercaseStatus.includes('programando') || lowercaseStatus.includes('rust') || lowercaseStatus.includes('código') || lowercaseStatus.includes('audit')) {
-                    statusIcon = '💻';
-                  } else if (lowercaseStatus.includes('café') || lowercaseStatus.includes('comendo') || lowercaseStatus.includes('donuts') || lowercaseStatus.includes('comer') || lowercaseStatus.includes('assembléia') || lowercaseStatus.includes('paraná')) {
-                    statusIcon = '☕';
-                  } else if (lowercaseStatus.includes('viajando') || lowercaseStatus.includes('viagem') || lowercaseStatus.includes('destino')) {
-                    statusIcon = '🏔️';
-                  } else if (lowercaseStatus.includes('hack') || lowercaseStatus.includes('pentest') || lowercaseStatus.includes('vulnerabilidade')) {
-                    statusIcon = '🕵️‍♂️';
-                  }
-
-                  return (
-                    <div className="flex items-center mt-1">
-                      <div 
-                        onClick={() => { if (isOwnProfile) setIsEditing(true); }}
-                        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-sm text-xs border border-pink-250 bg-[#fae8ff]/50 text-[#86198f] font-mono shadow-[0_1px_3px_rgba(0,0,0,0.02)] ${
-                          isOwnProfile ? 'cursor-pointer hover:bg-[#fae8ff] hover:border-pink-300 transition-all' : ''
-                        }`}
-                        title={isOwnProfile ? "Clique para alterar seu status personalizado" : undefined}
-                      >
-                        <span className="text-[10px] text-[#a21caf] font-bold">{statusIcon}</span>
-                        <span className="font-medium tracking-wide">
-                          {cleanStatus}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })()}
-              </div>
-            </div>
+          {/* Row 1: Name + Sparkles (Left) & Edit/Save Button (Right) */}
+          <div className="flex justify-between items-center mb-1">
+            <h1 className={`text-2xl font-bold flex items-center gap-2 break-all ${displayNameClass}`}>
+              {displayNameText}
+              <Sparkles className="text-pink-500 shrink-0" size={18} />
+            </h1>
+            
             {isOwnProfile && (
               <button
                 id="btn-edit-profile"
@@ -759,28 +743,123 @@ export default function ProfileLayout({
                   if (isEditing) handleSave();
                   else setIsEditing(true);
                 }}
-                className={`flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded cursor-pointer border shadow-sm transition-all ${
-                  isEditing 
-                    ? 'bg-green-600 hover:bg-green-700 text-white border-green-600' 
-                    : 'bg-[#dee7f4] hover:bg-[#c6d7ed] text-[#1d4ed8] border-[#adc3df]'
-                }`}
+                className="inline-flex items-center gap-1.5 focus:outline-none focus:ring-0 active:scale-97 opacity-80 hover:opacity-100 transition-all cursor-pointer group"
               >
                 {isEditing ? (
                   <>
-                    <Save size={14} /> Salvar Perfil
+                    <div className="relative flex items-center pr-1.5">
+                      <Cog className="text-emerald-500 animate-[spin_10s_linear_infinite]" size={16} />
+                      <Settings className="text-emerald-500 absolute -right-1 -top-1 animate-[spin_6s_linear_infinite_reverse]" size={10} />
+                    </div>
+                    <span className="bg-[#107e45] hover:bg-[#0b5c32] text-white font-mono text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded shadow-[1.5px_1.5px_3px_rgba(0,0,0,0.3)] border border-emerald-700/50 flex items-center">
+                      SALVAR
+                    </span>
                   </>
                 ) : (
                   <>
-                    <Edit size={14} /> Editar Perfil
+                    <div className="relative flex items-center pr-1.5">
+                      <Cog className="text-[#5a6b7c] group-hover:text-[#455463] transition-colors animate-[spin_16s_linear_infinite]" size={16} />
+                      <Settings className="text-[#5a6b7c] absolute -right-1 -top-1 group-hover:text-[#455463] transition-colors animate-[spin_10s_linear_infinite_reverse]" size={10} />
+                    </div>
+                    <span className="bg-[#5b6c73] hover:bg-[#4a5a60] text-white font-sans text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded shadow-[1.5px_1.5px_3px_rgba(0,0,0,0.3)] border border-[#48565c] flex items-center">
+                      EDITAR
+                    </span>
                   </>
                 )}
               </button>
             )}
           </div>
 
+          {/* Row 2: @Username (Left) & orkay.net/username link (Right/Inline next to it) */}
+          {profile.username && (
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-1 mb-6 text-xs md:text-sm font-sans">
+              <span className={`font-black ${
+                profile.theme === 'gotico-retro' ? 'text-[#b08d57]' : 'text-[#7e7ea0]'
+              }`}>
+                @{profile.username}
+              </span>
+              <a 
+                href={`https://orkay.net/${profile.username}`} 
+                onClick={(e) => e.preventDefault()} 
+                className="text-[#0000a0] dark:text-sky-300 font-bold underline hover:text-[#1d4ed8] transition-colors select-all"
+              >
+                orkay.net/{profile.username}
+              </a>
+            </div>
+          )}
+
+          {/* Row 3: Online status badge (Left) & Informações button/status (Right) on top of dashed line */}
+          <div className={`flex justify-between items-center border-b border-dashed pb-3 mb-4 ${
+            profile.theme === 'emo-2008' ? 'border-[#ff00af]' : 'border-neutral-350'
+          }`}>
+            <PresenceStatus
+              profileId={profile.id}
+              isOwnProfile={isOwnProfile}
+              profileName={displayNameText}
+            />
+
+            {/* Status personalizado secundário (ou Botão Informações para Proprietário/Outros) */}
+            {(() => {
+              const rawStatus = profile.statusOnline || '';
+              const cleanStatus = rawStatus.replace(/^●\s*/, '').trim();
+              
+              // If not own profile and no status expression, hide section
+              if (!isOwnProfile && (!cleanStatus || cleanStatus === 'offline')) return null;
+
+              let statusIcon = '✏️';
+              const lowercaseStatus = cleanStatus.toLowerCase();
+              if (lowercaseStatus.includes('ouvindo') || lowercaseStatus.includes('linkin') || lowercaseStatus.includes('música') || lowercaseStatus.includes('music')) {
+                statusIcon = '🎵';
+              } else if (lowercaseStatus.includes('programando') || lowercaseStatus.includes('rust') || lowercaseStatus.includes('código') || lowercaseStatus.includes('audit')) {
+                statusIcon = '💻';
+              } else if (lowercaseStatus.includes('café') || lowercaseStatus.includes('comendo') || lowercaseStatus.includes('donuts') || lowercaseStatus.includes('comer') || lowercaseStatus.includes('assembléia') || lowercaseStatus.includes('paraná')) {
+                statusIcon = '☕';
+              } else if (lowercaseStatus.includes('viajando') || lowercaseStatus.includes('viagem') || lowercaseStatus.includes('destino')) {
+                statusIcon = '🏔️';
+              } else if (lowercaseStatus.includes('hack') || lowercaseStatus.includes('pentest') || lowercaseStatus.includes('vulnerabilidade')) {
+                statusIcon = '🕵️‍♂️';
+              }
+
+              return (
+                <div 
+                  onClick={() => { if (isOwnProfile) setIsEditing(true); }}
+                  className={`${isOwnProfile ? 'cursor-pointer' : ''} flex items-center transition-all`}
+                >
+                  {isOwnProfile ? (
+                    <div className="flex items-center gap-1.5 font-sans group">
+                      <div className="relative flex items-center pr-0.5">
+                        <Cog className="text-[#5a6b7c] group-hover:text-[#455463] group-hover:rotate-45 transition-all duration-300" size={17} />
+                      </div>
+                      <span className="bg-[#b9ceda] hover:bg-[#a1b9c9] text-[#1e293b] font-sans text-[10px] font-black uppercase tracking-widest px-3.5 py-1.5 rounded border border-[#8ea9ba] shadow-[1.5px_1.5px_3px_rgba(0,0,0,0.15)] flex items-center transition-colors">
+                        INFORMAÇÕES
+                      </span>
+                    </div>
+                  ) : (
+                    <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-sm text-xs border font-mono shadow-[0_1px_3.5px_rgba(0,0,0,0.06)] ${
+                      profile.theme === 'gotico-retro'
+                        ? 'bg-[#3e2142] border-[#b08d57]/30 text-[#b08d57]'
+                        : `${themeStyles.badgeBg} ${themeStyles.badgeText}`
+                    }`}>
+                      <span className="text-[10px] opacity-85 font-bold">{statusIcon}</span>
+                      <span className="font-medium tracking-wide">
+                        {cleanStatus}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
+
           {/* Retro Orkut Badges Ratings */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 py-1 mb-3 font-sans select-none">
-            <div className={`bg-neutral-100/40 border border-neutral-200/40 rounded p-2 text-center flex flex-col items-center justify-center transition-all ${!isOwnProfile ? 'hover:bg-[#fefce8]/40 hover:border-amber-200' : ''}`}>
+            <div className={`border border-neutral-200/40 rounded p-2 text-center flex flex-col items-center justify-center transition-all ${
+              profile.theme === 'gotico-retro' 
+                ? 'bg-[#3e2142]' 
+                : profile.theme === 'emo-2008'
+                  ? 'bg-[#0f0f11]'
+                  : 'bg-neutral-100/40'
+            } ${!isOwnProfile ? 'hover:bg-[#fefce8]/40 hover:border-amber-200' : ''}`}>
               <span className="text-[10px] text-neutral-500 font-semibold uppercase mb-1 flex items-center gap-1">
                 Confiável {!isOwnProfile && <span className="text-[9px] text-[#406a94] normal-case font-normal">(votar)</span>}
               </span>
@@ -789,7 +868,13 @@ export default function ProfileLayout({
               </div>
             </div>
 
-            <div className={`bg-neutral-100/40 border border-neutral-200/40 rounded p-2 text-center flex flex-col items-center justify-center transition-all ${!isOwnProfile ? 'hover:bg-[#f0f9ff]/40 hover:border-sky-200' : ''}`}>
+            <div className={`border border-neutral-200/40 rounded p-2 text-center flex flex-col items-center justify-center transition-all ${
+              profile.theme === 'gotico-retro' 
+                ? 'bg-[#3e2142]' 
+                : profile.theme === 'emo-2008'
+                  ? 'bg-[#0f0f11]'
+                  : 'bg-neutral-100/40'
+            } ${!isOwnProfile ? 'hover:bg-[#f0f9ff]/40 hover:border-sky-200' : ''}`}>
               <span className="text-[10px] text-neutral-500 font-semibold uppercase mb-1 flex items-center gap-1">
                 Legal {!isOwnProfile && <span className="text-[9px] text-[#406a94] normal-case font-normal">(votar)</span>}
               </span>
@@ -798,7 +883,13 @@ export default function ProfileLayout({
               </div>
             </div>
 
-            <div className={`bg-neutral-100/40 border border-neutral-200/40 rounded p-2 text-center flex flex-col items-center justify-center transition-all ${!isOwnProfile ? 'hover:bg-[#fff1f2]/40 hover:border-rose-200' : ''}`}>
+            <div className={`border border-neutral-200/40 rounded p-2 text-center flex flex-col items-center justify-center transition-all ${
+              profile.theme === 'gotico-retro' 
+                ? 'bg-[#3e2142]' 
+                : profile.theme === 'emo-2008'
+                  ? 'bg-[#0f0f11]'
+                  : 'bg-neutral-100/40'
+            } ${!isOwnProfile ? 'hover:bg-[#fff1f2]/40 hover:border-rose-200' : ''}`}>
               <span className="text-[10px] text-neutral-500 font-semibold uppercase mb-1 flex items-center gap-1">
                 Sexy {!isOwnProfile && <span className="text-[9px] text-[#406a94] normal-case font-normal">(votar)</span>}
               </span>
@@ -826,13 +917,17 @@ export default function ProfileLayout({
                 }
               }}
               className={`border rounded p-2 text-center flex flex-col items-center justify-center w-full focus:outline-none transition-all ${
-                isOwnProfile 
-                  ? 'bg-neutral-100/40 border-neutral-200/40' 
-                  : `cursor-pointer hover:scale-[1.02] shadow-xs ${
-                      isFanOfThisUser 
-                        ? 'bg-amber-50/70 border-amber-300 text-amber-800 font-extrabold shadow-[0_1px_6px_rgba(251,191,36,0.15)]' 
-                        : 'bg-neutral-100/40 border-neutral-200/40 hover:bg-amber-50/20 hover:border-amber-250 text-neutral-600'
-                    }`
+                profile.theme === 'gotico-retro'
+                  ? 'bg-[#3e2142] border-neutral-200/40'
+                  : profile.theme === 'emo-2008'
+                    ? 'bg-[#0f0f11] border-neutral-200/40'
+                    : isOwnProfile 
+                      ? 'bg-neutral-100/40 border-neutral-200/40' 
+                      : `cursor-pointer hover:scale-[1.02] shadow-xs ${
+                          isFanOfThisUser 
+                            ? 'bg-amber-50/70 border-amber-300 text-amber-800 font-extrabold shadow-[0_1px_6px_rgba(251,191,36,0.15)]' 
+                            : 'bg-neutral-100/40 border-neutral-200/40 hover:bg-amber-50/20 hover:border-amber-250 text-neutral-600'
+                        }`
               }`}
               title={!isOwnProfile ? (isFanOfThisUser ? 'Você é fã! Clique para deixar de ser' : 'Tornar-se fã deste membro') : `Fãs: ${profile.fans}`}
             >
@@ -883,11 +978,11 @@ export default function ProfileLayout({
                 playShutterSound();
                 onNavigateToTab('photos');
               }}
-              className="bg-white border border-[#c4dafa] rounded shadow-xs text-left cursor-pointer transition-all hover:border-[#a0c2f7] overflow-hidden relative flex flex-col font-sans"
+              className={`relative border rounded shadow-xs text-left cursor-pointer transition-all overflow-hidden flex flex-col ${themeStyles.cardBg} ${themeStyles.borderClass} ${themeStyles.glow} ${themeStyles.font}`}
             >
               {/* Header: Foto do Momento */}
-              <div className="bg-[#e5f0fc] px-4 py-3 flex items-center justify-between border-b border-[#c4dafa] select-none">
-                <h3 className="text-[13px] font-bold text-[#1f407a] font-sans flex items-center gap-1.5 m-0 leading-none">
+              <div className={`px-4 py-3 flex items-center justify-between border-b ${themeStyles.accent} select-none`}>
+                <h3 className={`text-[13px] font-bold ${themeStyles.text} font-sans flex items-center gap-1.5 m-0 leading-none`}>
                   📸 Foto do Momento
                 </h3>
                 <span className="px-2 py-0.5 bg-[#ffdf85] border border-[#f3c853] text-[#704f05] font-extrabold text-[9px] rounded uppercase tracking-wider">
@@ -946,6 +1041,7 @@ export default function ProfileLayout({
                     }}
                     onShareToFeed={onShareToFeed}
                     layout="retro-feed"
+                    theme={profile.theme}
                     onCommentClick={() => {
                       playShutterSound();
                       onNavigateToTab('photos');
@@ -971,15 +1067,25 @@ export default function ProfileLayout({
             {isEditing ? (
               <div className="space-y-3">
                 {/* 📌 SEÇÃO DE IDENTIDADE VISUAL RETRÔ DO PERFIL */}
-                <div className="border border-indigo-200 bg-indigo-50/50 p-3 rounded-lg space-y-3.5 mb-2">
-                  <div className="flex items-center gap-1.5 text-[11px] font-bold text-indigo-800 uppercase tracking-wider border-b border-indigo-100 pb-1.5">
-                    <Sparkles size={13} className="text-pink-500" />
+                <div className={`p-3 rounded-lg space-y-3.5 mb-2 border ${
+                  profile.theme === 'gotico-retro'
+                    ? 'border-[#b08d57]/30 bg-black/40'
+                    : 'border-indigo-200 bg-indigo-50/50'
+                }`}>
+                  <div className={`flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider border-b pb-1.5 ${
+                    profile.theme === 'gotico-retro'
+                      ? 'text-[#b08d57] border-[#b08d57]/30'
+                      : 'text-indigo-800 border-indigo-100'
+                  }`}>
+                    <Sparkles size={13} className={profile.theme === 'gotico-retro' ? "text-[#b08d57]" : "text-pink-500"} />
                     Estilo e Identidade Visual Retrô do Nome
                   </div>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label htmlFor="edit-input-display-name" className="block text-[11px] font-bold text-neutral-600 uppercase mb-1">
+                      <label htmlFor="edit-input-display-name" className={`block text-[11px] font-bold uppercase mb-1 ${
+                        profile.theme === 'gotico-retro' ? 'text-zinc-300' : 'text-neutral-600'
+                      }`}>
                         Nome de Exibição (Display Name):
                       </label>
                       <input
@@ -992,7 +1098,11 @@ export default function ProfileLayout({
                           const sanitized = sanitizeTextInput(e.target.value);
                           setEditForm({ ...editForm, nome_exibicao: sanitized });
                         }}
-                        className="w-full px-2.5 py-1.5 border border-indigo-200 rounded font-sans text-xs bg-white text-neutral-800 focus:ring-1 focus:ring-indigo-400 focus:outline-none placeholder:text-neutral-400"
+                        className={`w-full px-2.5 py-1.5 border rounded font-sans text-xs focus:ring-1 focus:outline-none ${
+                          profile.theme === 'gotico-retro'
+                            ? 'border-zinc-700 bg-black text-[#c0c0c0] placeholder:text-zinc-650 focus:ring-zinc-500'
+                            : 'border-indigo-200 bg-white text-neutral-800 focus:ring-indigo-400 placeholder:text-neutral-400'
+                        }`}
                       />
                       <span className="text-[10px] text-neutral-400 mt-1 block leading-tight">
                         Tratado como texto puro (XSS-safe). Caracteres perigosos (<span className="font-mono text-[9px]">&lt;&gt;</span>) são filtrados automaticamente. Máx. 45 caracteres.
@@ -1000,7 +1110,9 @@ export default function ProfileLayout({
                     </div>
 
                     <div>
-                      <span className="block text-[11px] font-bold text-neutral-600 uppercase mb-2">
+                      <span className={`block text-[11px] font-bold uppercase mb-2 ${
+                        profile.theme === 'gotico-retro' ? 'text-zinc-300' : 'text-neutral-600'
+                      }`}>
                         Estilo da Fonte do Nome:
                       </span>
                       <div className="grid grid-cols-2 gap-1.5">
@@ -1016,9 +1128,13 @@ export default function ProfileLayout({
                           <label
                             key={fontStyle.key}
                             className={`flex items-center gap-2 p-1.5 px-2.5 rounded border cursor-pointer select-none transition-all text-[11px] ${
-                              editForm.estilo_fonte === fontStyle.key
-                                ? 'border-[#d946ef] bg-[#d946ef]/5 font-bold text-[#d946ef]'
-                                : 'border-neutral-200 hover:border-neutral-300 hover:bg-neutral-50 text-neutral-600'
+                              profile.theme === 'gotico-retro'
+                                ? (editForm.estilo_fonte === fontStyle.key
+                                  ? 'border-[#0df0ff] bg-[#24252a] text-white font-bold shadow-[0_0_8px_rgba(13,240,255,0.6)]'
+                                  : 'border-zinc-700 bg-[#24252a] text-zinc-300 hover:border-zinc-400 hover:bg-[#2c2d33]')
+                                : (editForm.estilo_fonte === fontStyle.key
+                                  ? 'border-[#d946ef] bg-[#d946ef]/5 font-bold text-[#d946ef]'
+                                  : 'border-neutral-200 hover:border-neutral-300 hover:bg-neutral-50 text-neutral-600')
                             }`}
                           >
                             <input
@@ -1028,9 +1144,13 @@ export default function ProfileLayout({
                               onChange={() => setEditForm({ ...editForm, estilo_fonte: fontStyle.key })}
                               className="accent-[#d946ef] sr-only"
                             />
-                            <span className="w-2.5 h-2.5 rounded-full border border-neutral-300 flex items-center justify-center shrink-0">
+                            <span className={`w-2.5 h-2.5 rounded-full border flex items-center justify-center shrink-0 ${
+                              profile.theme === 'gotico-retro' ? 'border-zinc-650' : 'border-neutral-300'
+                            }`}>
                               {editForm.estilo_fonte === fontStyle.key && (
-                                <span className="w-1.5 h-1.5 rounded-full bg-[#d946ef]" />
+                                <span className={`w-1.5 h-1.5 rounded-full ${
+                                  profile.theme === 'gotico-retro' ? 'bg-[#0df0ff]' : 'bg-[#d946ef]'
+                                }`} />
                               )}
                             </span>
                             <span className="truncate">{fontStyle.label}</span>
@@ -1220,6 +1340,12 @@ export default function ProfileLayout({
                     />
                   </div>
                 </div>
+                <div className="mt-4">
+                  <ThemeSelector
+                    currentTheme={editForm.theme}
+                    onThemeChange={(themeId) => setEditForm({ ...editForm, theme: themeId })}
+                  />
+                </div>
               </div>
             ) : (
               <>
@@ -1324,11 +1450,15 @@ export default function ProfileLayout({
                 return (
                   <div 
                     key={entry.id} 
-                    className="border border-neutral-200/60 rounded p-3 bg-white/40 shadow-xs relative hover:border-[#1d4ed8]/30 transition-all group"
+                    className={`border rounded p-3 shadow-xs relative transition-all group ${
+                      profile.theme === 'emo-2008'
+                        ? 'bg-[#473b4b] border-[#f6339a] border-dashed border-2 hover:border-[#f6339a]/80'
+                        : 'border-neutral-200/60 bg-white/40 hover:border-[#1d4ed8]/30'
+                    }`}
                   >
                     {/* Activity Header */}
                     <div className="flex items-center justify-between border-b border-neutral-200/20 pb-2 mb-2">
-                      <div className="flex items-center gap-2">
+                       <div className="flex items-center gap-2">
                         <img
                           src={entry.sharerAvatar}
                           alt={entry.sharerName}
@@ -1336,10 +1466,14 @@ export default function ProfileLayout({
                           referrerPolicy="no-referrer"
                         />
                         <div className="text-[11px] leading-tight text-left">
-                          <strong className="text-neutral-800 font-sans border-b border-transparent group-hover:border-purple-500/30">
+                          <strong className={`font-sans border-b border-transparent group-hover:border-purple-500/30 ${
+                            profile.theme === 'emo-2008' ? 'text-[#cd5bff] font-black' : 'text-neutral-800'
+                          }`}>
                             {entry.sharerName}
                           </strong>
-                          <span className="text-neutral-500 text-[10.5px] ml-1">
+                          <span className={`text-[10.5px] ml-1 ${
+                            profile.theme === 'emo-2008' ? 'text-[#d0aedf]' : 'text-neutral-500'
+                          }`}>
                             {entry.itemType === 'photo' && 'compartilhou uma foto:'}
                             {entry.itemType === 'album' && 'recomendou um álbum de fotos:'}
                             {entry.itemType === 'post' && 'postou um pensamento chapa:'}
@@ -1347,24 +1481,34 @@ export default function ProfileLayout({
                             {entry.itemType === 'testimonial' && 'divulgou um depoimento:'}
                           </span>
                           {entry.targetUser && (
-                            <span className="text-neutral-500 text-[10.5px]">
-                              {' '}para <strong className="text-neutral-800">@{entry.targetUser}</strong>
+                            <span className={`text-[10.5px] ${
+                              profile.theme === 'emo-2008' ? 'text-[#d0aedf]' : 'text-neutral-500'
+                            }`}>
+                              {' '}para <strong className={profile.theme === 'emo-2008' ? 'text-[#cd5bff]' : 'text-neutral-800'}>@{entry.targetUser}</strong>
                             </span>
                           )}
                         </div>
                       </div>
-                      <span className="text-[9px] text-neutral-450 font-mono">
+                      <span className={`text-[9px] font-mono ${
+                        profile.theme === 'emo-2008' ? 'text-[#d0aedf]' : 'text-neutral-450'
+                      }`}>
                         {entry.timestamp.split(' - ')[1] || entry.timestamp}
                       </span>
                     </div>
 
                     {/* Shared Content preview */}
-                    <div className="px-2.5 py-2.5 bg-white/85 border border-neutral-250/30 rounded text-xs text-neutral-800 leading-relaxed font-sans mt-1">
+                    <div className={`px-2.5 py-2.5 rounded text-xs leading-relaxed font-sans mt-1 ${
+                      profile.theme === 'emo-2008'
+                        ? 'bg-black/30 border border-[#f6339a]/30 text-pink-300'
+                        : 'bg-white/85 border border-neutral-250/30 text-neutral-800'
+                    }`}>
                       {entry.itemType === 'photo' && (
                         <div className="flex items-center gap-2">
                           <span className="text-xl">🖼️</span>
                           <div>
-                            <p className="font-bold text-sky-700 italic">“{entry.itemTitle.replace('Foto: ', '')}”</p>
+                            <p className={`font-bold italic ${profile.theme === 'emo-2008' ? 'text-pink-400' : 'text-sky-700'}`}>
+                              “{entry.itemTitle.replace('Foto: ', '')}”
+                            </p>
                             <span className="text-[9px] text-neutral-400">Verificado em Scrapzone Secure Albums</span>
                           </div>
                         </div>
@@ -1373,21 +1517,23 @@ export default function ProfileLayout({
                         <div className="flex items-center gap-2">
                           <span className="text-xl">FolderPath</span>
                           <div>
-                            <p className="font-bold text-pink-700 uppercase tracking-wide">📂 {entry.itemTitle}</p>
+                            <p className={`font-bold uppercase tracking-wide ${profile.theme === 'emo-2008' ? 'text-pink-400' : 'text-pink-700'}`}>📂 {entry.itemTitle}</p>
                             <span className="text-[9px] text-neutral-400">Clique em Acessar Fotos para decodificar esse rolo analógico</span>
                           </div>
                         </div>
                       )}
                       {entry.itemType === 'post' && (
                         <div className="flex flex-col gap-1">
-                          <p className="font-sans text-[11.5px] text-neutral-800 leading-normal font-medium bg-neutral-100/10 rounded">
+                          <p className={`font-sans text-[11.5px] leading-normal font-medium bg-neutral-100/10 rounded ${
+                            profile.theme === 'emo-2008' ? 'text-pink-300' : 'text-neutral-800'
+                          }`}>
                             “{entry.itemTitle}”
                           </p>
                           <span className="text-[8.5px] text-neutral-400 font-mono">Publicado via Rede Local Descentralizada</span>
                         </div>
                       )}
                       {entry.itemType !== 'photo' && entry.itemType !== 'album' && entry.itemType !== 'post' && (
-                        <p className="italic text-neutral-700 font-medium">“{entry.itemTitle}”</p>
+                        <p className={`italic font-medium ${profile.theme === 'emo-2008' ? 'text-pink-300' : 'text-neutral-700'}`}>“{entry.itemTitle}”</p>
                       )}
                     </div>
 
@@ -1401,6 +1547,7 @@ export default function ProfileLayout({
                       onLikeUpdate={(liked, count) => onLikeShare(entry.id, liked, count)}
                       onShareToFeed={onShareToFeed}
                       layout="retro-feed"
+                      theme={profile.theme}
                     />
 
                     {/* CRT Scan line HUD vibe overlay */}
@@ -1437,7 +1584,13 @@ export default function ProfileLayout({
                     referrerPolicy="no-referrer"
                   />
                 </div>
-                <span className="text-[9px] font-bold text-center mt-1 truncate w-full group-hover:underline">
+                <span className={`text-[9px] font-bold text-center mt-1 truncate w-full group-hover:underline ${
+                  profile.theme === 'minimal-oldweb' 
+                    ? 'text-[#0033b6]' 
+                    : (!profile.theme || profile.theme === 'default')
+                      ? 'text-[#110e61]'
+                      : ''
+                }`}>
                   {friend.name.split(' ')[0]}
                 </span>
               </div>
@@ -1449,23 +1602,51 @@ export default function ProfileLayout({
             <button
               id="friends-notification-bell"
               onClick={() => setIsRequestsModalOpen(true)}
-              className="p-1 px-1.5 bg-white border border-neutral-300 rounded hover:bg-neutral-50 hover:scale-105 active:scale-95 transition-all shadow-md relative flex items-center justify-center cursor-pointer"
+              className={
+                profile.theme === 'gotico-retro'
+                  ? "p-1 px-1.5 bg-transparent border-none hover:scale-110 active:scale-95 transition-all shadow-none relative flex items-center justify-center cursor-pointer"
+                  : "p-1 px-1.5 bg-white border border-neutral-300 rounded hover:bg-neutral-50 hover:scale-105 active:scale-95 transition-all shadow-md relative flex items-center justify-center cursor-pointer"
+              }
               title="Solicitações de Amizade"
             >
               {hasPendingRequests ? (
                 <div className="flex items-center justify-center relative w-5 h-5">
                   <motion.div
-                    animate={{ scale: [1, 1.15, 1], rotate: [0, 8, -8, 8, 0] }}
-                    transition={{ repeat: Infinity, duration: 1.8, ease: "easeInOut" }}
+                    animate={
+                      profile.theme === 'gotico-retro'
+                        ? { scale: [1, 1.25, 1], rotate: [0, 6, -6, 6, 0] }
+                        : { scale: [1, 1.15, 1], rotate: [0, 8, -8, 8, 0] }
+                    }
+                    transition={{ repeat: Infinity, duration: 1.5, ease: "easeInOut" }}
+                    className={profile.theme === 'gotico-retro' ? "animate-pulse" : ""}
                   >
-                    <Bell size={16} className="text-[#ff003a]" fill="#ff003a" />
+                    <Bell 
+                      size={16} 
+                      className={
+                        profile.theme === 'gotico-retro' 
+                          ? "text-[#ffd700] drop-shadow-[0_0_8px_rgba(255,215,0,0.95)]" 
+                          : "text-[#ff003a]"
+                      } 
+                      fill={profile.theme === 'gotico-retro' ? "#ffd700" : "#ff003a"} 
+                    />
                   </motion.div>
-                  <span className="absolute -top-1.5 -right-1.5 bg-[#ff003a] text-white text-[8px] font-bold rounded-full w-4 h-4 flex items-center justify-center shadow-sm">
+                  <span className={
+                    profile.theme === 'gotico-retro'
+                      ? "absolute -top-1.5 -right-1.5 bg-[#ffd700] text-black text-[8px] font-extrabold rounded-full w-4 h-4 flex items-center justify-center shadow-[0_0_6px_rgba(255,215,0,0.8)] border border-black/30"
+                      : "absolute -top-1.5 -right-1.5 bg-[#ff003a] text-white text-[8px] font-bold rounded-full w-4 h-4 flex items-center justify-center shadow-sm"
+                  }>
                     {pendingReceivedRequests.length}
                   </span>
                 </div>
               ) : (
-                <Bell size={16} className="text-neutral-400" />
+                <Bell 
+                  size={16} 
+                  className={
+                    profile.theme === 'gotico-retro'
+                      ? "text-[#cccccc] fill-[#4a4a4a] drop-shadow-[0_0_4px_rgba(204,204,204,0.45)] opacity-85 hover:opacity-100 transition-opacity"
+                      : "text-neutral-400"
+                  } 
+                />
               )}
             </button>
           </div>
@@ -1665,109 +1846,189 @@ export default function ProfileLayout({
         />
       )}
 
-      {/* Modern Floating Modal for Friend Requests */}
+      {/* Lateral Sliding Drawer Panel for Friend Requests */}
       <AnimatePresence>
         {isRequestsModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            {/* Backdrop overlay with blur */}
+          <div className="fixed inset-0 z-50 overflow-hidden">
+            {/* Backdrop overlay (darkened) */}
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setIsRequestsModalOpen(false)}
-              className="fixed inset-0 bg-neutral-900/35 backdrop-blur-md"
+              className="fixed inset-0 bg-neutral-900/60 backdrop-blur-[2px] cursor-pointer"
             />
 
-            {/* Modal content box */}
+            {/* Slide-out Drawer Container */}
+            <div className="fixed inset-y-0 right-0 max-w-full flex pl-10 shadow-2xl">
+              <motion.div
+                initial={{ x: '100%' }}
+                animate={{ x: 0 }}
+                exit={{ x: '100%' }}
+                transition={{ type: "tween", duration: 0.3, ease: "easeOut" }}
+                className="w-80 max-w-md bg-white h-full flex flex-col overflow-hidden text-left border-l border-neutral-200"
+              >
+                {/* Header */}
+                <div className="px-4 py-4 bg-[#e0f2fe] border-b border-sky-100 flex justify-between items-center shrink-0">
+                  <h3 className="text-xs font-bold text-sky-850 uppercase tracking-widest flex items-center gap-2">
+                    <Bell size={15} className="text-sky-600 animate-bounce" />
+                    Solicitações de Amizade ({pendingReceivedRequests.length})
+                  </h3>
+                  <button
+                    onClick={() => setIsRequestsModalOpen(false)}
+                    className="text-neutral-500 hover:text-neutral-800 text-sm font-bold p-1 cursor-pointer"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {/* Body */}
+                <div className="flex-1 overflow-y-auto p-4 divide-y divide-neutral-100 bg-neutral-50/50">
+                  {pendingReceivedRequests.length === 0 ? (
+                    <div className="py-12 text-center flex flex-col items-center justify-center gap-3">
+                      <span className="text-4xl text-neutral-300 select-none">🎐</span>
+                      <p className="text-xs text-neutral-500 font-sans">
+                        Sua caixa de correio está limpa! Nenhuma solicitação pendente.
+                      </p>
+                    </div>
+                  ) : (
+                    pendingReceivedRequests.map((req) => {
+                      const senderProfile = profiles[req.fromUserId] || DEFAULT_PROFILES_LOCAL[req.fromUserId];
+                      const avatarUrl = senderProfile?.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150';
+                      const senderName = senderProfile?.name || 'Membro do Scrapzone';
+                      
+                      return (
+                        <div key={req.id} className="py-4 flex flex-col gap-3 justify-between first:pt-0 last:pb-0">
+                          <div className="flex items-center gap-3">
+                            <div className="w-12 h-12 rounded border border-neutral-250 overflow-hidden shrink-0 bg-neutral-100 shadow-sm">
+                              <img
+                                src={avatarUrl}
+                                alt={senderName}
+                                className="w-full h-full object-cover"
+                                referrerPolicy="no-referrer"
+                              />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <span 
+                                className="text-xs font-bold text-neutral-850 block hover:underline cursor-pointer truncate" 
+                                onClick={() => {
+                                  setIsRequestsModalOpen(false);
+                                  onNavigateToFriend(req.fromUserId);
+                                }}
+                              >
+                                {senderName}
+                              </span>
+                              <span className="text-[10px] text-neutral-400 font-mono block">
+                                Enviado em {new Date(req.createdAt).toLocaleDateString('pt-BR')}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 w-full">
+                            <button
+                              onClick={async () => {
+                                if (onAcceptFriendRequest) {
+                                  await onAcceptFriendRequest(req.id);
+                                }
+                              }}
+                              className="flex-1 py-1.5 bg-[#4f46e5] hover:bg-[#4338ca] text-white font-bold rounded text-[11px] shadow-sm select-none cursor-pointer text-center"
+                            >
+                              Aceitar
+                            </button>
+                            <button
+                              onClick={async () => {
+                                if (onRejectFriendRequest) {
+                                  await onRejectFriendRequest(req.id);
+                                }
+                              }}
+                              className="flex-1 py-1.5 bg-[#ef4444] hover:bg-[#dc2626] text-white font-bold rounded text-[11px] shadow-sm select-none cursor-pointer text-center"
+                            >
+                              Rejeitar
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </motion.div>
+            </div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal de Confirmação de Remoção de Amizade */}
+      <AnimatePresence>
+        {showRemoveConfirm && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            {/* Backdrop */}
             <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 15 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 15 }}
-              transition={{ type: "spring", duration: 0.4 }}
-              className="bg-white rounded-lg shadow-2xl border border-neutral-200 w-full max-w-md overflow-hidden text-left flex flex-col z-10 max-h-[480px]"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowRemoveConfirm(false)}
+              className="fixed inset-0 bg-neutral-900/60 backdrop-blur-[2px] cursor-pointer"
+            />
+
+            {/* Modal Dialog */}
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              className={`relative max-w-sm w-full border rounded-lg shadow-xl overflow-hidden text-left z-10 ${themeStyles.cardBg} ${themeStyles.borderClass} ${themeStyles.glow}`}
             >
-              {/* Header */}
-              <div className="px-4 py-3 bg-[#e0f2fe] border-b border-sky-100 flex justify-between items-center">
-                <h3 className="text-xs font-bold text-sky-850 uppercase tracking-widest flex items-center gap-2">
-                  <Bell size={15} className="text-sky-600" />
-                  Solicitações de Amizade ({pendingReceivedRequests.length})
+              <div className={`px-4 py-3 border-b flex justify-between items-center ${themeStyles.accent}`}>
+                <h3 className={`text-xs font-bold leading-none uppercase m-0 flex items-center gap-2 ${themeStyles.text}`}>
+                  💔 Remover Amizade
                 </h3>
                 <button
-                  onClick={() => setIsRequestsModalOpen(false)}
-                  className="text-neutral-500 hover:text-neutral-850 text-sm font-bold p-1 cursor-pointer"
+                  type="button"
+                  onClick={() => setShowRemoveConfirm(false)}
+                  className="text-neutral-500 hover:text-neutral-800 text-sm font-bold cursor-pointer"
                 >
                   ✕
                 </button>
               </div>
 
-              {/* Body */}
-              <div className="p-4 overflow-y-auto flex-1 divide-y divide-neutral-100 max-h-[350px]">
-                {pendingReceivedRequests.length === 0 ? (
-                  <div className="py-8 text-center flex flex-col items-center justify-center gap-2">
-                    <span className="text-3xl text-neutral-350 select-none">🎐</span>
-                    <p className="text-xs text-neutral-500 font-sans">
-                      Sua caixa de correio está limpa! Nenhuma solicitação pendente.
-                    </p>
-                  </div>
-                ) : (
-                  pendingReceivedRequests.map((req) => {
-                    const senderProfile = profiles[req.senderId] || DEFAULT_PROFILES_LOCAL[req.senderId];
-                    const avatarUrl = senderProfile?.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150';
-                    const senderName = senderProfile?.name || 'Membro do Scrapzone';
-                    
-                    return (
-                      <div key={req.id} className="py-3 flex items-center justify-between gap-3 first:pt-0 last:pb-0">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded border border-neutral-250 overflow-hidden shrink-0 bg-neutral-100">
-                            <img
-                              src={avatarUrl}
-                              alt={senderName}
-                              className="w-full h-full object-cover"
-                              referrerPolicy="no-referrer"
-                            />
-                          </div>
-                          <div>
-                            <span 
-                              className="text-xs font-bold text-neutral-850 block hover:underline cursor-pointer" 
-                              onClick={() => {
-                                setIsRequestsModalOpen(false);
-                                onNavigateToFriend(req.senderId);
-                              }}
-                            >
-                              {senderName}
-                            </span>
-                            <span className="text-[9px] text-neutral-400 font-mono">
-                              Enviado em {new Date(req.createdAt).toLocaleDateString('pt-BR')}
-                            </span>
-                          </div>
-                        </div>
+              <div className="p-4 bg-white text-zinc-800">
+                <p className="text-xs font-medium text-neutral-700 font-sans leading-relaxed">
+                  Remover este amigo da sua lista?
+                </p>
+                <p className="text-[10px] text-neutral-400 font-sans mt-1.5 italic">
+                  Você não fará mais parte da lista de conexões de {profile.name}.
+                </p>
+              </div>
 
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <button
-                            onClick={async () => {
-                              if (onAcceptFriendRequest) {
-                                await onAcceptFriendRequest(req.id);
-                              }
-                            }}
-                            className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded text-[10px] shadow-sm select-none cursor-pointer"
-                          >
-                            Aceitar
-                          </button>
-                          <button
-                            onClick={async () => {
-                              if (onRejectFriendRequest) {
-                                await onRejectFriendRequest(req.id);
-                              }
-                            }}
-                            className="px-2.5 py-1.5 bg-neutral-100 hover:bg-neutral-200 border border-neutral-300 text-neutral-700 font-bold font-sans rounded text-[10px] select-none cursor-pointer"
-                          >
-                            Recusar
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
+              <div className="px-4 py-3 bg-neutral-50 border-t border-neutral-200/60 flex justify-end gap-2 shrink-0">
+                <button
+                  type="button"
+                  disabled={isRemovingFriend}
+                  onClick={() => setShowRemoveConfirm(false)}
+                  className="px-3 py-1.5 bg-neutral-200 hover:bg-neutral-300 text-neutral-700 font-bold rounded text-[11px] shadow-sm select-none cursor-pointer text-center font-sans"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  disabled={isRemovingFriend}
+                  onClick={async () => {
+                    if (onRemoveFriend) {
+                      setIsRemovingFriend(true);
+                      await onRemoveFriend(profile.id);
+                      setIsRemovingFriend(false);
+                    }
+                    setIsPendingLocal(false);
+                    setShowRemoveConfirm(false);
+                  }}
+                  className={`px-3 py-1.5 text-white font-bold rounded text-[11px] shadow-sm select-none cursor-pointer text-center font-sans ${
+                    isRemovingFriend 
+                      ? 'bg-neutral-400 cursor-not-allowed' 
+                      : 'bg-red-600 hover:bg-red-700'
+                  }`}
+                >
+                  {isRemovingFriend ? 'Removendo...' : 'Remover'}
+                </button>
               </div>
             </motion.div>
           </div>

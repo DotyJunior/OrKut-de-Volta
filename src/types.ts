@@ -94,8 +94,10 @@ export interface Friend {
 
 export interface FriendRequest {
   id: string;
-  senderId: string;
-  receiverId: string;
+  fromUserId: string;
+  toUserId: string;
+  senderId?: string;
+  receiverId?: string;
   status: 'pending' | 'accepted' | 'rejected';
   createdAt: number;
 }

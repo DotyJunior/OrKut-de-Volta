@@ -25,7 +25,7 @@ export default function GlossyRetroButton({
       disabled={disabled}
       className={`
         w-full py-3.5 px-6
-        rounded-full
+        rounded-md
         font-sans font-black text-sm uppercase tracking-wider
         text-black text-center select-none
         border-2 border-[#5a6b6c]

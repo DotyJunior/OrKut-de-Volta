@@ -14,6 +14,7 @@ interface SocialActionsProps {
   layout?: 'default' | 'retro-feed';
   onCommentClick?: () => void;
   commentCount?: number;
+  theme?: string;
 }
 
 export default function SocialActions({
@@ -28,6 +29,7 @@ export default function SocialActions({
   layout = 'default',
   onCommentClick,
   commentCount,
+  theme = 'default',
 }: SocialActionsProps) {
   const [likes, setLikes] = useState(initialLikes);
   const [likedByMe, setLikedByMe] = useState(initialLikedByMe);
@@ -156,19 +158,29 @@ export default function SocialActions({
       
       {/* HUD Minimal Actions Row */}
       {layout === 'retro-feed' ? (
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-neutral-600 font-sans border-t border-b border-dashed border-neutral-300/70 py-2.5">
+        <div className={`flex flex-wrap items-center gap-x-5 gap-y-2 text-xs font-sans py-2.5 ${
+          theme === 'emo-2008'
+            ? 'border-t border-b border-dashed border-[#f6339a]/40 text-[#d0aedf]'
+            : 'border-t border-b border-dashed border-neutral-300/70 text-neutral-600'
+        }`}>
           
           {/* ♡ Curtir */}
           <button
             onClick={handleLike}
             className={`group flex items-center gap-1 transition-all text-xs font-sans tracking-tight select-none cursor-pointer hover:scale-[1.01] ${
-              likedByMe 
-                ? 'text-pink-600 font-extrabold' 
-                : 'text-neutral-600 hover:text-pink-500'
+              theme === 'emo-2008'
+                ? 'text-[#ff28d4] font-bold'
+                : likedByMe 
+                  ? 'text-pink-600 font-extrabold' 
+                  : 'text-neutral-600 hover:text-pink-500'
             }`}
           >
-            <span className="text-[13px] leading-none">{likedByMe ? '❤️' : '♡'}</span>
-            <span>Curtir ({likes})</span>
+            <span className={theme === 'emo-2008' ? 'bg-[#ff16b6] px-1 rounded text-black font-semibold' : 'text-[13px] leading-none'}>
+              {likedByMe ? '❤️' : '♡'}
+            </span>
+            <span className={theme === 'emo-2008' ? 'text-[#ff28d4] font-bold' : ''}>
+              Curtir ({likes})
+            </span>
           </button>
 
           {/* 💬 Comentários */}
@@ -178,10 +190,14 @@ export default function SocialActions({
                 e.stopPropagation();
                 onCommentClick();
               }}
-              className="group flex items-center gap-1 text-neutral-600 hover:text-pink-500 transition-all text-xs font-sans tracking-tight cursor-pointer hover:scale-[1.01]"
+              className={`group flex items-center gap-1 transition-all text-xs font-sans tracking-tight cursor-pointer hover:scale-[1.01] ${
+                theme === 'emo-2008' ? 'text-[#d0aedf]' : 'text-neutral-600 hover:text-pink-500'
+              }`}
             >
-              <span className="text-[12px] leading-none">💬</span>
-              <span>Comentários {commentCount !== undefined ? `(${commentCount})` : ''}</span>
+              <span className={theme === 'emo-2008' ? 'text-[#a0a3a6]' : 'text-[12px] leading-none'}>💬</span>
+              <span className={theme === 'emo-2008' ? 'text-[#d0aedf]' : ''}>
+                Comentários {commentCount !== undefined ? `(${commentCount})` : ''}
+              </span>
             </button>
           )}
 
@@ -193,28 +209,34 @@ export default function SocialActions({
               setSuccessMsg('↪ Memória compartilhada!');
               setTimeout(() => setSuccessMsg(''), 3000);
             }}
-            className="group flex items-center gap-1 text-neutral-600 hover:text-pink-500 transition-all text-xs font-sans tracking-tight cursor-pointer hover:scale-[1.01]"
+            className={`group flex items-center gap-1 transition-all text-xs font-sans tracking-tight cursor-pointer hover:scale-[1.01] ${
+              theme === 'emo-2008' ? 'text-[#d0aedf]' : 'text-neutral-600 hover:text-pink-500'
+            }`}
           >
-            <span className="text-[12px] leading-none">↪</span>
-            <span>Compartilhar</span>
+            <span className={theme === 'emo-2008' ? 'text-[#a0a3a6]' : 'text-[12px] leading-none'}>↪</span>
+            <span className={theme === 'emo-2008' ? 'text-[#d0aedf]' : ''}>Compartilhar</span>
           </button>
 
           {/* ✉ Enviar */}
           <button
             onClick={handleOpenFriendlyShare}
-            className="group flex items-center gap-1 text-neutral-600 hover:text-pink-500 transition-all text-xs font-sans tracking-tight cursor-pointer hover:scale-[1.01]"
+            className={`group flex items-center gap-1 transition-all text-xs font-sans tracking-tight cursor-pointer hover:scale-[1.01] ${
+              theme === 'emo-2008' ? 'text-[#d0aedf]' : 'text-neutral-600 hover:text-pink-500'
+            }`}
           >
-            <span className="text-[12px] leading-none">✉</span>
-            <span>Enviar para amigo</span>
+            <span className={theme === 'emo-2008' ? 'text-[#a0a3a6]' : 'text-[12px] leading-none'}>✉</span>
+            <span className={theme === 'emo-2008' ? 'text-[#d0aedf]' : ''}>Enviar para amigo</span>
           </button>
 
           {/* 📨 Telegram */}
           <button
             onClick={handleShareOnTelegram}
-            className="group flex items-center gap-1 text-neutral-600 hover:text-pink-500 transition-all text-xs font-sans tracking-tight cursor-pointer hover:scale-[1.01]"
+            className={`group flex items-center gap-1 transition-all text-xs font-sans tracking-tight cursor-pointer hover:scale-[1.01] ${
+              theme === 'emo-2008' ? 'text-[#d0aedf]' : 'text-neutral-600 hover:text-pink-500'
+            }`}
           >
-            <span className="text-[12px] leading-none">📨</span>
-            <span>Telegram</span>
+            <span className={theme === 'emo-2008' ? 'text-[#a0a3a6]' : 'text-[12px] leading-none'}>📨</span>
+            <span className={theme === 'emo-2008' ? 'text-[#d0aedf]' : ''}>Telegram</span>
           </button>
 
         </div>

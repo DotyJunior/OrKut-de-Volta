@@ -1177,17 +1177,27 @@ export default function Communities({
   const isJoined = activeComm ? joinedIds.includes(activeComm.id) : false;
 
   return (
-    <div id="scrapzone-communities-main" className="flex flex-col gap-4 font-sans text-left max-w-7xl mx-auto w-full">
+    <div id="scrapzone-communities-main" className={`flex flex-col gap-4 font-sans text-left max-w-7xl mx-auto w-full p-4 rounded-lg ${themeStyles.communitiesBg}`}>
       
       {/* 1. TOP HEADER & SEARCH SEARCH BAR - Match Mockup styling */}
-      <div className="bg-[#dee7f4] border border-neutral-300 rounded p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
+      <div 
+        className={`border border-neutral-300 rounded p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm ${
+          myProfile.theme === 'minimal-oldweb' 
+            ? 'bg-gradient-to-r from-[#18237c] to-[#2480cf]' 
+            : 'bg-[#dee7f4]'
+        }`}
+      >
         
         {/* Page title and nostalgic brand tagline */}
         <div>
-          <h2 className="text-xl font-bold text-neutral-800 flex items-center gap-1.5 leading-none">
+          <h2 className={`text-xl font-bold flex items-center gap-1.5 leading-none ${
+            myProfile.theme === 'minimal-oldweb' ? 'text-white' : 'text-neutral-800'
+          }`}>
             👥 Comunidades
           </h2>
-          <p className="text-[10px] text-neutral-500 font-sans mt-1">
+          <p className={`text-[10px] font-sans mt-1 ${
+            myProfile.theme === 'minimal-oldweb' ? 'text-[#00ffcc] font-semibold' : 'text-neutral-500'
+          }`}>
             Volte para a era MSN / Orkut das comunidades clássicas do Brasil.
           </p>
         </div>
@@ -1234,7 +1244,7 @@ export default function Communities({
                   setActiveTopic(null);
                   setSearchQuery('');
                 }}
-                className="bg-white border rounded p-2 flex items-center gap-3.5 hover:border-pink-400 cursor-pointer transition-all shadow-sm"
+                className={`bg-white border rounded p-2 flex items-center gap-3.5 hover:border-pink-400 cursor-pointer transition-all shadow-sm ${themeStyles.bg.includes('bg-checkerboard') ? 'bg-[#0c4b24] border-[#0ef46f] text-[#16fc21]' : 'bg-white'}`}
               >
                 <div className="w-10 h-10 rounded bg-[#eff6ff] flex items-center justify-center text-xl shadow-inner border overflow-hidden">
                   {comm.avatar && comm.avatar.startsWith('data:') ? (
@@ -1244,8 +1254,8 @@ export default function Communities({
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h4 className="text-xs font-bold text-indigo-900 truncate">{comm.name}</h4>
-                  <p className="text-[9.5px] text-neutral-400 truncate">{comm.description}</p>
+                  <h4 className={`text-xs font-bold ${themeStyles.bg.includes('bg-checkerboard') ? 'text-[#16fc21]' : 'text-indigo-900'} truncate`}>{comm.name}</h4>
+                  <p className={`text-[9.5px] ${themeStyles.bg.includes('bg-checkerboard') ? 'text-[#16fc21]' : 'text-neutral-400'} truncate`}>{comm.description}</p>
                   <span className="text-[8.5px] font-mono text-pink-600 font-bold bg-pink-50 px-1 rounded">
                     {comm.category}
                   </span>

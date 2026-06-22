@@ -24,6 +24,7 @@ interface ScrapbookBuilderProps {
   currentUser: { id: string; name: string; avatar: string };
   onPostScrap: (scrap: Omit<Scrap, 'id' | 'timestamp'> & { needsAiResponse?: boolean }) => void;
   onNavigateToTab: (tab: string) => void;
+  theme?: string;
 }
 
 // Retro stickers list using scalable colorful emojis
@@ -106,7 +107,8 @@ export default function ScrapbookBuilder({
   profiles, 
   currentUser, 
   onPostScrap,
-  onNavigateToTab 
+  onNavigateToTab,
+  theme
 }: ScrapbookBuilderProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   
@@ -1242,15 +1244,44 @@ export default function ScrapbookBuilder({
   };
 
   return (
-    <div id="scrapbook-builder-container" className="bg-[#dee7f4] border border-[#a2bfdb] p-4 rounded shadow-md text-left font-sans select-none">
+    <div 
+      id="scrapbook-builder-container" 
+      className={`p-4 rounded shadow-md text-left font-sans select-none ${
+        theme === 'minimal-oldweb' 
+          ? 'bg-[#a19c95] border-t-2 border-l-2 border-b-black border-r-black border' 
+          : theme === 'gotico-retro'
+            ? 'bg-[#49101c] border border-[#b08d57]/40 shadow-[0_0_15px_rgba(73,16,28,0.5)] text-[#b08d57]'
+            : 'bg-[#dee7f4] border border-[#a2bfdb]'
+      }`}
+    >
       
       {/* Title block */}
-      <div className="bg-[#b3cbef] border border-[#97b3db] rounded-sm p-3 mb-4 flex justify-between items-center flex-wrap gap-4 shadow-[inset_1px_1px_3px_rgba(255,255,255,0.7)]">
+      <div 
+        className={`rounded-sm p-3 mb-4 flex justify-between items-center flex-wrap gap-4 shadow-[inset_1px_1px_3px_rgba(255,255,255,0.7)] ${
+          theme === 'minimal-oldweb' 
+            ? 'bg-gradient-to-r from-[#18237c] to-[#2480cf] border border-stone-850' 
+            : theme === 'gotico-retro'
+              ? 'bg-[#121624] border border-zinc-800'
+              : 'bg-[#b3cbef] border border-[#97b3db]'
+        }`}
+      >
         <div>
-          <h2 className="text-xl font-extrabold text-[#112d53] flex items-center gap-2">
-            🎨 Scrapbook Builder Studio v2008
+          <h2 className={`text-xl font-extrabold flex items-center gap-2 ${
+            theme === 'minimal-oldweb' 
+              ? 'text-white' 
+              : theme === 'gotico-retro'
+                ? 'text-[#a0aaab]'
+                : 'text-[#112d53]'
+          }`}>
+            {theme === 'minimal-oldweb' ? '🎨 ScrapBook Builder v2 2008' : '🎨 Scrapbook Builder Studio v2008'}
           </h2>
-          <p className="text-[11px] text-[#1b4372]">
+          <p className={`text-[11px] ${
+            theme === 'minimal-oldweb' 
+              ? 'text-[#00ffcc] font-semibold' 
+              : theme === 'gotico-retro'
+                ? 'text-[#3b93fc]'
+                : 'text-[#1b4372]'
+          }`}>
             Escreva recados, aplique glitter animado, use molduras neon e envie depoimentos gráficos lindos!
           </p>
         </div>
@@ -1476,7 +1507,11 @@ export default function ScrapbookBuilder({
         </div>
 
         {/* RIGHT COLUMN: DETAILED CUSTOMIZATION SUITE */}
-        <div className="lg:col-span-5 bg-white border border-[#abc3df] rounded p-4 flex flex-col gap-4 shadow-sm min-h-[450px]">
+        <div className={`lg:col-span-5 rounded p-4 flex flex-col gap-4 shadow-sm min-h-[450px] border ${
+          theme === 'gotico-retro'
+            ? 'bg-[#363a3b] border-[#4d5152] text-white'
+            : 'bg-white border-[#abc3df]'
+        }`}>
           
           {/* THE BIG EPIC RED DIRECTIVE DEIXAR MAIS 2008 BUTTON! */}
           <div className="text-center p-1 bg-gradient-to-r from-[#d946ef] via-[#ec4899] to-[#f43f5e] rounded border-2 border-fuchsia-300 overflow-hidden shadow-lg hover:scale-101 transition-all duration-300 animate-bounce">
@@ -1492,7 +1527,9 @@ export default function ScrapbookBuilder({
           </div>
 
           {/* Sub Navigation controls tabs */}
-          <div className="flex border-b border-dashed border-neutral-300 pb-1 flex-wrap gap-1">
+          <div className={`flex border-b border-dashed pb-1 flex-wrap gap-1 ${
+            theme === 'gotico-retro' ? 'border-[#4d5152]' : 'border-neutral-300'
+          }`}>
             {[
               { id: 'text', label: 'Letreiro/Texto' },
               { id: 'stickers', label: 'MSN Stickers' },
@@ -1508,8 +1545,12 @@ export default function ScrapbookBuilder({
                 }}
                 className={`px-2.5 py-1 text-[10.5px] uppercase font-bold cursor-pointer rounded-sm border transition-all ${
                   editorTab === tab.id 
-                    ? 'bg-[#1b4372] text-white border-[#1b4372]' 
-                    : 'bg-neutral-100 hover:bg-neutral-200 text-neutral-600 border-neutral-300'
+                    ? theme === 'gotico-retro'
+                      ? 'bg-[#121624] text-[#a0aaab] border-[#121624]'
+                      : 'bg-[#1b4372] text-white border-[#1b4372]' 
+                    : theme === 'gotico-retro'
+                      ? 'bg-[#242728] text-stone-400 border-stone-600 hover:bg-[#2d3031] hover:text-white'
+                      : 'bg-neutral-100 hover:bg-neutral-200 text-neutral-600 border-neutral-300'
                 }`}
               >
                 {tab.label}
@@ -1521,7 +1562,9 @@ export default function ScrapbookBuilder({
           {editorTab === 'text' && (
             <div className="flex flex-col gap-3 font-sans text-xs">
               <div>
-                <label className="block text-[10.5px] font-black uppercase text-neutral-500 mb-1">Título do Tema:</label>
+                <label className={`block text-[10.5px] font-black uppercase mb-1 ${
+                  theme === 'gotico-retro' ? 'text-zinc-300' : 'text-neutral-500'
+                }`}>Título do Tema:</label>
                 <input
                   id="builder-theme-name"
                   type="text"
@@ -1531,16 +1574,20 @@ export default function ScrapbookBuilder({
                     setThemeName(text);
                     validateText(text);
                   }}
-                  className={`w-full px-2.5 py-1.5 border rounded text-xs bg-neutral-50 font-sans focus:outline-none focus:ring-1 transition-all ${
+                  className={`w-full px-2.5 py-1.5 border rounded text-xs font-sans focus:outline-none focus:ring-1 transition-all ${
                     validationError 
                       ? 'border-red-500 ring-2 ring-red-500/15 text-red-900 bg-red-50/10 focus:ring-red-500' 
-                      : 'border-neutral-300 focus:ring-blue-500 text-neutral-800'
+                      : theme === 'gotico-retro'
+                        ? 'border-[#4d5152] focus:ring-red-500 bg-[#0e0e12] text-[#ee1515] font-mono'
+                        : 'border-neutral-300 bg-neutral-50 focus:ring-blue-500 text-neutral-800'
                   }`}
                 />
               </div>
 
               <div>
-                <label className="block text-[10.5px] font-black uppercase text-neutral-500 mb-1">Mensagem do Scrap (Retro Internetês):</label>
+                <label className={`block text-[10.5px] font-black uppercase mb-1 ${
+                  theme === 'gotico-retro' ? 'text-zinc-300' : 'text-neutral-500'
+                }`}>Mensagem do Scrap (Retro Internetês):</label>
                 <textarea
                   id="builder-message-text"
                   rows={4}
@@ -1551,10 +1598,12 @@ export default function ScrapbookBuilder({
                     validateText(text);
                   }}
                   placeholder="Seu recado brilhante aqui..."
-                  className={`w-full px-2.5 py-1.5 border rounded text-xs bg-neutral-50 font-sans focus:outline-none focus:ring-1 transition-all ${
+                  className={`w-full px-2.5 py-1.5 border rounded text-xs font-sans focus:outline-none focus:ring-1 transition-all ${
                     validationError 
                       ? 'border-red-500 ring-2 ring-red-500/15 text-red-900 bg-red-50/10 focus:ring-red-500' 
-                      : 'border-neutral-300 focus:ring-blue-500 text-neutral-800'
+                      : theme === 'gotico-retro'
+                        ? 'border-[#4d5152] focus:ring-[#0df0ff] bg-[#0a0a11] text-[#b5c6d0]'
+                        : 'border-neutral-300 bg-neutral-50 focus:ring-blue-500 text-neutral-800'
                   }`}
                 />
               </div>
@@ -1576,12 +1625,18 @@ export default function ScrapbookBuilder({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[10.5px] font-black uppercase text-neutral-500 mb-1">Fonte Clássica:</label>
+                  <label className={`block text-[10.5px] font-black uppercase mb-1 ${
+                    theme === 'gotico-retro' ? 'text-zinc-300' : 'text-neutral-500'
+                  }`}>Fonte Clássica:</label>
                   <select
                     id="builder-font-family"
                     value={fontFamily}
                     onChange={(e) => setFontFamily(e.target.value)}
-                    className="w-full px-2 py-1.5 border border-neutral-300 rounded text-xs bg-neutral-50 cursor-pointer"
+                    className={`w-full px-2 py-1.5 border rounded text-xs cursor-pointer focus:outline-none ${
+                      theme === 'gotico-retro'
+                        ? 'border-[#4d5152] bg-[#0c0c0f] text-[#c0c0c0]'
+                        : 'border-neutral-300 bg-neutral-50 text-neutral-800'
+                    }`}
                   >
                     {FONTS.map(f => (
                       <option key={f.id} value={f.id}>{f.label}</option>
@@ -1590,7 +1645,9 @@ export default function ScrapbookBuilder({
                 </div>
 
                 <div>
-                  <label className="block text-[10.5px] font-black uppercase text-neutral-500 mb-1">Tamanho da Fonte:</label>
+                  <label className={`block text-[10.5px] font-black uppercase mb-1 ${
+                    theme === 'gotico-retro' ? 'text-zinc-300' : 'text-neutral-500'
+                  }`}>Tamanho da Fonte:</label>
                   <input
                     id="builder-text-size"
                     type="range"
@@ -1940,16 +1997,26 @@ export default function ScrapbookBuilder({
           )}
 
           {/* CHOOSE RECIPIENT & ACTION BUTTON PANEL */}
-          <div className="bg-[#f0f5fa] border border-[#bcd2ea] rounded p-3 mt-auto flex flex-col gap-3 font-sans text-xs">
+          <div className={`p-3 mt-auto flex flex-col gap-3 font-sans text-xs border rounded ${
+            theme === 'gotico-retro'
+              ? 'bg-[#505657] border-[#5a6061]'
+              : 'bg-[#f0f5fa] border border-[#bcd2ea]'
+          }`}>
             
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
               <div>
-                <label className="block text-[9px] font-black uppercase text-neutral-500 mb-1">Destinatário do Scrap:</label>
+                <label className={`block text-[9px] font-black uppercase mb-1 ${
+                  theme === 'gotico-retro' ? 'text-zinc-200' : 'text-neutral-500'
+                }`}>Destinatário do Scrap:</label>
                 <select
                   id="builder-recipient-select"
                   value={recipientId}
                   onChange={(e) => setRecipientId(e.target.value)}
-                  className="w-full px-2 py-1 bg-white border border-neutral-300 rounded text-[11px] font-sans text-[#1d4ed8] font-bold cursor-pointer"
+                  className={`w-full px-2 py-1 rounded text-[11px] font-sans font-bold cursor-pointer focus:outline-none ${
+                    theme === 'gotico-retro'
+                      ? 'bg-zinc-800 border-zinc-750 text-sky-300'
+                      : 'bg-white border-neutral-300 text-[#1d4ed8]'
+                  }`}
                 >
                   <option value="me">Meu Perfil (Proprietário)</option>
                   {Object.values(profiles)

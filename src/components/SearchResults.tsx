@@ -68,9 +68,9 @@ export default function SearchResults({
   // 2. Filter Communities
   const matchedCommunities = communities.filter(c => {
     return (
-      c.name.toLowerCase().includes(normalizedQuery) ||
-      c.description.toLowerCase().includes(normalizedQuery) ||
-      c.category.toLowerCase().includes(normalizedQuery)
+      (c.name || '').toLowerCase().includes(normalizedQuery) ||
+      (c.description || '').toLowerCase().includes(normalizedQuery) ||
+      (c.category || '').toLowerCase().includes(normalizedQuery)
     );
   });
 

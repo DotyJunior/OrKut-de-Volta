@@ -479,6 +479,7 @@ export default function App() {
 
   // Real-time snapshot loader and hydration controller
   const [initDone, setInitDone] = useState<boolean>(false);
+  const [isRequestPanelOpen, setIsRequestPanelOpen] = useState<boolean>(false);
   const initFlags = useRef({
     profiles: false,
     users: false,
@@ -704,10 +705,10 @@ export default function App() {
 
         try {
           console.log(`Presence transition writing in Firestore: ${currentSavedState} -> ${nextState} (status: ${targetStatus})`);
-          await setDoc(doc(db, 'profiles', currentUserProfile.id), {
-            ...currentUserProfile,
-            statusOnline: targetStatus
-          });
+          //await setDoc(doc(db, 'profiles', currentUserProfile.id), {
+          //  ...currentUserProfile,
+          //  statusOnline: targetStatus
+          //});
           currentSavedState = nextState;
         } catch (e) {
           console.error("Auto heartbeat update failed: ", e);
@@ -862,13 +863,28 @@ export default function App() {
       checkInitDone();
     });
 
-    const unsubscribeRelationships = onSnapshot(collection(db, 'relationships'), (snapshot) => {
-      const list = snapshot.docs.map(d => ({ id: d.id, ...d.data() }) as any);
+    const unsubscribeRelationships = onSnapshot(collection(db, 'friend_requests'), (snapshot) => {
+      const list = snapshot.docs.map(d => {
+        const data = d.data();
+        const fromVal = data.fromUserId || data.senderId || '';
+        const toVal = data.toUserId || data.receiverId || '';
+        return {
+          id: d.id,
+          fromUserId: fromVal,
+          senderId: fromVal,
+          toUserId: toVal,
+          receiverId: toVal,
+          status: data.status || 'pending',
+          type: 'friend',
+          createdAt: data.createdAt || Date.now()
+        };
+      }) as any;
       setRelationships(list);
+      setFriendRequests(list);
       initFlags.current.relationships = true;
       checkInitDone();
     }, (error) => {
-      console.error("Error listening to relationships collection:", error);
+      console.error("Error listening to friend_requests collection:", error);
       initFlags.current.relationships = true;
       checkInitDone();
     });
@@ -1028,13 +1044,17 @@ export default function App() {
 
   // Synchronize friendRequests state dynamically from the real-time relationships list dependent on currentUserProfile
   useEffect(() => {
-    const activeId = currentUserProfile?.id || 'me';
+    if (!currentUserProfile?.id) {
+      setFriendRequests([]);
+      return;
+    }
+    const activeId = currentUserProfile.id;
     const mapped = relationships
-      .filter((rel: any) => rel.type === 'friend' && (rel.fromUserId === activeId || rel.toUserId === activeId))
+      .filter((rel: any) => rel.type === 'friend')
       .map((rel: any) => ({
         id: rel.id,
-        senderId: rel.fromUserId,
-        receiverId: rel.toUserId,
+        fromUserId: rel.fromUserId,
+        toUserId: rel.toUserId,
         status: rel.status,
         createdAt: rel.createdAt || Date.now()
       }));
@@ -1477,8 +1497,8 @@ export default function App() {
     // Add dynamic friends from accepted requests
     friendRequests.forEach(req => {
       if (req.status === 'accepted') {
-        if (req.senderId === uid) friendsSet.add(req.receiverId);
-        if (req.receiverId === uid) friendsSet.add(req.senderId);
+        if (req.fromUserId === uid) friendsSet.add(req.toUserId);
+        if (req.toUserId === uid) friendsSet.add(req.fromUserId);
       }
     });
     
@@ -1527,13 +1547,13 @@ export default function App() {
 
     // Check if there is already any request between sender and receiver in either direction
     const existingReq = friendRequests.find(req => 
-      (req.senderId === currentUserId && req.receiverId === receiverId) ||
-      (req.senderId === receiverId && req.receiverId === currentUserId)
+      (req.fromUserId === currentUserId && req.toUserId === receiverId) ||
+      (req.toUserId === currentUserId && req.fromUserId === receiverId)
     );
 
     if (existingReq) {
       if (existingReq.status === 'pending') {
-        if (existingReq.senderId === currentUserId) {
+        if (existingReq.fromUserId === currentUserId) {
           console.warn("Você já enviou uma solicitação de amizade para este usuário que está pendente.");
         } else {
           console.warn("Este usuário já enviou uma solicitação de amizade para você. Por favor, verifique suas notificações.");
@@ -1546,45 +1566,67 @@ export default function App() {
     }
 
     try {
-      await addDoc(collection(db, 'relationships'), {
+      await addDoc(collection(db, 'friend_requests'), {
         fromUserId: currentUserId,
+        senderId: currentUserId,
         toUserId: receiverId,
-        type: 'friend',
+        receiverId: receiverId,
         status: 'pending',
         createdAt: Date.now()
       });
     } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, 'relationships');
+      handleFirestoreError(err, OperationType.WRITE, 'friend_requests');
     }
   };
 
   const handleAcceptFriendRequest = async (requestId: string) => {
     try {
-      const reqRef = doc(db, 'relationships', requestId);
+      const reqRef = doc(db, 'friend_requests', requestId);
       await setDoc(reqRef, { status: 'accepted' }, { merge: true });
 
       const targetReq = friendRequests.find(r => r.id === requestId);
       if (targetReq) {
         const opposite = friendRequests.find(r => 
-          r.senderId === targetReq.receiverId && 
-          r.receiverId === targetReq.senderId && 
+          r.fromUserId === targetReq.toUserId && 
+          r.toUserId === targetReq.fromUserId && 
           r.id !== requestId
         );
         if (opposite) {
-          await deleteDoc(doc(db, 'relationships', opposite.id));
+          await deleteDoc(doc(db, 'friend_requests', opposite.id));
         }
       }
     } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, `relationships/${requestId}`);
+      handleFirestoreError(err, OperationType.WRITE, `friend_requests/${requestId}`);
     }
   };
 
   const handleRejectFriendRequest = async (requestId: string) => {
     try {
-      const reqRef = doc(db, 'relationships', requestId);
+      const reqRef = doc(db, 'friend_requests', requestId);
       await setDoc(reqRef, { status: 'rejected' }, { merge: true });
     } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, `relationships/${requestId}`);
+      handleFirestoreError(err, OperationType.WRITE, `friend_requests/${requestId}`);
+    }
+  };
+
+  const handleRemoveFriend = async (targetId: string) => {
+    const currentUserId = currentUserProfile?.id || 'me';
+    if (!currentUserId || !targetId) return;
+
+    try {
+      // Get any friend requests matching these users in both directions (including accepted or pending)
+      const matches = friendRequests.filter(req => 
+        ((req.fromUserId === currentUserId && req.toUserId === targetId) ||
+         (req.fromUserId === targetId && req.toUserId === currentUserId))
+      );
+
+      for (const req of matches) {
+        if (req.id) {
+          await deleteDoc(doc(db, 'friend_requests', req.id));
+        }
+      }
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, `friend_requests_delete_${targetId}`);
     }
   };
 
@@ -1936,6 +1978,7 @@ export default function App() {
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
         onLogout={handleLogout}
+        themeStyles={themeStyles}
       />
 
       {/* 2. Main content container */}
@@ -1992,7 +2035,9 @@ export default function App() {
             onAddFriend={handleAddFriend}
             onAcceptFriendRequest={handleAcceptFriendRequest}
             onRejectFriendRequest={handleRejectFriendRequest}
+            onRemoveFriend={handleRemoveFriend}
             profiles={profiles}
+            loggedInUserId={currentUserProfile?.id || ''}
           />
         )}
  
@@ -2040,6 +2085,7 @@ export default function App() {
             currentUser={{ id: currentUserProfile?.id || profiles.me.id || 'me', name: profiles.me.name, avatar: profiles.me.avatar }}
             onPostScrap={handleAddScrap}
             onNavigateToTab={(tab) => setCurrentTab(tab)}
+            theme={currentViewedProfile.theme}
           />
         )}
 

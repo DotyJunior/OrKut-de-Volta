@@ -15,9 +15,10 @@ import {
   Check, 
   X,
   Sparkles,
-  Award
+  Award,
+  Bell
 } from 'lucide-react';
-import { Friend, Community } from '../types';
+import { Friend, Community, FriendRequest } from '../types';
 
 interface SocialSidebarProps {
   currentTab: string;
@@ -26,6 +27,12 @@ interface SocialSidebarProps {
   communities: Community[];
   onNavigateToFriend: (id: string) => void;
   themeStyles: any; // injected theme style
+  friendRequests: FriendRequest[];
+  loggedInUserId?: string;
+  onAcceptFriendRequest: (requestId: string) => Promise<void>;
+  onRejectFriendRequest: (requestId: string) => Promise<void>;
+  profiles: Record<string, any>;
+  theme?: string;
 }
 
 export default function SocialSidebar({
@@ -35,6 +42,12 @@ export default function SocialSidebar({
   communities,
   onNavigateToFriend,
   themeStyles,
+  friendRequests,
+  loggedInUserId,
+  onAcceptFriendRequest,
+  onRejectFriendRequest,
+  profiles,
+  theme,
 }: SocialSidebarProps) {
   // Invite states
   const [inviteInput, setInviteInput] = useState('');
@@ -45,7 +58,7 @@ export default function SocialSidebar({
   const [invitationsList, setInvitationsList] = useState<string[]>([]);
 
   // Modals / Dropdowns toggles
-  const [activeModal, setActiveModal] = useState<'none' | 'visitors' | 'favorites' | 'friends'>('none');
+  const [activeModal, setActiveModal] = useState<'none' | 'visitors' | 'favorites' | 'friends' | 'pending-requests'>('none');
 
   // Phrases list
   const invitePhrases = [
@@ -196,19 +209,36 @@ export default function SocialSidebar({
           </button>
 
           {/* 5. AMIGOS (MODAL TOGGLE) */}
-          <button
-            id="sidebar-nav-friends-popup"
-            onClick={() => setActiveModal(activeModal === 'friends' ? 'none' : 'friends')}
-            className={`px-3 py-2.5 transition-colors border-b border-dashed border-neutral-200/50 flex items-center justify-between cursor-pointer text-left hover:bg-neutral-100/15`}
+          <div
+            id="sidebar-nav-friends-container"
+            className="px-3 py-2.5 border-b border-dashed border-neutral-200/50 flex items-center justify-between hover:bg-neutral-100/15"
           >
-            <span className="flex items-center gap-2">
+            <div 
+              onClick={() => setActiveModal(activeModal === 'friends' ? 'none' : 'friends')}
+              className="flex items-center gap-2 cursor-pointer flex-1"
+            >
               <Heart size={13} className="text-red-500" />
-              <span>Amigos</span>
-            </span>
-            <span className="text-[9px] bg-neutral-200/75 px-1 py-0.2 rounded text-neutral-600 font-bold font-mono">
-              {friends.length} conectores
-            </span>
-          </button>
+              <span className="text-xs">Amigos</span>
+              <span className="text-[9px] bg-neutral-200/75 px-1 py-0.2 rounded text-neutral-600 font-bold font-mono">
+                {friends.length} conectados
+              </span>
+            </div>
+            
+            <button 
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setActiveModal(activeModal === 'pending-requests' ? 'none' : 'pending-requests');
+              }}
+              className="relative p-1 hover:bg-neutral-200/50 rounded transition-colors cursor-pointer flex items-center justify-center mr-1"
+              title="Solicitações Pendentes & Diagnósticos"
+            >
+              {friendRequests.filter(req => req.toUserId === loggedInUserId && req.status === 'pending').length > 0 && (
+                <span className="absolute top-0 right-0 w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
+              )}
+              <Bell size={13} className={friendRequests.filter(req => req.toUserId === loggedInUserId && req.status === 'pending').length > 0 ? "text-pink-500" : "text-neutral-400"} />
+            </button>
+          </div>
 
           {/* 6. VISITANTES (MODAL TOGGLE) */}
           <button
@@ -253,6 +283,127 @@ export default function SocialSidebar({
           </div>
 
           <div className="p-3 text-xs">
+            {activeModal === 'pending-requests' && (
+              <div className="space-y-3 py-1 text-left">
+                <div className="flex justify-between items-center bg-neutral-100 p-1 rounded border border-neutral-200">
+                  <h4 className="text-[10px] font-bold text-neutral-600 uppercase">Solicitações Pendentes ({friendRequests.filter(req => req.toUserId === loggedInUserId && req.status === 'pending').length})</h4>
+                </div>
+
+                <div className="space-y-1">
+                  {friendRequests.filter(req => req.toUserId === loggedInUserId && req.status === 'pending').map((request) => {
+                    const fromProfile = profiles[request.fromUserId];
+                    return (
+                        <div key={request.id} className="p-2 border rounded text-[10.5px] flex justify-between items-center bg-white shadow-sm">
+                            <span className="font-bold text-neutral-800 truncate" style={{maxWidth: '120px'}}>{fromProfile?.name || `Usuário (${request.fromUserId.substring(0,6)})`}</span>
+                            <div className="flex gap-1.5">
+                                <button 
+                                  onClick={() => onAcceptFriendRequest(request.id)} 
+                                  className="bg-green-600 text-white font-bold rounded-md px-2 py-0.5 text-[9px] hover:bg-green-700 cursor-pointer"
+                                >
+                                  Aceitar
+                                </button>
+                                <button 
+                                  onClick={() => onRejectFriendRequest(request.id)} 
+                                  className="bg-red-600 text-white font-bold rounded-md px-2 py-0.5 text-[9px] hover:bg-red-700 cursor-pointer"
+                                >
+                                  Rejeitar
+                                </button>
+                            </div>
+                        </div>
+                    );
+                  })}
+                  {friendRequests.filter(req => req.toUserId === loggedInUserId && req.status === 'pending').length === 0 && (
+                    <p className="text-[10px] text-neutral-400 text-center py-2 italic bg-neutral-50 rounded border border-dashed border-neutral-200">
+                      Nenhuma solicitação pendente para você neste momento.
+                    </p>
+                  )}
+                </div>
+
+                {/* PAINEL DE DIAGNÓSTICO EM TEMPO REAL (Rastreamento Real) */}
+                <div className="mt-3 p-2 bg-neutral-900 text-zinc-300 rounded-lg border border-neutral-700 font-mono text-[9px] select-all leading-tight">
+                  <div className="text-pink-400 font-bold border-b border-neutral-700 pb-1 mb-1 flex justify-between items-center">
+                    <span>📡 RASTREAMENTO REAL</span>
+                    <span className="text-[8px] bg-red-600 text-white font-bold px-1 rounded animate-pulse">LIVE</span>
+                  </div>
+                  
+                  <div className="space-y-1 text-zinc-300">
+                    <div>
+                      <span className="text-yellow-400">ID Usuário Ativo (B):</span>{" "}
+                      <span className="text-white font-bold">{loggedInUserId || "Desconectado"}</span>
+                    </div>
+                    <div>
+                      <span className="text-yellow-400">ID Lindo pelo Sino:</span>{" "}
+                      <span className="text-white font-bold">{loggedInUserId || "Desconectado"}</span>
+                    </div>
+                    <div>
+                      <span className="text-yellow-400">Documentos Amizade Totais:</span>{" "}
+                      <span className="text-white font-bold">{friendRequests.length}</span>
+                    </div>
+                    <div>
+                      <span className="text-yellow-400">Filtrados (pending & destino B):</span>{" "}
+                      <span className="text-white font-bold">
+                        {friendRequests.filter(req => req.toUserId === loggedInUserId && req.status === 'pending').length}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="border-t border-neutral-800 mt-2 pt-2">
+                    <p className="text-pink-400 font-bold mb-1 uppercase text-[8.5px]">Análise detalhada por Documento:</p>
+                    {friendRequests.length === 0 ? (
+                      <p className="text-red-400 text-[8.5px] italic">[0 registros retornados pela coleção friend_requests]</p>
+                    ) : (
+                      <div className="space-y-2 mt-1.5 max-h-[160px] overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-700">
+                        {friendRequests.map((req, idx) => {
+                          const isMatchTo = req.toUserId === loggedInUserId;
+                          const isPending = req.status === 'pending';
+                          return (
+                            <div key={req.id} className="p-1.5 bg-neutral-950 rounded border border-neutral-800">
+                              <p className="text-emerald-400 font-extrabold text-[8.5px]">Doc #{idx + 1} (id: {req.id})</p>
+                              <pre className="text-[7.5px] text-zinc-400 leading-[9px] mt-0.5 bg-neutral-900/50 p-1 rounded overflow-x-auto whitespace-pre-wrap">
+{`fromUserId : "${req.fromUserId}"
+toUserId   : "${req.toUserId}"
+status     : "${req.status}"
+senderId   : "${req.senderId}"
+receiverId : "${req.receiverId}"`}
+                              </pre>
+                              
+                              <p className="mt-1 font-bold text-[8px] text-yellow-500 uppercase">Valores Lado-a-Lado:</p>
+                              <div className="text-[7.5px] text-zinc-400 mt-0.5 space-y-0.5 leading-[9px]">
+                                <div className="flex justify-between">
+                                  <span>Destinatário doc (toUserId):</span>
+                                  <span className="text-white font-bold">"{req.toUserId}"</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span>ID Logado (loggedInUserId):</span>
+                                  <span className="text-white font-bold">"{loggedInUserId}"</span>
+                                </div>
+                              </div>
+
+                              <div className="mt-1 flex items-center gap-1.5 text-[8px] font-bold">
+                                <span>Comparação ID:</span>
+                                {isMatchTo ? (
+                                  <span className="text-green-400 bg-green-950/40 px-1 rounded border border-green-800">✅ VERDADEIRO (IGUAIS)</span>
+                                ) : (
+                                  <span className="text-red-400 bg-red-950/40 px-1 rounded border border-red-800">❌ FALSO (DIFERENTES)</span>
+                                )}
+                              </div>
+                              <div className="mt-0.5 flex items-center gap-1.5 text-[8px] font-bold">
+                                <span>Check status:</span>
+                                {isPending ? (
+                                  <span className="text-green-400 bg-green-950/40 px-1 rounded border border-green-800">✅ PENDING</span>
+                                ) : (
+                                  <span className="text-red-400 bg-red-950/40 px-1 rounded border border-red-800">❌ STATUS: {req.status}</span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
             {activeModal === 'friends' && (
               <div className="space-y-2">
                 <p className="text-[11px] text-neutral-600 italic">Conversas criptografadas ponta-a-ponta abertas:</p>
@@ -289,7 +440,7 @@ export default function SocialSidebar({
                           <span>{v.name}</span>
                           <span className="text-[8px] text-neutral-400">{v.time}</span>
                         </div>
-                        <span className="text-[8px] text-green-700 font-mono font-semibold">{v.status}</span>
+                        <span className={`text-[8px] font-mono font-semibold ${themeStyles.bg.includes('bg-checkerboard') ? 'bg-[#0c4b24] border border-[#0ef46f] text-[#16fc21] px-1 rounded' : 'text-green-700'}`}>{v.status}</span>
                       </div>
                     </div>
                   ))}
@@ -324,33 +475,71 @@ export default function SocialSidebar({
       )}
 
       {/* BLOCK — CONVIDAR AMIGO */}
-      <div className={`border border-neutral-300 rounded shadow-sm overflow-hidden text-left bg-[#fffdf8]`}>
-        <div className={`bg-[#dee7f4] border-b border-neutral-200 px-3 py-1.5 flex items-center justify-between`}>
-          <span className="text-[11px] font-bold text-neutral-700 uppercase flex items-center gap-1">
-            <Plus size={13} className="text-[#d946ef]" /> Convidar Amigo
+      <div className={`rounded shadow-sm overflow-hidden text-left transition-all duration-300 ${
+        theme === 'emo-2008'
+          ? 'bg-neutral-900/85 backdrop-blur-sm border border-[#1ec6ff] anim-blue-neon'
+          : theme === 'default' || !theme 
+            ? 'bg-[#77879e] border border-[#1b4b82]' 
+            : 'bg-neutral-900/80 backdrop-blur-sm border border-neutral-800'
+      }`}>
+        <div className={`px-3 py-1.5 flex items-center justify-between border-b ${
+          theme === 'emo-2008'
+            ? 'bg-neutral-950/75 border-[#1ec6ff]/35'
+            : theme === 'default' || !theme 
+              ? 'bg-[#1b4b82] border-b border-[#2965ab]' 
+              : 'bg-neutral-950/70 border-neutral-600'
+        }`}>
+          <span className={`text-[11px] font-bold uppercase flex items-center gap-1 ${
+            theme === 'emo-2008'
+              ? 'text-[#1ec6ff]'
+              : theme === 'default' || !theme ? 'text-white' : 'text-neutral-300'
+          }`}>
+            <Plus size={13} className={theme === 'emo-2008' ? 'text-[#1ec6ff]' : (theme === 'default' || !theme ? 'text-white' : 'text-neutral-400')} /> Convidar Amigo
           </span>
-          <span className="text-[9px] bg-pink-100 text-[#d946ef] font-bold px-1.5 py-0.2 rounded font-mono">
+          <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded font-mono ${
+            theme === 'emo-2008'
+              ? 'bg-[#1ec6ff]/10 text-[#1ec6ff] border border-[#1ec6ff]/30'
+              : theme === 'default' || !theme 
+                ? 'bg-[#123661] text-[#77879e]' 
+                : 'bg-neutral-800 text-neutral-400'
+          }`}>
             {invitesLeft} RESTANTES
           </span>
         </div>
-
-        <div className="p-3 text-xs flex flex-col justify-between min-h-[190px]">
+        
+        <div className={`p-3 text-xs flex flex-col justify-between min-h-[190px] ${
+          theme === 'default' || !theme ? 'text-black' : 'text-neutral-200'
+        }`}>
           {invitesLeft > 0 ? (
             <form onSubmit={handleSendInvite} className="flex flex-col gap-2 relative">
-              <label className="text-[10px] font-bold text-neutral-600 uppercase">Username ou E-mail:</label>
+              <label className={`text-[10px] font-bold uppercase ${
+                theme === 'emo-2008'
+                  ? 'text-[#1ec6ff]'
+                  : theme === 'default' || !theme ? 'text-[#000000]' : 'text-neutral-600'
+              }`}>Username ou E-mail:</label>
               <input
                 id="sidebar-invite-input"
                 type="text"
                 value={inviteInput}
                 onChange={(e) => setInviteInput(e.target.value)}
                 placeholder="Ex: rust.nomad ou dario@gmail.com"
-                className="w-full px-2 py-1 border border-neutral-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-400 text-xs text-neutral-800 bg-white"
+                className={`w-full px-2 py-1 border rounded focus:outline-none focus:ring-1 text-xs ${
+                  theme === 'emo-2008'
+                    ? 'border-[#1ec6ff]/40 text-neutral-100 bg-neutral-950 focus:ring-[#1ec6ff]'
+                    : theme === 'default' || !theme 
+                      ? 'border-[#1b4b82] text-black bg-white focus:ring-[#1b4b82]' 
+                      : 'border-neutral-700 text-neutral-100 bg-neutral-950 focus:ring-neutral-500'
+                }`}
                 required
               />
 
               {/* Quick message selector */}
               <div>
-                <label className="text-[9px] font-bold text-neutral-500 uppercase block mb-1">Frase nostálgica de acompanhamento:</label>
+                <label className={`text-[9px] font-bold uppercase block mb-1 ${
+                  theme === 'emo-2008'
+                    ? 'text-[#1ec6ff]'
+                    : theme === 'default' || !theme ? 'text-[#000000] bg-[#77879e]' : 'text-neutral-500'
+                }`}>Frase nostálgica de acompanhamento:</label>
                 <div className="flex flex-col gap-1">
                   {invitePhrases.map((phrase, idx) => (
                     <button
@@ -358,9 +547,17 @@ export default function SocialSidebar({
                       key={idx}
                       onClick={() => setSelectedPhrase(phrase)}
                       className={`text-left p-1 text-[9px] rounded font-sans leading-tight cursor-pointer ${
-                        selectedPhrase === phrase 
-                          ? 'bg-[#dee7f4] text-[#1d4ed8] font-bold border border-blue-200' 
-                          : 'hover:bg-neutral-50 text-neutral-600 border border-transparent'
+                        theme === 'emo-2008'
+                          ? (selectedPhrase === phrase
+                            ? 'bg-[#1ed6ff]/10 text-[#1ec6ff] font-bold border border-[#1ec6ff]'
+                            : 'hover:bg-neutral-800 text-neutral-400 border border-transparent')
+                          : theme === 'default' || !theme
+                            ? (selectedPhrase === phrase
+                              ? 'bg-neutral-800 text-white font-bold border border-neutral-900 shadow-[inset_1px_1px_3px_rgba(0,0,0,0.5)]'
+                              : 'bg-[#5a668a] text-stone-200 hover:bg-[#4d5777] border border-transparent')
+                            : (selectedPhrase === phrase 
+                              ? 'bg-neutral-800 text-neutral-200 font-bold border border-neutral-600' 
+                              : 'hover:bg-neutral-800 text-neutral-400 border border-transparent')
                       }`}
                     >
                       “{phrase}”
@@ -372,7 +569,13 @@ export default function SocialSidebar({
               <button
                 type="submit"
                 disabled={isSending || !inviteInput.trim()}
-                className="w-full text-center font-bold px-3 py-1.5 mt-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-neutral-300 text-white rounded cursor-pointer transition-all flex items-center justify-center gap-1.5 font-sans"
+                className={`w-full text-center font-bold px-3 py-1.5 mt-2 rounded cursor-pointer transition-all flex items-center justify-center gap-1.5 font-sans shadow-md ${
+                  theme === 'emo-2008'
+                    ? 'bg-[#1ec6ff] hover:bg-[#00adff] text-zinc-950 font-black disabled:bg-neutral-800 disabled:text-neutral-500'
+                    : theme === 'default' || !theme
+                      ? 'bg-[#1b4b82] hover:bg-[#153a66] disabled:bg-[#4d5777] text-white'
+                      : 'bg-neutral-700 hover:bg-neutral-600 disabled:bg-neutral-800 text-[#000000]'
+                }`}
               >
                 {isSending ? (
                   <>🚀 Enviando sinal...</>
@@ -385,16 +588,24 @@ export default function SocialSidebar({
               </button>
             </form>
           ) : (
-            <div className="text-center py-6 text-neutral-400 italic">
+            <div className={`text-center py-6 italic ${
+              theme === 'default' || !theme ? 'text-neutral-900' : 'text-neutral-400'
+            }`}>
               🚨 Seus 3 convites mensais foram consumidos. Aguarde o ciclo de segurança renovar em 30 dias para convocar mais companheiros.
             </div>
           )}
 
           {/* Invitation success list */}
           {invitationsList.length > 0 && (
-            <div className="mt-3 border-t border-dashed border-neutral-200 pt-2 text-[10px]">
-              <span className="font-bold text-neutral-500 block">Sinais ativados este mês:</span>
-              <ul className="list-disc pl-3 text-neutral-600 mt-1">
+            <div className={`mt-3 border-t border-dashed pt-2 text-[10px] ${
+              theme === 'default' || !theme ? 'border-[#1b4b82]/40' : 'border-neutral-700'
+            }`}>
+              <span className={`font-bold block ${
+                theme === 'default' || !theme ? 'text-[#040415]' : 'text-neutral-400'
+              }`}>Sinais ativados este mês:</span>
+              <ul className={`list-disc pl-3 mt-1 ${
+                theme === 'default' || !theme ? 'text-neutral-900' : 'text-neutral-500'
+              }`}>
                 {invitationsList.map((mail, i) => (
                   <li key={i} className="truncate">{mail} (Aguardando handcheck)</li>
                 ))}
@@ -402,7 +613,9 @@ export default function SocialSidebar({
             </div>
           )}
 
-          <div className="border-t border-dashed border-neutral-150 mt-3 pt-2 text-center text-[10px] text-neutral-500 font-sans italic">
+          <div className={`border-t border-dashed mt-3 pt-2 text-center text-[10px] font-sans italic ${
+            theme === 'default' || !theme ? 'border-[#1b4b82]/40 text-[#040415]' : 'border-neutral-700 text-neutral-500'
+          }`}>
             “A internet antiga só existia porque alguém chamou você.”
           </div>
         </div>
