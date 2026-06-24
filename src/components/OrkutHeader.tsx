@@ -10,6 +10,9 @@ interface HeaderProps {
   setSearchQuery: (query: string) => void;
   onLogout?: () => void;
   themeStyles: ThemeStyle;
+  siteLogo?: string;
+  showAssets?: boolean;
+  themeId?: string;
 }
 
 export default function OrkutHeader({ 
@@ -20,6 +23,9 @@ export default function OrkutHeader({
   setSearchQuery,
   onLogout,
   themeStyles,
+  siteLogo,
+  showAssets = false,
+  themeId,
 }: HeaderProps) {
 
   const menuItems = [
@@ -27,7 +33,8 @@ export default function OrkutHeader({
     { id: 'scrapbook', label: 'PAGINA DE RECADOS' },
     { id: 'testimonials', label: 'DEPOIMENTOS' },
     { id: 'communities', label: 'COMUNIDADES' },
-    { id: 'scrapbook-builder', label: '🎨 BUILDER DE SCRAPS' }
+    { id: 'scrapbook-builder', label: '🎨 BUILDER DE SCRAPS' },
+    ...(showAssets ? [{ id: 'assets-manager', label: '🗂️ ASSETS' }] : [])
   ];
 
   return (
@@ -98,8 +105,19 @@ export default function OrkutHeader({
       </div>
 
       {/* 2. NAVIGATION BAR: Vintage Light Slate Blue */}
-      <div className={`${themeStyles.navBg} py-3.5 px-4`}>
-        <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center gap-4">
+      <div className={`relative overflow-hidden ${themeStyles.navBg} py-3.5 px-4`}>
+        {themeId === 'gotico-retro' && (
+          <div 
+            className="absolute inset-0 pointer-events-none opacity-25 z-0"
+            style={{
+              backgroundImage: "url('/assets/themes/elemento-prara-textura-de-fundo.svg'), url('/assets/themes/elemento-prara-textura-de-fundo.svg')",
+              backgroundPosition: '0 0, 50px 50px',
+              backgroundRepeat: 'repeat',
+              backgroundSize: '100px 100px',
+            }}
+          />
+        )}
+        <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center gap-4 relative z-10">
           
           {/* Brand Logo Scrapzone */}
           <div 
@@ -109,12 +127,16 @@ export default function OrkutHeader({
               setCurrentTab('profile');
             }}
           >
-            <img 
-              src="https://i.imgur.com/dhYT8Fa.png" 
-              alt="Scrapzone Logo" 
-              className="h-[110px] md:h-[120px] object-contain transition-transform hover:scale-102 active:scale-98"
-              referrerPolicy="no-referrer"
-            />
+            {siteLogo ? (
+              <img 
+                src={siteLogo} 
+                alt="Scrapzone Logo" 
+                className="h-[110px] md:h-[120px] object-contain transition-transform hover:scale-102 active:scale-98"
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <div className="h-[110px] md:h-[120px] w-1" />
+            )}
           </div>
 
           {/* Horizontal Vintage Menu Alignment directly adjacent to the logo, exactly like reference images */}

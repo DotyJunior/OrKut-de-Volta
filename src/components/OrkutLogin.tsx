@@ -30,9 +30,10 @@ interface OrkutLoginProps {
   defaultProfiles: Record<string, Profile>;
   isEmailUnverifiedProfile?: Profile | null;
   onLogout?: () => void;
+  siteLogo?: string;
 }
 
-export default function OrkutLogin({ onLoginSuccess, defaultProfiles, isEmailUnverifiedProfile, onLogout }: OrkutLoginProps) {
+export default function OrkutLogin({ onLoginSuccess, defaultProfiles, isEmailUnverifiedProfile, onLogout, siteLogo }: OrkutLoginProps) {
   const [view, setView] = useState<'login' | 'register' | 'recover'>('login');
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -669,14 +670,18 @@ Este código expira em 10 minutos. Não revele esta chave temporária para terce
         <div className="flex-1 flex flex-col justify-center text-center md:text-left py-4 px-2 md:px-0">
           
           {/* Logo Brand image logo */}
-          <div className="flex justify-center md:justify-start items-center gap-1.5 mb-6 animate-fade-in select-none">
-            <img 
-              src="https://i.imgur.com/dhYT8Fa.png" 
-              alt="Scrapzone Logo" 
-              className="h-[210px] md:h-[220px] object-contain"
-              referrerPolicy="no-referrer"
-            />
-          </div>
+          {siteLogo ? (
+            <div className="flex justify-center md:justify-start items-center gap-1.5 mb-6 animate-fade-in select-none">
+              <img 
+                src={siteLogo} 
+                alt="Scrapzone Logo" 
+                className="h-[210px] md:h-[220px] object-contain"
+                referrerPolicy="no-referrer"
+              />
+            </div>
+          ) : (
+            <div className="h-6" />
+          )}
 
           <h2 className="text-xl md:text-2xl font-bold text-[#1b4372] tracking-normal mb-6 leading-snug">
             Reconecte-se novamente em uma rede segura e amigável.

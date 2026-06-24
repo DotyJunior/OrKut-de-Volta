@@ -579,9 +579,19 @@ export default function ProfileLayout({
             )}
             
             <p className={`text-[12px] md:text-[13px] font-medium font-sans flex items-center justify-center gap-1.5 mt-2.5 tracking-wider uppercase ${
-              profile.theme === 'emo-2008' ? 'text-[#be2efd]' : 'text-neutral-700'
+              profile.theme === 'emo-2008' 
+                ? 'text-[#be2efd]' 
+                : profile.theme === 'gotico-retro'
+                  ? 'text-[#ad2fff]'
+                  : 'text-neutral-700'
             }`}>
-              <MapPin size={14} className={profile.theme === 'emo-2008' ? 'text-[#be2efd] shrink-0' : 'text-pink-600 shrink-0'} />
+              <MapPin size={14} className={
+                profile.theme === 'emo-2008' 
+                  ? 'text-[#be2efd] shrink-0' 
+                  : profile.theme === 'gotico-retro'
+                    ? 'text-[#ad2fff] shrink-0'
+                    : 'text-pink-600 shrink-0'
+              } />
               {profile.location}
             </p>
           </div>
@@ -853,73 +863,187 @@ export default function ProfileLayout({
 
           {/* Retro Orkut Badges Ratings */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 py-1 mb-3 font-sans select-none">
-            <div className={`border border-neutral-200/40 rounded p-2 text-center flex flex-col items-center justify-center transition-all ${
-              profile.theme === 'gotico-retro' 
-                ? 'bg-[#3e2142]' 
-                : profile.theme === 'emo-2008'
-                  ? 'bg-[#0f0f11]'
-                  : 'bg-neutral-100/40'
-            } ${!isOwnProfile ? 'hover:bg-[#fefce8]/40 hover:border-amber-200' : ''}`}>
-              <span className="text-[10px] text-neutral-500 font-semibold uppercase mb-1 flex items-center gap-1">
-                Confiável {!isOwnProfile && <span className="text-[9px] text-[#406a94] normal-case font-normal">(votar)</span>}
-              </span>
-              <div id="meter-trusty" className="flex gap-1.5 py-0.5">
-                {renderSmileys(profile.trusty)}
+            {profile.theme === 'gotico-retro' ? (
+              <div className="relative pt-6 pb-2 text-center flex flex-col items-center justify-between group select-none min-h-[125px]">
+                {/* The Cross at the top */}
+                <div className="absolute top-0 flex justify-center items-center h-6 w-full">
+                  <div className="relative w-1.5 h-6 bg-[#8a7f96] flex justify-center items-center shadow-xs rounded-sm">
+                    <div className="absolute top-1.5 w-4.5 h-1.5 bg-[#8a7f96] rounded-sm" />
+                  </div>
+                </div>
+                
+                {/* Body of the Tombstone */}
+                <div className="relative flex flex-col items-center justify-center bg-gradient-to-b from-[#1b0d1e] to-[#2d1533] border-2 border-[#b08d57]/50 w-full rounded-t-[48px] pt-4 pb-2 px-1 text-center shadow-[0_4px_12px_rgba(0,0,0,0.5)] min-h-[90px] z-10 hover:border-[#ff00a0]/80 transition-all duration-300">
+                  <span className="text-[10px] text-[#b08d57] font-black uppercase mb-1.5 tracking-wider font-mono">
+                    Confiável
+                  </span>
+                  <div id="meter-trusty" className="flex gap-1.5 py-0.5 justify-center items-center">
+                    {renderSmileys(profile.trusty)}
+                  </div>
+                </div>
+                
+                {/* Tombstone Base Plate */}
+                <div className="w-[106%] h-2.5 bg-[#170919] border border-[#b08d57]/30 rounded-full shadow-md z-20 -mt-1" />
               </div>
-            </div>
-
-            <div className={`border border-neutral-200/40 rounded p-2 text-center flex flex-col items-center justify-center transition-all ${
-              profile.theme === 'gotico-retro' 
-                ? 'bg-[#3e2142]' 
-                : profile.theme === 'emo-2008'
-                  ? 'bg-[#0f0f11]'
-                  : 'bg-neutral-100/40'
-            } ${!isOwnProfile ? 'hover:bg-[#f0f9ff]/40 hover:border-sky-200' : ''}`}>
-              <span className="text-[10px] text-neutral-500 font-semibold uppercase mb-1 flex items-center gap-1">
-                Legal {!isOwnProfile && <span className="text-[9px] text-[#406a94] normal-case font-normal">(votar)</span>}
-              </span>
-              <div id="meter-cool" className="flex gap-1.5 py-0.5">
-                {renderIceCubes(profile.cool)}
+            ) : (
+              <div className={`border border-neutral-200/40 rounded p-2 text-center flex flex-col items-center justify-center transition-all ${
+                profile.theme === 'emo-2008' ? 'bg-[#0f0f11]' : 'bg-neutral-100/40'
+              } ${!isOwnProfile ? 'hover:bg-[#fefce8]/40 hover:border-amber-200' : ''}`}>
+                <span className="text-[10px] text-neutral-500 font-semibold uppercase mb-1 flex items-center gap-1">
+                  Confiável {!isOwnProfile && <span className="text-[9px] text-[#406a94] normal-case font-normal">(votar)</span>}
+                </span>
+                <div id="meter-trusty" className="flex gap-1.5 py-0.5">
+                  {renderSmileys(profile.trusty)}
+                </div>
               </div>
-            </div>
+            )}
 
-            <div className={`border border-neutral-200/40 rounded p-2 text-center flex flex-col items-center justify-center transition-all ${
-              profile.theme === 'gotico-retro' 
-                ? 'bg-[#3e2142]' 
-                : profile.theme === 'emo-2008'
-                  ? 'bg-[#0f0f11]'
-                  : 'bg-neutral-100/40'
-            } ${!isOwnProfile ? 'hover:bg-[#fff1f2]/40 hover:border-rose-200' : ''}`}>
-              <span className="text-[10px] text-neutral-500 font-semibold uppercase mb-1 flex items-center gap-1">
-                Sexy {!isOwnProfile && <span className="text-[9px] text-[#406a94] normal-case font-normal">(votar)</span>}
-              </span>
-              <div id="meter-sexy" className="flex gap-1.5 py-0.5">
-                {renderHearts(profile.sexy)}
+            {/* Legal Card */}
+            {profile.theme === 'gotico-retro' ? (
+              <div className="relative pt-6 pb-2 text-center flex flex-col items-center justify-between group select-none min-h-[125px]">
+                {/* The Cross at the top */}
+                <div className="absolute top-0 flex justify-center items-center h-6 w-full">
+                  <div className="relative w-1.5 h-6 bg-[#8a7f96] flex justify-center items-center shadow-xs rounded-sm">
+                    <div className="absolute top-1.5 w-4.5 h-1.5 bg-[#8a7f96] rounded-sm" />
+                  </div>
+                </div>
+                
+                {/* Body of the Tombstone */}
+                <div className="relative flex flex-col items-center justify-center bg-gradient-to-b from-[#1b0d1e] to-[#2d1533] border-2 border-[#b08d57]/50 w-full rounded-t-[48px] pt-4 pb-2 px-1 text-center shadow-[0_4px_12px_rgba(0,0,0,0.5)] min-h-[90px] z-10 hover:border-[#ff00a0]/80 transition-all duration-300">
+                  <span className="text-[10px] text-[#b08d57] font-black uppercase mb-1.5 tracking-wider font-mono">
+                    Legal
+                  </span>
+                  <div id="meter-cool" className="flex gap-1.5 py-0.5 justify-center items-center">
+                    {renderIceCubes(profile.cool)}
+                  </div>
+                </div>
+                
+                {/* Tombstone Base Plate */}
+                <div className="w-[106%] h-2.5 bg-[#170919] border border-[#b08d57]/30 rounded-full shadow-md z-20 -mt-1" />
               </div>
-            </div>
+            ) : (
+              <div className={`border border-neutral-200/40 rounded p-2 text-center flex flex-col items-center justify-center transition-all ${
+                profile.theme === 'emo-2008' ? 'bg-[#0f0f11]' : 'bg-neutral-100/40'
+              } ${!isOwnProfile ? 'hover:bg-[#f0f9ff]/40 hover:border-sky-200' : ''}`}>
+                <span className="text-[10px] text-neutral-500 font-semibold uppercase mb-1 flex items-center gap-1">
+                  Legal {!isOwnProfile && <span className="text-[9px] text-[#406a94] normal-case font-normal">(votar)</span>}
+                </span>
+                <div id="meter-cool" className="flex gap-1.5 py-0.5">
+                  {renderIceCubes(profile.cool)}
+                </div>
+              </div>
+            )}
 
-            <button
-              id="meter-fans"
-              disabled={isOwnProfile}
-              onClick={() => {
-                if (!isOwnProfile && onRateProfile) {
-                  playRatingSound('fans');
-                  const delta = isFanOfThisUser ? -1 : 1;
-                  const updated = {
-                    ...fannedProfiles,
-                    [profile.id]: !isFanOfThisUser
-                  };
-                  setFannedProfiles(updated);
-                  try {
-                    localStorage.setItem('fanned_profiles', JSON.stringify(updated));
-                  } catch (e) {}
-                  onRateProfile(profile.id, 'fans', delta);
-                }
-              }}
-              className={`border rounded p-2 text-center flex flex-col items-center justify-center w-full focus:outline-none transition-all ${
-                profile.theme === 'gotico-retro'
-                  ? 'bg-[#3e2142] border-neutral-200/40'
-                  : profile.theme === 'emo-2008'
+            {/* Sexy Card */}
+            {profile.theme === 'gotico-retro' ? (
+              <div className="relative pt-6 pb-2 text-center flex flex-col items-center justify-between group select-none min-h-[125px]">
+                {/* The Cross at the top */}
+                <div className="absolute top-0 flex justify-center items-center h-6 w-full">
+                  <div className="relative w-1.5 h-6 bg-[#8a7f96] flex justify-center items-center shadow-xs rounded-sm">
+                    <div className="absolute top-1.5 w-4.5 h-1.5 bg-[#8a7f96] rounded-sm" />
+                  </div>
+                </div>
+                
+                {/* Body of the Tombstone */}
+                <div className="relative flex flex-col items-center justify-center bg-gradient-to-b from-[#1b0d1e] to-[#2d1533] border-2 border-[#b08d57]/50 w-full rounded-t-[48px] pt-4 pb-2 px-1 text-center shadow-[0_4px_12px_rgba(0,0,0,0.5)] min-h-[90px] z-10 hover:border-[#ff00a0]/80 transition-all duration-300">
+                  <span className="text-[10px] text-[#b08d57] font-black uppercase mb-1.5 tracking-wider font-mono">
+                    Sexy
+                  </span>
+                  <div id="meter-sexy" className="flex gap-1.5 py-0.5 justify-center items-center">
+                    {renderHearts(profile.sexy)}
+                  </div>
+                </div>
+                
+                {/* Tombstone Base Plate */}
+                <div className="w-[106%] h-2.5 bg-[#170919] border border-[#b08d57]/30 rounded-full shadow-md z-20 -mt-1" />
+              </div>
+            ) : (
+              <div className={`border border-neutral-200/40 rounded p-2 text-center flex flex-col items-center justify-center transition-all ${
+                profile.theme === 'emo-2008' ? 'bg-[#0f0f11]' : 'bg-neutral-100/40'
+              } ${!isOwnProfile ? 'hover:bg-[#fff1f2]/40 hover:border-rose-200' : ''}`}>
+                <span className="text-[10px] text-neutral-500 font-semibold uppercase mb-1 flex items-center gap-1">
+                  Sexy {!isOwnProfile && <span className="text-[9px] text-[#406a94] normal-case font-normal">(votar)</span>}
+                </span>
+                <div id="meter-sexy" className="flex gap-1.5 py-0.5">
+                  {renderHearts(profile.sexy)}
+                </div>
+              </div>
+            )}
+
+            {/* Fans Card */}
+            {profile.theme === 'gotico-retro' ? (
+              <button
+                id="meter-fans"
+                disabled={isOwnProfile}
+                onClick={() => {
+                  if (!isOwnProfile && onRateProfile) {
+                    playRatingSound('fans');
+                    const delta = isFanOfThisUser ? -1 : 1;
+                    const updated = {
+                      ...fannedProfiles,
+                      [profile.id]: !isFanOfThisUser
+                    };
+                    setFannedProfiles(updated);
+                    try {
+                      localStorage.setItem('fanned_profiles', JSON.stringify(updated));
+                    } catch (e) {}
+                    onRateProfile(profile.id, 'fans', delta);
+                  }
+                }}
+                className={`group relative pt-6 pb-2 text-center flex flex-col items-center justify-between w-full focus:outline-none select-none min-h-[125px] ${isOwnProfile ? '' : 'cursor-pointer active:scale-95 transition-all duration-150'}`}
+                title={!isOwnProfile ? (isFanOfThisUser ? 'Você é fã! Clique para deixar de ser' : 'Tornar-se fã deste membro') : `Fãs: ${profile.fans}`}
+              >
+                {/* The Cross at the top */}
+                <div className="absolute top-0 flex justify-center items-center h-6 w-full">
+                  <div className="relative w-1.5 h-6 bg-[#8a7f96] flex justify-center items-center shadow-xs rounded-sm">
+                    <div className="absolute top-1.5 w-4.5 h-1.5 bg-[#8a7f96] rounded-sm" />
+                  </div>
+                </div>
+                
+                {/* Body of the Tombstone */}
+                <div className={`relative flex flex-col items-center justify-center w-full rounded-t-[48px] pt-4 pb-2 px-1 text-center shadow-[0_4px_12px_rgba(0,0,0,0.5)] min-h-[90px] z-10 border-2 transition-all duration-300 ${isFanOfThisUser ? 'bg-gradient-to-b from-[#2d1f0d] to-[#422d15] border-amber-500' : 'bg-gradient-to-b from-[#1b0d1e] to-[#2d1533] border-[#b08d57]/50 hover:border-[#ff00a0]/80'}`}>
+                  <span className="text-[10px] text-[#b08d57] font-black uppercase mb-1.5 tracking-wider font-mono flex flex-col items-center gap-0.5 leading-none">
+                    <span>Fãs</span>
+                    {!isOwnProfile && (
+                      <span className="text-[7.5px] text-[#ff00a0] font-normal normal-case">
+                        {isFanOfThisUser ? '★ Já é fã!' : '(ser fã)'}
+                      </span>
+                    )}
+                  </span>
+                  <div className="flex gap-1 items-center justify-center text-[#d97706] font-bold text-xs">
+                    <Star 
+                      size={14} 
+                      fill={isFanOfThisUser || isOwnProfile ? "#fbbf24" : "none"} 
+                      className={`${isFanOfThisUser || isOwnProfile ? 'text-[#f59e0b]' : 'text-[#8a7f96]'} transition-all`} 
+                    />
+                    <span className="ml-0.5 font-mono text-[#b08d57] text-[11px]">{profile.fans}</span>
+                  </div>
+                </div>
+                
+                {/* Tombstone Base Plate */}
+                <div className="w-[106%] h-2.5 bg-[#170919] border border-[#b08d57]/30 rounded-full shadow-md z-20 -mt-1" />
+              </button>
+            ) : (
+              <button
+                id="meter-fans"
+                disabled={isOwnProfile}
+                onClick={() => {
+                  if (!isOwnProfile && onRateProfile) {
+                    playRatingSound('fans');
+                    const delta = isFanOfThisUser ? -1 : 1;
+                    const updated = {
+                      ...fannedProfiles,
+                      [profile.id]: !isFanOfThisUser
+                    };
+                    setFannedProfiles(updated);
+                    try {
+                      localStorage.setItem('fanned_profiles', JSON.stringify(updated));
+                    } catch (e) {}
+                    onRateProfile(profile.id, 'fans', delta);
+                  }
+                }}
+                className={`border rounded p-2 text-center flex flex-col items-center justify-center w-full focus:outline-none transition-all ${
+                  profile.theme === 'emo-2008'
                     ? 'bg-[#0f0f11] border-neutral-200/40'
                     : isOwnProfile 
                       ? 'bg-neutral-100/40 border-neutral-200/40' 
@@ -928,21 +1052,22 @@ export default function ProfileLayout({
                             ? 'bg-amber-50/70 border-amber-300 text-amber-800 font-extrabold shadow-[0_1px_6px_rgba(251,191,36,0.15)]' 
                             : 'bg-neutral-100/40 border-neutral-200/40 hover:bg-amber-50/20 hover:border-amber-250 text-neutral-600'
                         }`
-              }`}
-              title={!isOwnProfile ? (isFanOfThisUser ? 'Você é fã! Clique para deixar de ser' : 'Tornar-se fã deste membro') : `Fãs: ${profile.fans}`}
-            >
-              <span className="text-[10px] text-neutral-500 font-semibold uppercase mb-1 flex items-center gap-1">
-                Fãs {!isOwnProfile && <span className="text-[9px] text-[#d97706] normal-case font-normal">{isFanOfThisUser ? '★ Já é fã!' : '(clique p/ ser fã)'}</span>}
-              </span>
-              <div className="flex gap-1 items-center justify-center text-[#d97706] font-bold text-sm">
-                <Star 
-                  size={16} 
-                  fill={isFanOfThisUser || isOwnProfile ? "#fbbf24" : "none"} 
-                  className={`${isFanOfThisUser || isOwnProfile ? 'text-[#f59e0b]' : 'text-neutral-300'} transition-all hover:scale-110`} 
-                />
-                <span className="ml-1 text-[11px] font-sans text-amber-800">{profile.fans} fãs</span>
-              </div>
-            </button>
+                }`}
+                title={!isOwnProfile ? (isFanOfThisUser ? 'Você é fã! Clique para deixar de ser' : 'Tornar-se fã deste membro') : `Fãs: ${profile.fans}`}
+              >
+                <span className="text-[10px] text-neutral-500 font-semibold uppercase mb-1 flex items-center gap-1">
+                  Fãs {!isOwnProfile && <span className="text-[9px] text-[#d97706] normal-case font-normal">{isFanOfThisUser ? '★ Já é fã!' : '(clique p/ ser fã)'}</span>}
+                </span>
+                <div className="flex gap-1 items-center justify-center text-[#d97706] font-bold text-sm">
+                  <Star 
+                    size={16} 
+                    fill={isFanOfThisUser || isOwnProfile ? "#fbbf24" : "none"} 
+                    className={`${isFanOfThisUser || isOwnProfile ? 'text-[#f59e0b]' : 'text-neutral-300'} transition-all hover:scale-110`} 
+                  />
+                  <span className="ml-1 text-[11px] font-sans text-amber-800">{profile.fans} fãs</span>
+                </div>
+              </button>
+            )}
           </div>
         </div>
 
@@ -1355,7 +1480,11 @@ export default function ProfileLayout({
                     id="profile-aboutme-text" 
                     className={`leading-relaxed break-all ${
                       profile.preserve_formatting !== false 
-                        ? 'font-mono text-[11px] whitespace-pre bg-neutral-950/5 border border-neutral-200/40 p-3 rounded overflow-x-auto shadow-inner' 
+                        ? `font-mono text-[11px] whitespace-pre p-3 rounded overflow-x-auto shadow-inner ${
+                            profile.theme === 'gotico-retro'
+                              ? 'bg-[#171221]/80 border border-[#b08d57]/30 text-zinc-200 gotico-retro-scrollbar'
+                              : 'bg-neutral-950/5 border border-neutral-200/40'
+                          }` 
                         : 'font-sans text-xs whitespace-pre-wrap'
                     }`}
                   >

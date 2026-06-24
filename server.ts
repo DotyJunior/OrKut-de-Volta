@@ -46,10 +46,177 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  app.use(express.json());
+  app.use(express.json({ limit: "20mb" })); // Increase limit for base64 file uploads
 
-  // Serve the assets directory, enabling dotfiles like '.aistudio' to be requested
+  // Ensure native asset directories exist and write default assets
+  const publicDir = path.join(process.cwd(), "public");
+  const assetsDir = path.join(publicDir, "assets");
+  const categories = ["branding", "icons", "emojis", "badges", "themes"];
+
+  if (!fs.existsSync(publicDir)) {
+    fs.mkdirSync(publicDir, { recursive: true });
+  }
+  if (!fs.existsSync(assetsDir)) {
+    fs.mkdirSync(assetsDir, { recursive: true });
+  }
+
+  categories.forEach(cat => {
+    const catPath = path.join(assetsDir, cat);
+    if (!fs.existsSync(catPath)) {
+      fs.mkdirSync(catPath, { recursive: true });
+    }
+    
+    // Create README.md in each folder so it's never empty
+    const readmePath = path.join(catPath, "README.md");
+    if (!fs.existsSync(readmePath)) {
+      fs.writeFileSync(
+        readmePath,
+        `# ScrapZone ${cat.toUpperCase()} Assets\n\nThis directory contains native ${cat} visual files.\n`
+      );
+    }
+  });
+
+  // Do not write default ScrapZone SVG logo, favicon, or config to respect user requirement of having branding directory clean.
+  // Serve the assets directories
+  app.use("/assets", express.static(path.join(process.cwd(), "public/assets"), { dotfiles: "allow" }));
   app.use("/assets", express.static(path.join(process.cwd(), "assets"), { dotfiles: "allow" }));
+
+  // ==========================================
+  // NATIVE ASSETS ADMIN API ENDPOINTS
+  // ==========================================
+
+  // List all available assets and current config
+  app.get("/api/admin/assets", (req, res) => {
+    try {
+      const publicDir = path.join(process.cwd(), "public");
+      const assetsDir = path.join(publicDir, "assets");
+      const categories = ["branding", "icons", "emojis", "badges", "themes"];
+      const result: Record<string, string[]> = {};
+
+      categories.forEach(cat => {
+        const catPath = path.join(assetsDir, cat);
+        if (fs.existsSync(catPath)) {
+          const files = fs.readdirSync(catPath);
+          result[cat] = files
+            .filter(file => file.toLowerCase() !== "readme.md" && !file.startsWith("."))
+            .map(file => `/assets/${cat}/${file}`);
+        } else {
+          result[cat] = [];
+        }
+      });
+
+      // Do not include default assets if they are deleted
+
+      let config = {
+        siteLogo: "/assets/branding/logo-original-scrap-zone.svg",
+        favicon: "/assets/branding/favicon.ico"
+      };
+      const configPath = path.join(assetsDir, "config.json");
+      if (fs.existsSync(configPath)) {
+        config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+      }
+
+      return res.json({ categories: result, config });
+    } catch (err) {
+      console.error("Error listing assets:", err);
+      return res.status(500).json({ error: "Failed to list assets" });
+    }
+  });
+
+  // Upload new asset file
+  app.post("/api/admin/assets/upload", (req, res) => {
+    try {
+      const { name, category, base64Data } = req.body;
+      if (!name || !category || !base64Data) {
+        return res.status(400).json({ error: "Missing required fields (name, category, base64Data)" });
+      }
+
+      const categories = ["branding", "icons", "emojis", "badges", "themes"];
+      if (!categories.includes(category)) {
+        return res.status(400).json({ error: "Invalid category" });
+      }
+
+      const ext = path.extname(name).toLowerCase();
+      const allowedExts = [".svg", ".png", ".webp", ".ico"];
+      if (!allowedExts.includes(ext)) {
+        return res.status(400).json({ error: "File type not allowed. Supported types: SVG, PNG, WEBP, ICO" });
+      }
+
+      let cleanBase64 = base64Data;
+      if (base64Data.includes(";base64,")) {
+        cleanBase64 = base64Data.split(";base64,").pop();
+      }
+
+      const publicDir = path.join(process.cwd(), "public");
+      const assetsDir = path.join(publicDir, "assets");
+      const targetPath = path.join(assetsDir, category, name);
+
+      fs.writeFileSync(targetPath, Buffer.from(cleanBase64, "base64"));
+      const relativeUrl = `/assets/${category}/${name}`;
+
+      return res.json({ success: true, url: relativeUrl });
+    } catch (err) {
+      console.error("Error uploading asset:", err);
+      return res.status(500).json({ error: "Failed to upload asset" });
+    }
+  });
+
+  // Update global branding config
+  app.post("/api/admin/assets/config", (req, res) => {
+    try {
+      const { siteLogo, favicon } = req.body;
+      if (!siteLogo || !favicon) {
+        return res.status(400).json({ error: "Missing siteLogo or favicon" });
+      }
+
+      const publicDir = path.join(process.cwd(), "public");
+      const assetsDir = path.join(publicDir, "assets");
+      const configPath = path.join(assetsDir, "config.json");
+
+      const newConfig = { siteLogo, favicon };
+      fs.writeFileSync(configPath, JSON.stringify(newConfig, null, 2));
+
+      return res.json({ success: true, config: newConfig });
+    } catch (err) {
+      console.error("Error saving global assets configuration:", err);
+      return res.status(500).json({ error: "Failed to save configuration" });
+    }
+  });
+
+  // Delete uploaded asset file
+  app.delete("/api/admin/assets", (req, res) => {
+    try {
+      const { url } = req.query;
+      if (!url || typeof url !== "string") {
+        return res.status(400).json({ error: "Missing url parameter" });
+      }
+
+      const cleanUrl = path.normalize(url).replace(/^(\.\.(\/|\\|$))+/, '');
+      if (!cleanUrl.startsWith("/assets/")) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      const publicDir = path.join(process.cwd(), "public");
+      const filePath = path.join(publicDir, cleanUrl);
+
+      if (fs.existsSync(filePath)) {
+        if (path.basename(filePath).toLowerCase() === "readme.md") {
+          return res.status(400).json({ error: "Cannot delete README.md" });
+        }
+        // Protect defaults
+        if (cleanUrl === "/assets/branding/logo-original-scrap-zone.svg" || cleanUrl === "/assets/branding/LOGO-ORIIGINAL-scrap-zone.svg" || cleanUrl === "/assets/branding/logo-scrap-zone.svg" || cleanUrl === "/assets/branding/logo-scrapzone.svg" || cleanUrl === "/assets/branding/favicon.ico") {
+          return res.status(400).json({ error: "Cannot delete default system assets" });
+        }
+        fs.unlinkSync(filePath);
+        return res.json({ success: true });
+      }
+
+      return res.status(404).json({ error: "Asset not found" });
+    } catch (err) {
+      console.error("Error deleting asset:", err);
+      return res.status(500).json({ error: "Failed to delete asset" });
+    }
+  });
 
   // API Route for Orkut Character Simulated Replies (using Gemini 2.5 Flash)
   app.post("/api/reply", async (req, res) => {

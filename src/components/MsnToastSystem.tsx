@@ -8,6 +8,8 @@ interface FriendAlert {
   avatar: string;
   statusText: string;
   actionType: 'online' | 'away' | 'status-change';
+  timestamp?: string;
+  senderId?: string;
 }
 
 const POPULAR_STATUS_PRESETS = [
@@ -62,76 +64,39 @@ export default function MsnToastSystem() {
   };
 
   useEffect(() => {
-    // List of virtual friends for simulation
-    const simulatedFriends = [
-      {
-        name: 'Alexandre Curi',
-        avatar: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=150',
-      },
-      {
-        name: 'Orkut Büyükkökten',
-        avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150',
-      },
-      {
-        name: 'H3_Elit3_Hacker',
-        avatar: 'https://images.unsplash.com/photo-1544197150-b99a580bb7a8?w=150',
-      }
-    ];
-
-    const triggers = [
-      { statusText: 'acabou de entrar online!', actionType: 'online' as const },
-      { statusText: 'ficou ausente.', actionType: 'away' as const },
-      { statusText: 'atualizou o status personalizado.', actionType: 'status-change' as const },
-    ];
-
-    // Trigger first alert after 18 seconds, then periodically
-    const triggerRandomAlert = () => {
-      // Choose random friend
-      const friend = simulatedFriends[Math.floor(Math.random() * simulatedFriends.length)];
-      // Choose random action
-      const trigger = triggers[Math.floor(Math.random() * triggers.length)];
-      
-      let finalStatusText = trigger.statusText;
-      if (trigger.actionType === 'status-change') {
-        const randomPreset = POPULAR_STATUS_PRESETS[Math.floor(Math.random() * POPULAR_STATUS_PRESETS.length)];
-        finalStatusText = `mudou status: "${randomPreset}"`;
-      }
-
-      setActiveAlert({
-        id: 'alert_' + Date.now(),
-        name: friend.name,
-        avatar: friend.avatar,
-        statusText: finalStatusText,
-        actionType: trigger.actionType
-      });
-
-      // Play MSN chime sound
-      playMsnSound();
-
-      // Dismiss automatically after 7 seconds
-      setTimeout(() => {
-        setActiveAlert(current => {
-          if (current?.name === friend.name && current?.statusText === finalStatusText) {
-            return null;
-          }
-          return current;
+    // Event listener for real programmatically triggered MSN alerts
+    const handleRealMsnAlert = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      if (customEvent.detail) {
+        const { name, avatar, statusText, actionType, timestamp, senderId } = customEvent.detail;
+        setActiveAlert({
+          id: 'alert_' + Date.now(),
+          name: name || 'Amigo',
+          avatar: avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
+          statusText: statusText || 'recado seguro',
+          actionType: actionType || 'online',
+          timestamp: timestamp || new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+          senderId: senderId
         });
-      }, 7000);
+
+        // Play MSN chime sound
+        playMsnSound();
+
+        // Dismiss automatically after 7 seconds
+        setTimeout(() => {
+          setActiveAlert(current => {
+            if (current?.name === name && current?.statusText === statusText) {
+              return null;
+            }
+            return current;
+          });
+        }, 7000);
+      }
     };
 
-    // Set first interval
-    const timeout = setTimeout(() => {
-      triggerRandomAlert();
-    }, 15000);
-
-    // Continuous intervals
-    const interval = setInterval(() => {
-      triggerRandomAlert();
-    }, 45000);
-
+    window.addEventListener('msn-real-alert', handleRealMsnAlert);
     return () => {
-      clearTimeout(timeout);
-      clearInterval(interval);
+      window.removeEventListener('msn-real-alert', handleRealMsnAlert);
     };
   }, []);
 
@@ -147,49 +112,72 @@ export default function MsnToastSystem() {
             className="pointer-events-auto w-72 bg-[#fdfdfd] border-2 border-sky-600 rounded shadow-[0_6px_20px_rgba(0,0,0,0.18)] overflow-hidden text-left"
           >
             {/* Header / MSN style window bar */}
-            <div className="bg-gradient-to-r from-sky-700 via-sky-600 to-sky-700 text-white px-2.5 py-1 text-[10px] uppercase font-bold tracking-wider flex justify-between items-center shadow-inner">
-              <span className="flex items-center gap-1 font-mono">
-                <span className="animate-pulse">💬</span> MSN Messenger Alerta
+            <div className="bg-[#3b61b4] text-white px-2.5 py-1.5 text-[11px] uppercase font-bold tracking-wider flex justify-between items-center shadow-inner">
+              <span className="flex items-center gap-1 font-sans">
+                <span>🔔</span> Nova Mensagem
               </span>
               <button 
                 onClick={() => setActiveAlert(null)}
                 className="text-white/80 hover:text-white cursor-pointer hover:bg-white/10 p-0.5 rounded transition-colors"
               >
-                <X size={10} />
+                <X size={12} />
               </button>
             </div>
 
-            {/* Content box / MSN speech notification aesthetic */}
-            <div className="p-3 bg-gradient-to-br from-[#ebf4fa] to-white flex items-center gap-3">
-              {/* Profile Image with MSN status frame style */}
-              <div className="relative">
-                <img
-                  src={activeAlert.avatar}
-                  alt={activeAlert.name}
-                  className="w-10 h-10 rounded-full object-cover border-2 border-[#10b981] shadow-xs"
-                  referrerPolicy="no-referrer"
-                />
-                <span className="absolute -bottom-1 -right-0.5 text-xs bg-[#e0f2fe] border border-sky-300 rounded px-0.5 leading-none">
-                  {activeAlert.actionType === 'online' ? '🟢' : activeAlert.actionType === 'away' ? '🟡' : '✏️'}
-                </span>
+            {/* Custom separators and content layout requested by the user */}
+            <div className="p-3 bg-gradient-to-br from-[#ebf4fa] to-white">
+              <div className="border-b border-neutral-200 pb-1.5 mb-2.5 text-[9px] text-neutral-400 font-mono tracking-wider text-center">
+                -------------------------
               </div>
 
-              {/* Msg Content */}
-              <div className="flex-1 min-w-0 text-left">
-                <h5 className="text-[11.5px] font-bold text-neutral-800 tracking-tight truncate">
-                  {activeAlert.name}
-                </h5>
-                <p className="text-[10px] text-[#1e3a8a] leading-snug mt-0.5">
-                  {activeAlert.statusText}
-                </p>
-                <span className="text-[8px] text-neutral-400 font-mono mt-1 block">
-                  MSN Service 2026.05.27
-                </span>
+              <div className="flex items-center gap-3">
+                {/* Profile Avatar formatted using standard img */}
+                <div className="relative flex-shrink-0">
+                  <img
+                    src={activeAlert.avatar}
+                    alt={activeAlert.name}
+                    className="w-12 h-12 rounded-lg object-cover border-2 border-[#ff00a0]/60 p-[1px] bg-white shadow-xs"
+                    referrerPolicy="no-referrer"
+                  />
+                </div>
+
+                {/* Sender details and message preview */}
+                <div className="flex-1 min-w-0 text-left">
+                  <h5 className="text-[11px] text-neutral-500 font-sans leading-tight">
+                    De: <span className="text-[#3b61b4] font-bold text-xs">{activeAlert.name}</span>
+                  </h5>
+                  <p className="text-[10px] text-neutral-600 truncate mt-1 italic">
+                    "{activeAlert.statusText}"
+                  </p>
+                  <span className="text-[9px] text-[#1e3a8a] font-medium block mt-1">
+                    Recebida às {activeAlert.timestamp}
+                  </span>
+                </div>
               </div>
+
+              {/* [ Abrir Conversa ] click prompt to open the thread instantly */}
+              {activeAlert.senderId && (
+                <div className="mt-3 pt-2 border-t border-neutral-100 flex justify-center">
+                  <button
+                    onClick={() => {
+                      window.dispatchEvent(
+                        new CustomEvent('msn-open-chat', {
+                          detail: { partnerId: activeAlert.senderId }
+                        })
+                      );
+                      setActiveAlert(null);
+                    }}
+                    className="w-full py-1 text-[11px] font-bold text-[#3b61b4] hover:text-white bg-blue-50 hover:bg-[#3b61b4] cursor-pointer rounded border border-blue-200 transition-all text-center uppercase tracking-wider"
+                    id="open-chat-action-btn"
+                  >
+                    [ Abrir Conversa ]
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Glowing bottom line indicator */}
-            <div className="h-0.5 bg-gradient-to-r from-teal-400 via-sky-500 to-pink-500" />
+            <div className="h-1 bg-gradient-to-r from-[#ff00a0] via-[#00d4ff] to-amber-400" />
           </motion.div>
         )}
       </AnimatePresence>

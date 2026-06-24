@@ -18,6 +18,7 @@ import { DEFAULT_COMMUNITIES_SEED } from './data/initialCommunities';
 import { Profile, Friend, Community, Scrap, Testimonial, Album, SharedMemory, FriendRequest, Relationship } from './types';
 import { getThemeStyles } from './lib/theme';
 import OrkutLogin from './components/OrkutLogin';
+import AssetsManager from './components/AssetsManager';
 
 // Firebase imports
 import { collection, doc, setDoc, onSnapshot, getDoc, getDocFromServer, addDoc, deleteDoc, query, where, or, getDocs } from 'firebase/firestore';
@@ -446,10 +447,60 @@ export default function App() {
   const [visitedProfileJoinedCommIds, setVisitedProfileJoinedCommIds] = useState<string[]>([]);
   const [userPublicKey, setUserPublicKey] = useState<string>('04f9810b14c3e2182fe91da938b82dfc394ca0e2193bde1a5928d1ac297b47e2b1029c');
 
+  const [siteConfig, setSiteConfig] = useState({
+    siteLogo: '/assets/branding/logo-original-scrap-zone.svg',
+    favicon: '/assets/branding/favicon.ico'
+  });
+
+  // Load site visual branding config on mount
+  useEffect(() => {
+    fetch('/assets/config.json')
+      .then(res => {
+        if (!res.ok) throw new Error();
+        return res.json();
+      })
+      .then(data => {
+        if (data && (data.siteLogo || data.favicon)) {
+          setSiteConfig(prev => ({
+            ...prev,
+            ...data
+          }));
+          
+          if (data.favicon) {
+            let link = document.querySelector("link[rel~='icon']") as HTMLLinkElement;
+            if (!link) {
+              link = document.createElement('link');
+              link.rel = 'icon';
+              document.head.appendChild(link);
+            }
+            link.href = data.favicon;
+          }
+        }
+      })
+      .catch(() => {
+        // Fallback silently if config is not customized yet
+      });
+  }, []);
+
   // Secret Chat modal state
   const [isSecretChatOpen, setIsSecretChatOpen] = useState<boolean>(false);
   const [secretChatFriendId, setSecretChatFriendId] = useState<string>('lucas');
   const [showPrivacyModal, setShowPrivacyModal] = useState<boolean>(false);
+
+  // Set up event listener for opening MSN conversations programmatically
+  useEffect(() => {
+    const handleMsnOpenChat = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      if (customEvent.detail?.partnerId) {
+        setSecretChatFriendId(customEvent.detail.partnerId);
+        setIsSecretChatOpen(true);
+      }
+    };
+    window.addEventListener('msn-open-chat', handleMsnOpenChat);
+    return () => {
+      window.removeEventListener('msn-open-chat', handleMsnOpenChat);
+    };
+  }, []);
 
   // Photo Albums Nostalgic state engine
   const [albums, setAlbums] = useState<Album[]>(() => getInitialAlbums());
@@ -469,6 +520,16 @@ export default function App() {
   useEffect(() => {
     currentUserProfileRef.current = currentUserProfile;
   }, [currentUserProfile]);
+
+  // Restrict Assets Manager tab strictly to darkjuniorsombra@gmail.com
+  useEffect(() => {
+    if (currentTab === 'assets-manager' && currentUserProfile) {
+      const isAssetsAdmin = auth.currentUser?.email === 'darkjuniorsombra@gmail.com' || (currentUserProfile as any)?.email === 'darkjuniorsombra@gmail.com';
+      if (!isAssetsAdmin) {
+        setCurrentTab('profile');
+      }
+    }
+  }, [currentTab, currentUserProfile]);
 
   const [isAuthLoading, setIsAuthLoading] = useState<boolean>(true);
   const [isAppReady, setIsAppReady] = useState<boolean>(false);
@@ -1935,6 +1996,7 @@ export default function App() {
         defaultProfiles={DEFAULT_PROFILES} 
         isEmailUnverifiedProfile={currentUserProfile}
         onLogout={handleLogout}
+        siteLogo={siteConfig.siteLogo}
       />
     );
   }
@@ -1979,20 +2041,34 @@ export default function App() {
         setSearchQuery={setSearchQuery}
         onLogout={handleLogout}
         themeStyles={themeStyles}
+        siteLogo={siteConfig.siteLogo}
+        showAssets={auth.currentUser?.email === 'darkjuniorsombra@gmail.com' || (currentUserProfile as any)?.email === 'darkjuniorsombra@gmail.com'}
+        themeId={currentViewedProfile.theme}
       />
 
       {/* 2. Main content container */}
       <main className="flex-1 max-w-6xl w-full mx-auto px-4 py-6 font-sans">
         {/* If viewing a friend's profile, show a nice retro ribbon allowing return to my own profile */}
         {!isOwnProfile && (
-          <div className="bg-[#fffbeb] border border-amber-200 rounded p-3 mb-5 flex justify-between items-center text-xs text-amber-800">
+          <div 
+            className={`${
+              currentViewedProfile.theme === 'gotico-retro'
+                ? 'bg-[#120a14]/80 border-[#b08d57]/30 text-[#b08d57]'
+                : 'bg-[#fffbeb] border border-amber-200 text-amber-800'
+            } rounded p-3 mb-5 flex justify-between items-center text-xs transition-colors duration-300`}
+            style={currentViewedProfile.theme === 'gotico-retro' ? { boxShadow: '0 4px 15px rgba(0,0,0,0.4)' } : undefined}
+          >
             <span className="font-semibold font-sans">
               🔍 Você está visualizando o perfil seguro de: <strong>{currentViewedProfile.name}</strong>
             </span>
             <button
               id="btn-return-myprofile"
               onClick={() => setActiveProfileId('me')}
-              className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded shadow-sm text-[11px] cursor-pointer"
+              className={`px-2.5 py-1 ${
+                currentViewedProfile.theme === 'gotico-retro'
+                  ? 'bg-[#2d1533] hover:bg-[#ff00a0] text-[#b08d57] hover:text-white border border-[#b08d57]/40 font-mono'
+                  : 'bg-amber-600 hover:bg-amber-700 text-white font-bold'
+              } rounded shadow-sm text-[11px] cursor-pointer transition-all`}
             >
               Voltar ao Meu Perfil
             </button>
@@ -2147,6 +2223,15 @@ export default function App() {
 
         {currentTab === 'rust-sec-lab' && (
           <RustSecLab />
+        )}
+
+        {currentTab === 'assets-manager' && (auth.currentUser?.email === 'darkjuniorsombra@gmail.com' || (currentUserProfile as any)?.email === 'darkjuniorsombra@gmail.com') && (
+          <AssetsManager 
+            currentTheme={currentViewedProfile.theme}
+            onConfigChange={(newConfig) => {
+              setSiteConfig(newConfig);
+            }}
+          />
         )}
       </main>
 
