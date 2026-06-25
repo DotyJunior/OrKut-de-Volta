@@ -553,7 +553,58 @@ export default function ProfileLayout({
 
         {/* Profile Details Container Below Photo */}
         <div className={`border rounded p-4 text-center transition-all ${themeStyles.cardBg} ${themeStyles.glow} ${themeStyles.borderClass} space-y-3.5`}>
-          <div className="py-1">
+          {profile.theme === 'gotico-retro' ? (
+            <div className="flex flex-col items-center">
+              <div 
+                className="relative mx-auto w-full flex flex-col items-center justify-center select-none"
+                style={{
+                  backgroundImage: "url('/assets/themes/plaqueta-gotica.webp')",
+                  backgroundSize: '100% 100%',
+                  backgroundRepeat: 'no-repeat',
+                  backgroundPosition: 'center',
+                  minHeight: '118px',
+                  padding: '26px 20px 20px 20px',
+                  marginTop: '-10px',
+                }}
+              >
+                {isOwnProfile && (
+                  <button 
+                    onClick={() => setShowIdentityWizard(true)} 
+                    title="Configurar Identidade"
+                    className="absolute top-2 right-4 p-1 text-[#2c1303] hover:text-[#4d2105] cursor-pointer shrink-0 transition-transform active:scale-95 z-20"
+                  >
+                    <Palette size={12} />
+                  </button>
+                )}
+                <h2 
+                  className={`font-black flex items-center justify-center gap-1 break-all tracking-wide text-[#100703] ${displayNameClass}`}
+                  style={{
+                    fontSize: '12px',
+                    lineHeight: '18px',
+                    textShadow: '0 0 4px rgba(255, 63, 44, 0.15)',
+                  }}
+                >
+                  {displayNameText}
+                </h2>
+                {profile.username && (
+                  <span 
+                    className="block font-sans font-bold text-[#220d04] tracking-normal mt-0.5"
+                    style={{
+                      fontSize: '8px',
+                    }}
+                  >
+                    @{profile.username}
+                  </span>
+                )}
+              </div>
+              
+              <p className="text-[12px] md:text-[13px] font-medium font-sans flex items-center justify-center gap-1.5 mt-2.5 tracking-wider uppercase text-[#ad2fff]">
+                <MapPin size={14} className="text-[#ad2fff] shrink-0" />
+                {profile.location}
+              </p>
+            </div>
+          ) : (
+            <div className="py-1">
             <h2 className={`text-base md:text-lg font-bold flex items-center justify-center gap-1.5 break-all tracking-wide ${
               profile.theme === 'gotico-retro' 
                 ? 'text-[#aaa857]' 
@@ -595,6 +646,7 @@ export default function ProfileLayout({
               {profile.location}
             </p>
           </div>
+          )}
 
           <div className="border-t border-dashed border-neutral-350 pt-3.5 text-left">
             <span className="text-[10px] font-bold uppercase tracking-widest block mb-2 opacity-70">Criptografia Local</span>
