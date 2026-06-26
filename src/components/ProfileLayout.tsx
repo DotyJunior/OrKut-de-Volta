@@ -843,7 +843,11 @@ export default function ProfileLayout({
               <a 
                 href={`https://orkay.net/${profile.username}`} 
                 onClick={(e) => e.preventDefault()} 
-                className="text-[#0000a0] dark:text-sky-300 font-bold underline hover:text-[#1d4ed8] transition-colors select-all"
+                className={`${
+                  profile.theme === 'gotico-retro' 
+                    ? 'text-[#ad2fff] dark:text-[#ad2fff] hover:text-[#c466ff]' 
+                    : 'text-[#0000a0] dark:text-sky-300 hover:text-[#1d4ed8]'
+                } font-bold underline transition-colors select-all`}
               >
                 orkay.net/{profile.username}
               </a>

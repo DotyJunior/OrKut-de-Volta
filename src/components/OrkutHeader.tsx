@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Shield, Search, Lock, Cpu, Globe } from 'lucide-react';
 import { ThemeStyle } from '../lib/theme';
 
@@ -107,15 +107,23 @@ export default function OrkutHeader({
       {/* 2. NAVIGATION BAR: Vintage Light Slate Blue */}
       <div className={`relative overflow-hidden ${themeStyles.navBg} py-3.5 px-4`}>
         {themeId === 'gotico-retro' && (
-          <div 
-            className="absolute inset-0 pointer-events-none opacity-25 z-0"
-            style={{
-              backgroundImage: "url('/assets/themes/elemento-prara-textura-de-fundo.svg'), url('/assets/themes/elemento-prara-textura-de-fundo.svg')",
-              backgroundPosition: '0 0, 50px 50px',
-              backgroundRepeat: 'repeat',
-              backgroundSize: '100px 100px',
-            }}
-          />
+          <>
+            <div 
+              className="absolute inset-0 pointer-events-none opacity-25 z-0"
+              style={{
+                backgroundImage: "url('/assets/themes/elemento-prara-textura-de-fundo.svg'), url('/assets/themes/elemento-prara-textura-de-fundo.svg')",
+                backgroundPosition: '0 0, 50px 50px',
+                backgroundRepeat: 'repeat',
+                backgroundSize: '100px 100px',
+              }}
+            />
+            <img 
+              src="/assets/themes/gothic/creatures/morcego-gotico/morcego-frame-07.png"
+              alt="Morcego Gótico"
+              className="absolute top-0 right-0 h-full max-h-[150px] z-20 pointer-events-none select-none object-contain object-right-top"
+              referrerPolicy="no-referrer"
+            />
+          </>
         )}
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center gap-4 relative z-10">
           
