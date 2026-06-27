@@ -846,6 +846,8 @@ export default function ProfileLayout({
                 className={`${
                   profile.theme === 'gotico-retro' 
                     ? 'text-[#ad2fff] dark:text-[#ad2fff] hover:text-[#c466ff]' 
+                    : profile.theme === 'minimal-oldweb'
+                    ? 'text-[#000080] dark:text-[#000080] hover:text-[#0000ee]'
                     : 'text-[#0000a0] dark:text-sky-300 hover:text-[#1d4ed8]'
                 } font-bold underline transition-colors select-all`}
               >
@@ -1749,9 +1751,13 @@ export default function ProfileLayout({
       <div className="lg:col-span-3 flex flex-col gap-4">
         {/* Friends Grid */}
         <div className={`relative border rounded shadow-sm overflow-hidden text-left transition-all ${themeStyles.cardBg} ${themeStyles.glow} ${themeStyles.borderClass}`}>
-          <div className={`px-3 py-1.5 flex justify-between items-center ${themeStyles.accent}`}>
-            <span className="text-[11px] font-bold uppercase">Amigos ({friends.length})</span>
-            <button onClick={() => onNavigateToTab('profile')} className="text-[10px] hover:underline font-bold">ver todos</button>
+          <div className={`px-3 py-1.5 flex justify-between items-center ${
+            profile.theme === 'minimal-oldweb'
+              ? 'bg-gradient-to-br from-[#000080] to-[#1084d0]'
+              : themeStyles.accent
+          }`}>
+            <span className={`text-[11px] font-bold uppercase ${profile.theme === 'minimal-oldweb' ? 'text-[#d6f9ff]' : ''}`}>Amigos ({friends.length})</span>
+            <button onClick={() => onNavigateToTab('profile')} className={`text-[10px] hover:underline font-bold ${profile.theme === 'minimal-oldweb' ? 'text-[#d6f9ff]' : ''}`}>ver todos</button>
           </div>
 
           <div className="p-3 grid grid-cols-3 gap-2 bg-transparent pb-10">
@@ -1839,9 +1845,13 @@ export default function ProfileLayout({
 
         {/* Communities Grid */}
         <div className={`border rounded shadow-sm overflow-hidden text-left transition-all ${themeStyles.cardBg} ${themeStyles.glow} ${themeStyles.borderClass}`}>
-          <div className={`px-3 py-1.5 flex justify-between items-center ${themeStyles.accent}`}>
-            <span className="text-[11px] font-bold uppercase">Comunidades ({communities.length})</span>
-            <button onClick={() => onNavigateToTab('communities', !isOwnProfile)} className="text-[10px] hover:underline font-bold">ver todas</button>
+          <div className={`px-3 py-1.5 flex justify-between items-center ${
+            profile.theme === 'minimal-oldweb'
+              ? 'bg-gradient-to-br from-[#000080] to-[#1084d0]'
+              : themeStyles.accent
+          }`}>
+            <span className={`text-[11px] font-bold uppercase ${profile.theme === 'minimal-oldweb' ? 'text-[#d6f9ff]' : ''}`}>Comunidades ({communities.length})</span>
+            <button onClick={() => onNavigateToTab('communities', !isOwnProfile)} className={`text-[10px] hover:underline font-bold ${profile.theme === 'minimal-oldweb' ? 'text-[#d6f9ff]' : ''}`}>ver todas</button>
           </div>
 
           <div className="p-3 grid grid-cols-3 gap-2 bg-transparent">
@@ -1913,11 +1923,15 @@ export default function ProfileLayout({
               className={`border rounded shadow-sm overflow-hidden text-left transition-all cursor-pointer hover:scale-[1.02] ${themeStyles.cardBg} ${themeStyles.glow} ${themeStyles.borderClass} group hover:border-[#d946ef] mt-1.5`}
               title={isOwnProfile ? "Explorar meus álbuns de fotos chapa!" : "Explorar memórias do perfil (Acesso de Visitante)"}
             >
-              <div className={`px-3 py-1.5 flex justify-between items-center ${themeStyles.accent}`}>
-                <span className="text-[11px] font-bold uppercase flex items-center gap-1.5">
+              <div className={`px-3 py-1.5 flex justify-between items-center ${
+                profile.theme === 'minimal-oldweb'
+                  ? 'bg-gradient-to-br from-[#000080] to-[#1084d0]'
+                  : themeStyles.accent
+              }`}>
+                <span className={`text-[11px] font-bold uppercase flex items-center gap-1.5 ${profile.theme === 'minimal-oldweb' ? 'text-[#d6f9ff]' : ''}`}>
                   📸 Álbum de Fotos
                 </span>
-                <span className="text-[9px] group-hover:translate-x-0.5 transition-transform">explorar →</span>
+                <span className={`text-[9px] group-hover:translate-x-0.5 transition-transform ${profile.theme === 'minimal-oldweb' ? 'text-[#d6f9ff]' : ''}`}>explorar →</span>
               </div>
               <div className="p-3 bg-transparent font-sans text-[11px] leading-relaxed text-left flex flex-col gap-1.5">
                 <p className="opacity-95">
@@ -1985,11 +1999,15 @@ export default function ProfileLayout({
         {/* Sugestões: Amigos de amigos widget */}
         {friendsOfFriends.length > 0 && (
           <div className={`border rounded shadow-sm overflow-hidden text-left transition-all ${themeStyles.cardBg} ${themeStyles.glow} ${themeStyles.borderClass} mt-4`}>
-            <div className={`px-3 py-1.5 flex justify-between items-center ${themeStyles.accent}`}>
-              <span className="text-[11px] font-bold uppercase flex items-center gap-1.5">
+            <div className={`px-3 py-1.5 flex justify-between items-center ${
+              profile.theme === 'minimal-oldweb'
+                ? 'bg-gradient-to-br from-[#000080] to-[#1084d0]'
+                : themeStyles.accent
+            }`}>
+              <span className={`text-[11px] font-bold uppercase flex items-center gap-1.5 ${profile.theme === 'minimal-oldweb' ? 'text-[#d6f9ff]' : ''}`}>
                 👥 Amigos de amigo
               </span>
-              <span className="text-[9px] text-neutral-500 font-sans">sugestões</span>
+              <span className={`text-[9px] font-sans ${profile.theme === 'minimal-oldweb' ? 'text-[#d6f9ff]' : 'text-neutral-500'}`}>sugestões</span>
             </div>
 
             <div className="p-3 grid grid-cols-3 gap-2 bg-transparent pb-4">

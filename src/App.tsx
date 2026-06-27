@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { ShieldCheck, Calendar, Lock, BookOpen, RefreshCw } from 'lucide-react';
 import OrkutHeader from './components/OrkutHeader';
 import OrkutFooter from './components/OrkutFooter';
+import { CustomGothicCursor } from './components/CustomGothicCursor';
 import PrivacyModal from './components/PrivacyModal';
 import ProfileLayout from './components/ProfileLayout';
 import Scrapbook from './components/Scrapbook';
@@ -2026,6 +2027,7 @@ export default function App() {
 
   return (
     <div className={`min-h-screen ${themeStyles.bg} flex flex-col justify-between transition-colors duration-300 selection:bg-pink-100 antialiased`}>
+      <CustomGothicCursor themeId={currentViewedProfile.theme} />
       {/* 1. Header */}
       <OrkutHeader
         currentTab={currentTab}

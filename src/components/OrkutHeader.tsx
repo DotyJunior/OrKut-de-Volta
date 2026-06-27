@@ -28,6 +28,105 @@ export default function OrkutHeader({
   themeId,
 }: HeaderProps) {
 
+  const [batFrame, setBatFrame] = useState('01');
+  const [isBatVisible, setIsBatVisible] = useState(false);
+
+  // Preload all 7 PNG frames to ensure smooth and zero-flicker animation
+  useEffect(() => {
+    if (themeId !== 'gotico-retro') return;
+    const frames = ['01', '02', '03', '04', '05', '06', '07'];
+    frames.forEach(frame => {
+      const img = new Image();
+      img.src = `/assets/themes/gothic/creatures/morcego-gotico/morcego-frame-${frame}.png`;
+    });
+  }, [themeId]);
+
+  // Robust loop with exact timing for each frame
+  useEffect(() => {
+    if (themeId !== 'gotico-retro') return;
+
+    const frames = ['01', '02', '03', '04', '05', '06', '07'];
+    const delays: Record<string, number> = {
+      '01': 1500,
+      '02': 300,
+      '03': 300,
+      '04': 900,
+      '05': 300,
+      '06': 300,
+      '07': 900,
+    };
+
+    const currentFrameIndex = frames.indexOf(batFrame);
+    if (currentFrameIndex === -1) return;
+
+    const nextIndex = (currentFrameIndex + 1) % frames.length;
+    const nextFrame = frames[nextIndex];
+    const delay = delays[batFrame] || 120;
+
+    const timer = setTimeout(() => {
+      setBatFrame(nextFrame);
+    }, delay);
+
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [batFrame, themeId]);
+
+  // Daily rare appearance system for the gothic bat
+  useEffect(() => {
+    if (themeId !== 'gotico-retro') return;
+
+    const checkVisibility = () => {
+      const now = new Date();
+      const todayStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+      
+      let storedDate = localStorage.getItem('bat_appearance_date');
+      let storedTime = localStorage.getItem('bat_appearance_time');
+
+      if (!storedDate || storedDate !== todayStr || !storedTime) {
+        // Sorteio diário único
+        const isFriday = now.getDay() === 5;
+        let baseMinutes = 0;
+        let offset = 0;
+
+        if (isFriday) {
+          baseMinutes = 23 * 60; // 23:00 base
+          offset = Math.floor(Math.random() * 31) - 15; // -15 to +15 variation
+        } else {
+          const useOptionA = Math.random() < 0.5;
+          baseMinutes = useOptionA ? (19 * 60 + 20) : (20 * 60); // 19:20 or 20:00 base
+          offset = Math.floor(Math.random() * 21) - 10; // -10 to +10 variation
+        }
+
+        const targetMinutes = baseMinutes + offset;
+        const h = Math.floor(targetMinutes / 60);
+        const m = targetMinutes % 60;
+        storedTime = String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+        storedDate = todayStr;
+
+        localStorage.setItem('bat_appearance_date', todayStr);
+        localStorage.setItem('bat_appearance_time', storedTime);
+      }
+
+      // Parse current stored time for today's appearance
+      const [sh, sm] = storedTime.split(':').map(Number);
+      const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), sh, sm, 0, 0);
+      const startTime = start.getTime();
+      const endTime = startTime + 120 * 1000; // 120 seconds duration
+      const nowTime = now.getTime();
+
+      const visible = nowTime >= startTime && nowTime < endTime;
+      setIsBatVisible(visible);
+    };
+
+    // Check visibility immediately
+    checkVisibility();
+
+    // Check visibility every 1 second to stay updated
+    const intervalId = setInterval(checkVisibility, 1000);
+    return () => clearInterval(intervalId);
+  }, [themeId]);
+
   const menuItems = [
     { id: 'profile', label: 'INICIO' },
     { id: 'scrapbook', label: 'PAGINA DE RECADOS' },
@@ -117,12 +216,24 @@ export default function OrkutHeader({
                 backgroundSize: '100px 100px',
               }}
             />
-            <img 
-              src="/assets/themes/gothic/creatures/morcego-gotico/morcego-frame-07.png"
-              alt="Morcego Gótico"
-              className="absolute top-0 right-0 h-full max-h-[150px] z-20 pointer-events-none select-none object-contain object-right-top"
-              referrerPolicy="no-referrer"
-            />
+            {isBatVisible && (
+              <img 
+                src={`/assets/themes/gothic/creatures/morcego-gotico/morcego-frame-${batFrame}.png`}
+                alt="Morcego Gótico"
+                className="absolute right-0 h-full max-h-[150px] z-20 pointer-events-none select-none object-contain object-right-top"
+                referrerPolicy="no-referrer"
+                style={{
+                  filter: 'none',
+                  boxShadow: 'none',
+                  opacity: 1,
+                  transition: 'none',
+                  animation: 'none',
+                  mixBlendMode: 'normal',
+                  background: 'transparent',
+                  top: (batFrame === '06' || batFrame === '07') ? '2px' : '0px'
+                }}
+              />
+            )}
           </>
         )}
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center gap-4 relative z-10">

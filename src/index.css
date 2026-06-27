@@ -140,4 +140,10 @@ body {
   background-position: center !important;
 }
 
+/* Custom Gothic Cursor class to hide native cursor */
+.custom-gothic-cursor-active,
+.custom-gothic-cursor-active * {
+  cursor: none !important;
+}
+
 
