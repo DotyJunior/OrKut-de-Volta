@@ -146,4 +146,10 @@ body {
   cursor: none !important;
 }
 
+/* Custom Windows 95/98 Cursor */
+.minimal-oldweb-cursor-active,
+.minimal-oldweb-cursor-active * {
+  cursor: none !important;
+}
+
 

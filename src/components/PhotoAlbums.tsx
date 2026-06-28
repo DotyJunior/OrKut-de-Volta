@@ -74,6 +74,7 @@ interface PhotoAlbumsProps {
   profileId: string;
   profileName: string;
   profileAvatar: string;
+  profileTheme?: string;
   albums: Album[];
   isOwnProfile: boolean;
   onUpdateAlbums: (updatedAlbums: Album[]) => void;
@@ -198,6 +199,7 @@ export default function PhotoAlbums({
   profileId,
   profileName,
   profileAvatar,
+  profileTheme = 'default',
   albums,
   isOwnProfile,
   onUpdateAlbums,
@@ -213,6 +215,7 @@ export default function PhotoAlbums({
 }: PhotoAlbumsProps) {
   const [activeAlbumId, setActiveAlbumId] = useState<string | null>(null);
   const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(null);
+  const [isOpeningAlbum, setIsOpeningAlbum] = useState(false);
   
   // Sharing & Received Photos States
   const [showFriendsShareModal, setShowFriendsShareModal] = useState(false);
@@ -465,6 +468,10 @@ export default function PhotoAlbums({
   ];
 
   const triggerNostalgicLoading = (callback: () => void, textOverride?: string) => {
+    if (profileTheme === 'minimal-oldweb') {
+      callback();
+      return;
+    }
     setIsLoading(true);
     setLoadingProgress(0);
     setLoadingText(textOverride || loaderPhrases[Math.floor(Math.random() * loaderPhrases.length)]);
@@ -490,11 +497,13 @@ export default function PhotoAlbums({
   };
 
   const handleOpenAlbum = (id: string) => {
+    setIsOpeningAlbum(true);
     triggerNostalgicLoading(() => {
       setActiveAlbumId(id);
       setViewMode('album');
       setSelectedPhotoId(null);
       setAlbumPage(0);
+      setIsOpeningAlbum(false);
     }, 'Baixando fotos do álbum no cache seguro...');
   };
 

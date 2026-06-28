@@ -102,7 +102,11 @@ export default function SocialSidebar({
     <div className="flex flex-col gap-4">
       {/* Social Navigation Menu Block */}
       <div className={`rounded overflow-hidden transition-all ${themeStyles.cardBg} ${themeStyles.glow}`}>
-        <div className={`px-3 py-1.5 text-[11px] font-bold uppercase ${themeStyles.accent}`}>
+        <div className={`px-3 py-1.5 text-[11px] font-bold uppercase ${
+          theme === 'minimal-oldweb'
+            ? 'bg-gradient-to-r from-[#000080] to-[#1080d0] text-[#b9cee5]'
+            : themeStyles.accent
+        }`}>
           Menu Social
         </div>
         <div className={`flex flex-col text-xs font-sans text-left ${themeStyles.font}`}>

@@ -4,6 +4,7 @@ import { Profile, Friend, Community, Album, Photo, SharedMemory, FriendRequest }
 import { getThemeStyles } from '../lib/theme';
 import SocialSidebar from './SocialSidebar';
 import IdentityWizard from './IdentityWizard';
+import Windows95Installer from './Windows95Installer';
 import SocialActions from './SocialActions';
 import PresenceStatus from './PresenceStatus';
 import GlossyRetroButton from './GlossyRetroButton';
@@ -96,6 +97,17 @@ export default function ProfileLayout({
 }: ProfileLayoutProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [showIdentityWizard, setShowIdentityWizard] = useState(false);
+  const [showOldWebInstaller, setShowOldWebInstaller] = useState(false);
+  const [pendingThemeCallback, setPendingThemeCallback] = useState<(() => void) | null>(null);
+
+  const handleThemeSelectionWithInstaller = (targetTheme: string, onAccept: () => void) => {
+    if (targetTheme === 'minimal-oldweb' && profile.theme !== 'minimal-oldweb') {
+      setPendingThemeCallback(() => onAccept);
+      setShowOldWebInstaller(true);
+    } else {
+      onAccept();
+    }
+  };
 
   const [isPendingLocal, setIsPendingLocal] = useState(false);
   const [isRequestsModalOpen, setIsRequestsModalOpen] = useState(false);
@@ -1400,7 +1412,12 @@ export default function ProfileLayout({
                   <select
                     id="edit-select-theme"
                     value={editForm.theme}
-                    onChange={(e) => setEditForm({ ...editForm, theme: e.target.value })}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      handleThemeSelectionWithInstaller(val, () => {
+                        setEditForm({ ...editForm, theme: val });
+                      });
+                    }}
                     className="w-full px-2 py-1.5 border border-pink-400 bg-pink-50/10 text-[#d946ef] font-bold rounded cursor-pointer"
                   >
                     <option value="default">Padrão Scrapzone Clássico (Azul)</option>
@@ -2043,7 +2060,9 @@ export default function ProfileLayout({
           currentProfile={profile}
           onClose={() => setShowIdentityWizard(false)}
           onComplete={(completedData) => {
-            onSaveProfile(completedData);
+            handleThemeSelectionWithInstaller(completedData.theme || 'default', () => {
+              onSaveProfile(completedData);
+            });
             setShowIdentityWizard(false);
           }}
         />
@@ -2237,6 +2256,21 @@ export default function ProfileLayout({
           </div>
         )}
       </AnimatePresence>
+
+      <Windows95Installer
+        isOpen={showOldWebInstaller}
+        onClose={() => {
+          setShowOldWebInstaller(false);
+          setPendingThemeCallback(null);
+        }}
+        onComplete={() => {
+          setShowOldWebInstaller(false);
+          if (pendingThemeCallback) {
+            pendingThemeCallback();
+            setPendingThemeCallback(null);
+          }
+        }}
+      />
     </div>
   );
 }

@@ -1969,6 +1969,19 @@ export default function App() {
     }
   }, [currentViewedProfile]);
 
+  // Set custom Windows 95/98 cursor when theme is active
+  useEffect(() => {
+    const currentTheme = currentViewedProfile?.theme || 'default';
+    if (currentTheme === 'minimal-oldweb') {
+      document.body.classList.add('minimal-oldweb-cursor-active');
+    } else {
+      document.body.classList.remove('minimal-oldweb-cursor-active');
+    }
+    return () => {
+      document.body.classList.remove('minimal-oldweb-cursor-active');
+    };
+  }, [currentViewedProfile?.theme]);
+
   // Loading state during session check and app bootstrap
   if (isAuthLoading || !initDone) {
     return (
@@ -2124,6 +2137,7 @@ export default function App() {
             profileId={currentViewedProfile.id}
             profileName={currentViewedProfile.name}
             profileAvatar={currentViewedProfile.avatar}
+            profileTheme={currentViewedProfile.theme}
             albums={albums}
             isOwnProfile={isOwnProfile && !isVisitorMode}
             isVisitorMode={isVisitorMode}
