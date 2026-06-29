@@ -107,22 +107,22 @@ export const getThemeStyles = (themeId: string = 'default'): ThemeStyle => {
       };
     case 'cyberdeck':
       return {
-        bg: 'bg-[#0f172a] text-[#06b6d4]',
-        cardBg: 'bg-[#1e293b]/90 border-[#06b6d4] border text-[#06b6d4]',
+        bg: 'bg-[#09090c] text-[#06b6d4]',
+        cardBg: 'bg-[#0e101f] border-[#06b6d4] border text-[#06b6d4]',
         text: 'text-[#06b6d4]',
         borderClass: 'border-[#06b6d4]/50 border-2 shadow-[0_0_8px_rgba(6,182,212,0.4)]',
         accent: 'text-fuchsia-400 bg-[#1e1b4b] border-[#d946ef] border',
         glow: 'shadow-[0_0_12px_rgba(217,70,239,0.35)]',
         font: 'font-mono',
         bannerGradient: 'from-[#0f172a] via-[#1e1b4b] to-[#4c1d95] border-[#06b6d4] border-b',
-        navBg: 'bg-[#1e293b] border-b border-[#06b6d4]',
+        navBg: 'bg-[#0e101f] border-b border-[#06b6d4]',
         badgeBg: 'bg-[#155e75] border-[#06b6d4] border',
         badgeText: 'text-cyan-200',
         topBarBg: 'bg-[#0f172a]',
         topBarText: 'text-cyan-300',
         topBarAccent: 'text-fuchsia-400',
         communitiesBg: 'bg-[#0f172a]',
-        panelBg: 'bg-[#1e293b]',
+        panelBg: 'bg-[#0e101f]',
         inputBg: 'bg-[#0f172a]',
         textContrast: 'text-cyan-300',
       };

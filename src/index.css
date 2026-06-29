@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Audiowide&family=Cinzel:wght@600;700&family=Cinzel+Decorative:wght@400;700&family=Cormorant+Garamond:wght@400;500;600;700&family=Dancing+Script:wght@600;700&family=Great+Vibes&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&family=Marcellus+SC&family=MedievalSharp&family=Orbitron:wght@700&family=UnifrakturCook:wght@700&family=UnifrakturMaguntia&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Audiowide&family=Cinzel:wght@600;700&family=Cinzel+Decorative:wght@400;700&family=Cormorant+Garamond:wght@400;500;600;700&family=Dancing+Script:wght@600;700&family=Great+Vibes&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&family=Marcellus+SC&family=MedievalSharp&family=Orbitron:wght@700&family=UnifrakturCook:wght@700&family=UnifrakturMaguntia&family=DotGothic16&family=Rubik+Pixels&display=swap');
 @import "tailwindcss";
 
 @theme {
@@ -11,6 +11,8 @@
   --font-vaporwave: "Audiowide", "Syncopate", sans-serif;
   --font-smallcaps: "Cinzel", "Marcellus SC", serif;
   --font-comic: "Comic Sans MS", "Comic Sans", cursive;
+  --font-dotgothic: "DotGothic16", sans-serif;
+  --font-rubikpixels: "Rubik Pixels", sans-serif;
 }
 
 body {
@@ -146,10 +148,50 @@ body {
   cursor: none !important;
 }
 
+@keyframes gothic-glow-pulse {
+  0%, 100% {
+    transform: translate(-50%, -50%) scale(0.9);
+    opacity: 0.8;
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.25);
+    opacity: 1;
+  }
+}
+
+.gothic-glow-pulse-active {
+  animation: gothic-glow-pulse 1.6s ease-in-out infinite;
+}
+
 /* Custom Windows 95/98 Cursor */
 .minimal-oldweb-cursor-active,
 .minimal-oldweb-cursor-active * {
   cursor: none !important;
 }
+
+/* Animated cyber neon border */
+@keyframes rotate-cyber {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.cyber-neon-border-container {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cyber-neon-border-container::before {
+  content: '';
+  position: absolute;
+  width: 180%;
+  height: 180%;
+  background: conic-gradient(from 0deg, #39ff14, #00ffcc, #10b981, #39ff14);
+  animation: rotate-cyber 3.5s linear infinite;
+  z-index: 0;
+}
+
 
 

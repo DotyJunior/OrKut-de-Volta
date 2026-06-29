@@ -126,6 +126,8 @@ export interface Photo {
   effect?: string;
   likes: number;
   likedByMe?: boolean;
+  loves?: number;
+  lovedByMe?: boolean;
   comments: PhotoComment[];
   date: string;
 }

@@ -504,16 +504,20 @@ export default function ProfileLayout({
       <div className="lg:col-span-3 flex flex-col gap-4">
         {/* Profile Card Only - Photo Container (Enlarged) */}
         <div className={`border rounded p-3 text-center transition-all ${themeStyles.cardBg} ${themeStyles.glow} ${themeStyles.borderClass}`}>
-          <div className="relative group mx-auto w-full aspect-square border-2 border-neutral-300 overflow-hidden bg-neutral-100 rounded-lg flex items-center justify-center shadow-xs">
+          <div className={`relative group mx-auto w-full aspect-square overflow-hidden rounded-lg flex items-center justify-center shadow-xs ${
+            profile.theme === 'cyberdeck' 
+              ? 'cyber-neon-border-container p-[4px]' 
+              : 'border-2 border-neutral-300 bg-neutral-100'
+          }`}>
             {profile.avatar && profile.avatar !== '👤' && profile.avatar.trim() !== '' ? (
               <img
                 src={profile.avatar}
                 alt={profile.name}
-                className="w-full h-full object-cover"
+                className="w-full h-full object-cover z-10 rounded-[5px]"
                 referrerPolicy="no-referrer"
               />
             ) : (
-              <div className="w-full h-full bg-[#dee7f4] flex flex-col items-center justify-center text-neutral-400 gap-2 select-none">
+              <div className="w-full h-full bg-[#dee7f4] flex flex-col items-center justify-center text-neutral-400 gap-2 select-none z-10 rounded-[5px]">
                 <span className="text-6xl">👤</span>
                 <span className="text-xs font-bold tracking-widest uppercase text-neutral-500">Sem Foto</span>
               </div>
@@ -523,7 +527,7 @@ export default function ProfileLayout({
               profile.avatar && profile.avatar !== '👤' && profile.avatar.trim() !== '' ? (
                 /* COM FOTO: Floating menu, semi-transparent, only shows on hover */
                 <div 
-                  className="absolute bottom-2 left-2 right-2 h-7.5 bg-black/25 backdrop-blur-xs border border-white/10 rounded-full flex items-center justify-between px-2.5 text-white opacity-0 group-hover:opacity-100 transition-all duration-200 select-none font-sans"
+                  className="absolute bottom-2 left-2 right-2 h-7.5 bg-black/40 backdrop-blur-xs border border-white/10 rounded-full flex items-center justify-between px-2.5 text-white opacity-0 group-hover:opacity-100 transition-all duration-200 select-none font-sans z-20"
                 >
                   <button 
                     type="button"
@@ -545,7 +549,7 @@ export default function ProfileLayout({
                 /* SEM FOTO: Menu visible by default, semi-transparent */
                 <div 
                   onClick={() => userAvatarInputRef.current?.click()}
-                  className="absolute bottom-2.5 left-2.5 right-2.5 h-8 bg-black/25 backdrop-blur-xs border border-white/10 rounded-full flex items-center justify-between px-3 text-white cursor-pointer select-none font-sans hover:bg-black/45 active:scale-[0.98] transition-all"
+                  className="absolute bottom-2.5 left-2.5 right-2.5 h-8 bg-black/40 backdrop-blur-xs border border-white/10 rounded-full flex items-center justify-between px-3 text-white cursor-pointer select-none font-sans hover:bg-black/55 active:scale-[0.98] transition-all z-20"
                 >
                   <span className="text-[9.5px] font-black uppercase tracking-wide flex items-center gap-1.5">📷 Adicionar Foto</span>
                 </div>
@@ -622,7 +626,9 @@ export default function ProfileLayout({
                 ? 'text-[#aaa857]' 
                 : profile.theme === 'emo-2008'
                   ? 'text-[#f6339a] [text-shadow:1px_1px_2px_rgba(0,0,0,0.8)]'
-                  : 'text-neutral-800'
+                  : profile.theme === 'cyberdeck'
+                    ? 'text-[#55ff94]'
+                    : 'text-neutral-800'
             } ${displayNameClass}`}>
               {displayNameText}
               {isOwnProfile && (
@@ -956,9 +962,13 @@ export default function ProfileLayout({
                 <div className="w-[106%] h-2.5 bg-[#170919] border border-[#b08d57]/30 rounded-full shadow-md z-20 -mt-1" />
               </div>
             ) : (
-              <div className={`border border-neutral-200/40 rounded p-2 text-center flex flex-col items-center justify-center transition-all ${
-                profile.theme === 'emo-2008' ? 'bg-[#0f0f11]' : 'bg-neutral-100/40'
-              } ${!isOwnProfile ? 'hover:bg-[#fefce8]/40 hover:border-amber-200' : ''}`}>
+              <div className={`border rounded p-2 text-center flex flex-col items-center justify-center transition-all ${
+                profile.theme === 'cyberdeck'
+                  ? 'bg-transparent border-[#06b6d4]/30'
+                  : profile.theme === 'emo-2008'
+                    ? 'bg-[#0f0f11] border-neutral-200/40'
+                    : 'bg-neutral-100/40 border-neutral-200/40'
+              } ${!isOwnProfile && profile.theme !== 'cyberdeck' ? 'hover:bg-[#fefce8]/40 hover:border-amber-200' : ''}`}>
                 <span className="text-[10px] text-neutral-500 font-semibold uppercase mb-1 flex items-center gap-1">
                   Confiável {!isOwnProfile && <span className="text-[9px] text-[#406a94] normal-case font-normal">(votar)</span>}
                 </span>
@@ -992,9 +1002,13 @@ export default function ProfileLayout({
                 <div className="w-[106%] h-2.5 bg-[#170919] border border-[#b08d57]/30 rounded-full shadow-md z-20 -mt-1" />
               </div>
             ) : (
-              <div className={`border border-neutral-200/40 rounded p-2 text-center flex flex-col items-center justify-center transition-all ${
-                profile.theme === 'emo-2008' ? 'bg-[#0f0f11]' : 'bg-neutral-100/40'
-              } ${!isOwnProfile ? 'hover:bg-[#f0f9ff]/40 hover:border-sky-200' : ''}`}>
+              <div className={`border rounded p-2 text-center flex flex-col items-center justify-center transition-all ${
+                profile.theme === 'cyberdeck'
+                  ? 'bg-transparent border-[#06b6d4]/30'
+                  : profile.theme === 'emo-2008'
+                    ? 'bg-[#0f0f11] border-neutral-200/40'
+                    : 'bg-neutral-100/40 border-neutral-200/40'
+              } ${!isOwnProfile && profile.theme !== 'cyberdeck' ? 'hover:bg-[#f0f9ff]/40 hover:border-sky-200' : ''}`}>
                 <span className="text-[10px] text-neutral-500 font-semibold uppercase mb-1 flex items-center gap-1">
                   Legal {!isOwnProfile && <span className="text-[9px] text-[#406a94] normal-case font-normal">(votar)</span>}
                 </span>
@@ -1028,9 +1042,13 @@ export default function ProfileLayout({
                 <div className="w-[106%] h-2.5 bg-[#170919] border border-[#b08d57]/30 rounded-full shadow-md z-20 -mt-1" />
               </div>
             ) : (
-              <div className={`border border-neutral-200/40 rounded p-2 text-center flex flex-col items-center justify-center transition-all ${
-                profile.theme === 'emo-2008' ? 'bg-[#0f0f11]' : 'bg-neutral-100/40'
-              } ${!isOwnProfile ? 'hover:bg-[#fff1f2]/40 hover:border-rose-200' : ''}`}>
+              <div className={`border rounded p-2 text-center flex flex-col items-center justify-center transition-all ${
+                profile.theme === 'cyberdeck'
+                  ? 'bg-transparent border-[#06b6d4]/30'
+                  : profile.theme === 'emo-2008'
+                    ? 'bg-[#0f0f11] border-neutral-200/40'
+                    : 'bg-neutral-100/40 border-neutral-200/40'
+              } ${!isOwnProfile && profile.theme !== 'cyberdeck' ? 'hover:bg-[#fff1f2]/40 hover:border-rose-200' : ''}`}>
                 <span className="text-[10px] text-neutral-500 font-semibold uppercase mb-1 flex items-center gap-1">
                   Sexy {!isOwnProfile && <span className="text-[9px] text-[#406a94] normal-case font-normal">(votar)</span>}
                 </span>
@@ -1113,15 +1131,17 @@ export default function ProfileLayout({
                   }
                 }}
                 className={`border rounded p-2 text-center flex flex-col items-center justify-center w-full focus:outline-none transition-all ${
-                  profile.theme === 'emo-2008'
-                    ? 'bg-[#0f0f11] border-neutral-200/40'
-                    : isOwnProfile 
-                      ? 'bg-neutral-100/40 border-neutral-200/40' 
-                      : `cursor-pointer hover:scale-[1.02] shadow-xs ${
-                          isFanOfThisUser 
-                            ? 'bg-amber-50/70 border-amber-300 text-amber-800 font-extrabold shadow-[0_1px_6px_rgba(251,191,36,0.15)]' 
-                            : 'bg-neutral-100/40 border-neutral-200/40 hover:bg-amber-50/20 hover:border-amber-250 text-neutral-600'
-                        }`
+                  profile.theme === 'cyberdeck'
+                    ? 'bg-transparent border-[#06b6d4]/30'
+                    : profile.theme === 'emo-2008'
+                      ? 'bg-[#0f0f11] border-neutral-200/40'
+                      : isOwnProfile 
+                        ? 'bg-neutral-100/40 border-neutral-200/40' 
+                        : `cursor-pointer hover:scale-[1.02] shadow-xs ${
+                            isFanOfThisUser 
+                              ? 'bg-amber-50/70 border-amber-300 text-amber-800 font-extrabold shadow-[0_1px_6px_rgba(251,191,36,0.15)]' 
+                              : 'bg-neutral-100/40 border-neutral-200/40 hover:bg-amber-50/20 hover:border-amber-250 text-neutral-600'
+                          }`
                 }`}
                 title={!isOwnProfile ? (isFanOfThisUser ? 'Você é fã! Clique para deixar de ser' : 'Tornar-se fã deste membro') : `Fãs: ${profile.fans}`}
               >
@@ -1134,7 +1154,7 @@ export default function ProfileLayout({
                     fill={isFanOfThisUser || isOwnProfile ? "#fbbf24" : "none"} 
                     className={`${isFanOfThisUser || isOwnProfile ? 'text-[#f59e0b]' : 'text-neutral-300'} transition-all hover:scale-110`} 
                   />
-                  <span className="ml-1 text-[11px] font-sans text-amber-800">{profile.fans} fãs</span>
+                  <span className={`ml-1 text-[11px] font-sans ${profile.theme === 'cyberdeck' ? 'text-[#06b6d4]' : 'text-amber-800'}`}>{profile.fans} fãs</span>
                 </div>
               </button>
             )}
@@ -1189,7 +1209,17 @@ export default function ProfileLayout({
               <div className="p-5 flex flex-col gap-4 bg-transparent">
                 
                 {/* 1. FOTO: Aumentar tamanho, dominando visualmente o card */}
-                <div className="w-full flex justify-center bg-neutral-100/50 p-3 rounded border border-neutral-150 relative">
+                <div 
+                  className={`w-full flex justify-center p-3 rounded border relative ${
+                    profile.theme === 'cyberdeck' 
+                      ? 'bg-[#0e101f] border-[#06b6d4]/30' 
+                      : profile.theme === 'gotico-retro'
+                        ? 'bg-[#150307]/50 border-[#b08d57]/30'
+                        : profile.theme === 'minimal-oldweb'
+                          ? 'bg-[#d5d0c9] border-black'
+                          : 'bg-neutral-100/50 border-neutral-150'
+                  }`}
+                >
                   <div className="relative max-w-full md:max-w-md w-full aspect-square md:aspect-[4/3] bg-neutral-900 rounded-xs overflow-hidden border border-neutral-250 shadow-sm">
                     <img 
                       src={featuredPhoto.url} 
@@ -1415,7 +1445,9 @@ export default function ProfileLayout({
                     onChange={(e) => {
                       const val = e.target.value;
                       handleThemeSelectionWithInstaller(val, () => {
-                        setEditForm({ ...editForm, theme: val });
+                        onSaveProfile({ theme: val });
+                        setEditForm(prev => ({ ...prev, theme: val }));
+                        setIsEditing(false);
                       });
                     }}
                     className="w-full px-2 py-1.5 border border-pink-400 bg-pink-50/10 text-[#d946ef] font-bold rounded cursor-pointer"

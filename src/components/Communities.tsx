@@ -2193,17 +2193,21 @@ export default function Communities({
           <div className="lg:col-span-3 flex flex-col gap-4">
             
             {/* Profile Card Only - Photo Container (Enlarged and aligned to Profile layout) */}
-            <div className={`border rounded p-3 text-center transition-all bg-white border-neutral-300 shadow-sm`}>
-              <div className="relative group mx-auto w-full aspect-square border-2 border-neutral-300 overflow-hidden bg-neutral-100 rounded-lg flex items-center justify-center shadow-xs">
+            <div className={`border rounded p-3 text-center transition-all ${themeStyles.cardBg} ${themeStyles.glow} ${themeStyles.borderClass}`}>
+              <div className={`relative group mx-auto w-full aspect-square overflow-hidden rounded-lg flex items-center justify-center shadow-xs ${
+                myProfile.theme === 'cyberdeck' 
+                  ? 'cyber-neon-border-container p-[4px]' 
+                  : 'border-2 border-neutral-300 bg-neutral-100'
+              }`}>
                 {myProfile.avatar && myProfile.avatar !== '👤' && myProfile.avatar.trim() !== '' ? (
                   <img
                     src={myProfile.avatar}
                     alt={myProfile.name}
-                    className="w-full h-full object-cover"
+                    className="w-full h-full object-cover z-10 rounded-[5px]"
                     referrerPolicy="no-referrer"
                   />
                 ) : (
-                  <div className="w-full h-full bg-[#dee7f4] flex flex-col items-center justify-center text-neutral-400 gap-2 select-none">
+                  <div className="w-full h-full bg-[#dee7f4] flex flex-col items-center justify-center text-neutral-400 gap-2 select-none z-10 rounded-[5px]">
                     <span className="text-6xl">👤</span>
                     <span className="text-xs font-bold tracking-widest uppercase text-neutral-500">Sem Foto</span>
                   </div>
@@ -2212,22 +2216,79 @@ export default function Communities({
             </div>
 
             {/* Profile Details Container Below Photo */}
-            <div className={`border rounded p-4 text-center bg-white border-neutral-300 shadow-sm space-y-3.5`}>
-              <div className="py-1">
-                <h2 className={`text-base md:text-lg font-bold flex items-center justify-center gap-1.5 break-all tracking-wide text-neutral-800 ${displayNameClass}`}>
-                  {displayNameText}
-                </h2>
-                {myProfile.username && (
-                  <p className="text-xs font-mono text-neutral-500 opacity-95 mt-1 tracking-normal">
-                    @{myProfile.username}
+            <div className={`border rounded p-4 text-center transition-all ${themeStyles.cardBg} ${themeStyles.glow} ${themeStyles.borderClass} space-y-3.5`}>
+              {myProfile.theme === 'gotico-retro' ? (
+                <div className="flex flex-col items-center">
+                  <div 
+                    className="relative mx-auto w-full flex flex-col items-center justify-center select-none"
+                    style={{
+                      backgroundImage: "url('/assets/themes/plaqueta-gotica.webp')",
+                      backgroundSize: '100% 100%',
+                      backgroundRepeat: 'no-repeat',
+                      backgroundPosition: 'center',
+                      minHeight: '118px',
+                      padding: '26px 20px 20px 20px',
+                      marginTop: '-10px',
+                    }}
+                  >
+                    <h2 
+                      className={`font-black flex items-center justify-center gap-1 break-all tracking-wide text-[#100703] ${displayNameClass}`}
+                      style={{
+                        fontSize: '12px',
+                        lineHeight: '18px',
+                        textShadow: '0 0 4px rgba(255, 63, 44, 0.15)',
+                      }}
+                    >
+                      {displayNameText}
+                    </h2>
+                    {myProfile.username && (
+                      <span 
+                        className="block font-sans font-bold text-[#220d04] tracking-normal mt-0.5"
+                        style={{
+                          fontSize: '8px',
+                        }}
+                      >
+                        @{myProfile.username}
+                      </span>
+                    )}
+                  </div>
+                  
+                  <p className="text-[12px] md:text-[13px] font-medium font-sans flex items-center justify-center gap-1.5 mt-2.5 tracking-wider uppercase text-[#ad2fff]">
+                    <MapPin size={14} className="text-[#ad2fff] shrink-0" />
+                    {myProfile.location || 'Curitiba, PR - Brasil'}
                   </p>
-                )}
-                
-                <p className="text-[12px] md:text-[13px] font-medium font-sans flex items-center justify-center gap-1.5 mt-2.5 text-neutral-700 tracking-wider uppercase">
-                  <MapPin size={14} className="text-pink-600 shrink-0" />
-                  {myProfile.location || 'Curitiba, PR - Brasil'}
-                </p>
-              </div>
+                </div>
+              ) : (
+                <div className="py-1">
+                  <h2 className={`text-base md:text-lg font-bold flex items-center justify-center gap-1.5 break-all tracking-wide ${
+                    myProfile.theme === 'emo-2008'
+                      ? 'text-[#f6339a] [text-shadow:1px_1px_2px_rgba(0,0,0,0.8)]'
+                      : myProfile.theme === 'cyberdeck'
+                        ? 'text-[#55ff94]'
+                        : 'text-neutral-800'
+                  } ${displayNameClass}`}>
+                    {displayNameText}
+                  </h2>
+                  {myProfile.username && (
+                    <p className="text-xs font-mono text-neutral-500 opacity-95 mt-1 tracking-normal">
+                      @{myProfile.username}
+                    </p>
+                  )}
+                  
+                  <p className={`text-[12px] md:text-[13px] font-medium font-sans flex items-center justify-center gap-1.5 mt-2.5 tracking-wider uppercase ${
+                    myProfile.theme === 'emo-2008' 
+                      ? 'text-[#be2efd]' 
+                      : 'text-neutral-700'
+                  }`}>
+                    <MapPin size={14} className={
+                      myProfile.theme === 'emo-2008' 
+                        ? 'text-[#be2efd] shrink-0' 
+                        : 'text-pink-600 shrink-0'
+                    } />
+                    {myProfile.location || 'Curitiba, PR - Brasil'}
+                  </p>
+                </div>
+              )}
 
               <div className="border-t border-dashed border-neutral-300 pt-3.5 text-left">
                 <span className="text-[10px] font-bold uppercase tracking-widest block mb-2 opacity-70">Criptografia Local</span>
@@ -2279,13 +2340,35 @@ export default function Communities({
               </div>
 
               {/* Menu Social */}
-              <div className="border bg-zinc-50 border-neutral-300 mt-4 rounded p-2 text-left text-[11px] font-sans">
-                <span className="text-[9.5px] uppercase font-black text-neutral-400 block mb-1">Menu Social</span>
-                <div className="flex flex-col gap-1 text-blue-700 font-semibold">
+              <div className={`border mt-4 rounded p-2 text-left text-[11px] font-sans transition-all ${
+                myProfile.theme === 'gotico-retro' 
+                  ? 'bg-[#30060e]/90 border-[#b08d57] text-[#b08d57]' 
+                  : myProfile.theme === 'minimal-oldweb'
+                    ? 'bg-[#d5d0c9] border-black text-black'
+                    : 'bg-zinc-50 border-neutral-300 text-neutral-800'
+              }`}>
+                <span className={`text-[9.5px] uppercase font-black block mb-1 ${
+                  myProfile.theme === 'gotico-retro' 
+                    ? 'text-[#b08d57]/60' 
+                    : myProfile.theme === 'minimal-oldweb'
+                      ? 'text-black/60'
+                      : 'text-neutral-400'
+                }`}>Menu Social</span>
+                <div className={`flex flex-col gap-1 font-semibold ${
+                  myProfile.theme === 'gotico-retro' 
+                    ? 'text-[#b08d57]' 
+                    : myProfile.theme === 'minimal-oldweb'
+                      ? 'text-[#000080]'
+                      : 'text-blue-700'
+                }`}>
                   <button onClick={() => onNavigateToTab?.('profile')} className="hover:underline text-left cursor-pointer">Meu Perfil</button>
                   <button onClick={() => onNavigateToTab?.('scrapbook')} className="hover:underline text-left cursor-pointer">Recados</button>
                   <button onClick={() => onNavigateToTab?.('testimonials')} className="hover:underline text-left cursor-pointer">Depoimentos</button>
-                  <button onClick={() => handleSelectCommunity(null)} className="hover:underline text-left text-pink-600 cursor-pointer">📚 Minhas Comunidades</button>
+                  <button onClick={() => handleSelectCommunity(null)} className={`hover:underline text-left cursor-pointer ${
+                    myProfile.theme === 'gotico-retro' 
+                      ? 'text-[#ffd700]' 
+                      : 'text-pink-600'
+                  }`}>📚 Minhas Comunidades</button>
                 </div>
               </div>
 

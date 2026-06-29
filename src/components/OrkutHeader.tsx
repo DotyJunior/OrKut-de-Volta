@@ -260,31 +260,48 @@ export default function OrkutHeader({
 
           {/* Horizontal Vintage Menu Alignment directly adjacent to the logo, exactly like reference images */}
           <div className="flex flex-wrap gap-1.5 items-center justify-center md:justify-start w-full md:w-auto">
-            {menuItems.map((item) => (
-              <button
-                id={`tab-btn-${item.id}`}
-                key={item.id}
-                onClick={() => {
-                  setSearchQuery('');
-                  setCurrentTab(item.id);
-                }}
-                className={`px-4 py-2 text-[11px] font-black uppercase tracking-wide rounded-sm font-sans transition-all cursor-pointer ${
-                  themeStyles.bg.includes('bg-checkerboard')
-                    ? item.id === 'communities' && currentTab === 'communities'
-                      ? 'bg-neutral-800 text-white shadow-sm border-2 border-pink-500 rounded-lg scale-105'
-                      : currentTab === item.id 
-                      ? 'bg-zinc-800 text-pink-500 shadow-xs border border-pink-500' 
-                      : 'bg-transparent text-white hover:text-pink-500 hover:shadow-[0_0_10px_#ec4899] border border-transparent hover:border-pink-500'
-                    : item.id === 'communities' && currentTab === 'communities'
-                    ? 'bg-white text-[#9d174d] shadow-sm border-2 border-[#1b4372] font-black rounded-lg scale-105'
-                    : currentTab === item.id 
-                    ? 'bg-[#1b4372] text-white shadow-xs border border-[#1b4372]' 
-                    : 'bg-[#406a94] hover:bg-[#34597d] text-white border border-[#406a94]'
-                }`}
-              >
-                {item.id === 'communities' ? 'COMUNIDADE' : item.label}
-              </button>
-            ))}
+            {menuItems.map((item) => {
+              const isActive = currentTab === item.id;
+              let buttonClassName = "";
+              
+              if (themeId === 'cyberdeck') {
+                if (isActive) {
+                  buttonClassName = "bg-[#0e101f] text-[#00ffcc] border border-[#d946ef] shadow-[0_0_8px_rgba(217,70,239,0.6)]";
+                } else {
+                  buttonClassName = "bg-[#05070f] text-[#94a3b8] border border-[#0d2e3a]/80 hover:bg-[#0e101f] hover:text-[#00ffcc] hover:border-[#d946ef] hover:shadow-[0_0_8px_rgba(217,70,239,0.6)]";
+                }
+              } else if (themeStyles.bg.includes('bg-checkerboard')) {
+                if (item.id === 'communities' && currentTab === 'communities') {
+                  buttonClassName = "bg-neutral-800 text-white shadow-sm border-2 border-pink-500 rounded-lg scale-105";
+                } else if (currentTab === item.id) {
+                  buttonClassName = "bg-zinc-800 text-pink-500 shadow-xs border border-pink-500";
+                } else {
+                  buttonClassName = "bg-transparent text-white hover:text-pink-500 hover:shadow-[0_0_10px_#ec4899] border border-transparent hover:border-pink-500";
+                }
+              } else {
+                if (item.id === 'communities' && currentTab === 'communities') {
+                  buttonClassName = "bg-white text-[#9d174d] shadow-sm border-2 border-[#1b4372] font-black rounded-lg scale-105";
+                } else if (currentTab === item.id) {
+                  buttonClassName = "bg-[#1b4372] text-white shadow-xs border border-[#1b4372]";
+                } else {
+                  buttonClassName = "bg-[#406a94] hover:bg-[#34597d] text-white border border-[#406a94]";
+                }
+              }
+
+              return (
+                <button
+                  id={`tab-btn-${item.id}`}
+                  key={item.id}
+                  onClick={() => {
+                    setSearchQuery('');
+                    setCurrentTab(item.id);
+                  }}
+                  className={`px-4 py-2 text-[11px] font-black uppercase tracking-wide rounded-sm font-sans transition-all cursor-pointer ${buttonClassName}`}
+                >
+                  {item.id === 'communities' ? 'COMUNIDADE' : item.label}
+                </button>
+              );
+            })}
 
             {/* Special MINHAS COMUNIDADES Tab button matching mockup - hidden on Profile page */}
             {currentTab !== 'profile' && (
@@ -294,7 +311,13 @@ export default function OrkutHeader({
                   setSearchQuery('');
                   setCurrentTab('communities');
                 }}
-                className={`px-4 py-2 text-[11px] font-black uppercase tracking-wide border-2 ${themeStyles.bg.includes('bg-checkerboard') ? 'border-pink-500 bg-neutral-800 text-pink-300 hover:shadow-[0_0_10px_#ec4899]' : 'border-pink-600 bg-white hover:bg-pink-50 text-pink-600'} rounded-lg shadow-sm transition-all cursor-pointer shrink-0 ml-1.5 hover:scale-102 font-sans`}
+                className={`px-4 py-2 text-[11px] font-black uppercase tracking-wide border-2 rounded-lg shadow-sm transition-all cursor-pointer shrink-0 ml-1.5 hover:scale-102 font-sans ${
+                  themeId === 'cyberdeck'
+                    ? 'border-[#d946ef]/60 bg-[#05070f] text-[#00ffcc] hover:bg-[#0e101f] hover:shadow-[0_0_8px_rgba(217,70,239,0.6)]'
+                    : themeStyles.bg.includes('bg-checkerboard')
+                    ? 'border-pink-500 bg-neutral-800 text-pink-300 hover:shadow-[0_0_10px_#ec4899]'
+                    : 'border-pink-600 bg-white hover:bg-pink-50 text-pink-600'
+                }`}
               >
                 MINHAS COMUNIDADES
               </button>

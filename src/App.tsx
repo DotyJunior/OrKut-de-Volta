@@ -884,8 +884,8 @@ export default function App() {
           if (updated[uId]) {
             // Merge carefully: do not overwrite established profile traits
             updated[uId] = {
-              ...updated[uId],
-              ...u
+              ...u,
+              ...updated[uId]
             };
           } else {
             // Fallback safe default profile
@@ -1772,6 +1772,13 @@ export default function App() {
     try {
       const realId = currentUserProfile?.id || profiles.me?.id || 'me';
       await setDoc(doc(db, 'profiles', realId), updatedMe);
+      if (realId && realId !== 'me') {
+        try {
+          await setDoc(doc(db, 'users', realId), updatedMe);
+        } catch (usersErr) {
+          console.error("Non-blocking error syncing to users collection: ", usersErr);
+        }
+      }
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, `profiles/${currentUserProfile?.id || profiles.me?.id || 'me'}`);
     }
@@ -2062,7 +2069,10 @@ export default function App() {
       />
 
       {/* 2. Main content container */}
-      <main className="flex-1 max-w-6xl w-full mx-auto px-4 py-6 font-sans">
+      <main 
+        className="flex-1 max-w-6xl w-full mx-auto px-4 py-6 font-sans"
+        style={currentViewedProfile.theme === 'cyberdeck' ? { backgroundColor: '#09090c' } : undefined}
+      >
         {/* If viewing a friend's profile, show a nice retro ribbon allowing return to my own profile */}
         {!isOwnProfile && (
           <div 

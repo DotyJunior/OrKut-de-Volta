@@ -712,7 +712,7 @@ export default function SecretChat({
             <span 
               className="ticker-item px-10 text-[11px] uppercase tracking-[3px] font-bold"
               style={{
-                fontFamily: '"Bebas Neue", sans-serif',
+                fontFamily: '"DotGothic16", sans-serif',
                 color: '#ff38c8',
                 textShadow: '0 0 6px #ff38c8, 0 0 18px #c800ff'
               }}
@@ -722,7 +722,7 @@ export default function SecretChat({
             <span 
               className="ticker-item px-10 text-[11px] uppercase tracking-[3px] font-bold"
               style={{
-                fontFamily: '"Bebas Neue", sans-serif',
+                fontFamily: '"DotGothic16", sans-serif',
                 color: '#ff38c8',
                 textShadow: '0 0 6px #ff38c8, 0 0 18px #c800ff'
               }}

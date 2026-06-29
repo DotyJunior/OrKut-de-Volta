@@ -147,10 +147,27 @@ export function CustomGothicCursor({ themeId }: CustomGothicCursorProps) {
         zIndex: 999999,
       }}
     >
+      {/* Light blue glow effect (#2475fe) behind the gothic hand cursor */}
+      <div
+        className={isHoveringClickable ? 'gothic-glow-pulse-active' : ''}
+        style={{
+          position: 'absolute',
+          top: '50%',
+          left: '50%',
+          transform: isHoveringClickable ? undefined : 'translate(-50%, -50%)',
+          width: '50px',
+          height: '50px',
+          borderRadius: '50%',
+          background: 'radial-gradient(circle, rgba(36, 117, 254, 0.25) 0%, rgba(36, 117, 254, 0.05) 50%, rgba(36, 117, 254, 0) 70%)',
+          pointerEvents: 'none',
+          mixBlendMode: 'screen',
+          transition: 'all 0.2s ease',
+        }}
+      />
       <img
         src={cursorImg}
         alt="Gothic Cursor"
-        className="w-full h-full object-contain"
+        className="w-full h-full object-contain relative z-10"
         referrerPolicy="no-referrer"
         style={{
           filter: 'none',

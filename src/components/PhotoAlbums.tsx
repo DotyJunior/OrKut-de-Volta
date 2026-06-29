@@ -378,6 +378,99 @@ export default function PhotoAlbums({
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [loadingText, setLoadingText] = useState('');
 
+  // Exportando Foto system for minimal-oldweb
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportFrame, setExportFrame] = useState(1);
+  const [exportSeconds, setExportSeconds] = useState(6);
+  const [svgFrames, setSvgFrames] = useState<string[]>([]);
+  const [exportPhotoData, setExportPhotoData] = useState<{
+    newPhoto: Photo;
+    updatedAlbums: Album[];
+  } | null>(null);
+
+  // Pre-load SVG frames on mount for oldweb export animation
+  useEffect(() => {
+    const loadFrames = async () => {
+      try {
+        const frames: string[] = [];
+        for (let i = 1; i <= 9; i++) {
+          const res = await fetch(`/assets/themes/windows-98/ui/aproved/exportando-foto/Frame-0${i}-processing-photo.svg`);
+          const text = await res.text();
+          frames.push(text);
+        }
+        setSvgFrames(frames);
+      } catch (err) {
+        console.error("Erro ao carregar frames de exportação:", err);
+      }
+    };
+    loadFrames();
+  }, []);
+
+  // Drive animation timer for Exportando Foto
+  useEffect(() => {
+    if (!isExporting) return;
+
+    const startTime = Date.now();
+    const duration = 7000; // 7 seconds
+
+    const interval = setInterval(() => {
+      const elapsed = Date.now() - startTime;
+      if (elapsed >= duration) {
+        clearInterval(interval);
+        setExportFrame(9);
+        setExportSeconds(0);
+        // Complete the export
+        if (exportPhotoData) {
+          onUpdateAlbums(exportPhotoData.updatedAlbums);
+          setNewPhotoUrl('');
+          setNewPhotoCaption('');
+          setNewPhotoSong('');
+          setNewPhotoGif('');
+          setActiveEffect('');
+          setAiPrompt('');
+          setShowAddPhoto(false);
+          setSelectedPhotoId(exportPhotoData.newPhoto.id);
+          setViewMode('photo');
+        }
+        setIsExporting(false);
+        setExportPhotoData(null);
+      } else {
+        const progress = elapsed / duration;
+        const frame = Math.min(9, Math.floor(progress * 9) + 1);
+        setExportFrame(frame);
+
+        const sec = Math.max(0, 6 - Math.floor(elapsed / 1000));
+        setExportSeconds(sec);
+      }
+    }, 50);
+
+    return () => clearInterval(interval);
+  }, [isExporting, exportPhotoData]);
+
+  const handleCancelExport = () => {
+    setIsExporting(false);
+    setExportPhotoData(null);
+    setShowAddPhoto(true);
+  };
+
+  const getProcessedSvg = () => {
+    let rawSvg = svgFrames[exportFrame - 1];
+    if (!rawSvg) return '';
+    
+    // Replace the 1.300ms countdown text value dynamically
+    const textReplacement = `${exportSeconds} ${exportSeconds === 1 ? 'segundo' : 'segundos'}`;
+    rawSvg = rawSvg.replace('1.300ms', textReplacement);
+
+    // Decrease the countdown font-size from 48px to 19px so it fits beautifully and doesn't overflow
+    rawSvg = rawSvg.replace(/font-size:\s*48px/g, 'font-size:19px');
+
+    // Replace fonts with retro/digital DotGothic16
+    rawSvg = rawSvg.replace(/font-family:\s*['"]?Yu Gothic['"]?/g, "font-family:'DotGothic16', monospace");
+    rawSvg = rawSvg.replace(/font-family:\s*['"]?Redensek['"]?/g, "font-family:'DotGothic16', monospace");
+    
+    return rawSvg;
+  };
+
   // Creation State modals
   const [showCreateAlbum, setShowCreateAlbum] = useState(false);
   const [showAddPhoto, setShowAddPhoto] = useState(false);
@@ -467,9 +560,17 @@ export default function PhotoAlbums({
     'Iniciando tubo estático de raios catódicos...'
   ];
 
-  const triggerNostalgicLoading = (callback: () => void, textOverride?: string) => {
+  const triggerNostalgicLoading = (callback: () => void, textOverride?: string, forceLoadingForOldWeb?: boolean) => {
     if (profileTheme === 'minimal-oldweb') {
-      callback();
+      if (forceLoadingForOldWeb) {
+        setIsLoading(true);
+        setTimeout(() => {
+          setIsLoading(false);
+          callback();
+        }, 7000);
+      } else {
+        callback();
+      }
       return;
     }
     setIsLoading(true);
@@ -504,7 +605,7 @@ export default function PhotoAlbums({
       setSelectedPhotoId(null);
       setAlbumPage(0);
       setIsOpeningAlbum(false);
-    }, 'Baixando fotos do álbum no cache seguro...');
+    }, 'Baixando fotos do álbum no cache seguro...', true);
   };
 
   const handleOpenPhoto = (photoId: string) => {
@@ -577,6 +678,7 @@ export default function PhotoAlbums({
       gifUrl: newPhotoGif.trim() || undefined,
       effect: activeEffect || undefined,
       likes: 0,
+      loves: 0,
       comments: [],
       date: new Date().toLocaleDateString('pt-BR')
     };
@@ -591,19 +693,28 @@ export default function PhotoAlbums({
       return a;
     });
 
-    onUpdateAlbums(updatedAlbums);
-    setNewPhotoUrl('');
-    setNewPhotoCaption('');
-    setNewPhotoSong('');
-    setNewPhotoGif('');
-    setActiveEffect('');
-    setAiPrompt('');
-    setShowAddPhoto(false);
+    if (profileTheme === 'minimal-oldweb') {
+      // For Windows 95/98 theme, run the Exportando Foto animation system
+      setExportPhotoData({ newPhoto, updatedAlbums });
+      setShowAddPhoto(false);
+      setIsExporting(true);
+      setExportFrame(1);
+      setExportSeconds(6);
+    } else {
+      onUpdateAlbums(updatedAlbums);
+      setNewPhotoUrl('');
+      setNewPhotoCaption('');
+      setNewPhotoSong('');
+      setNewPhotoGif('');
+      setActiveEffect('');
+      setAiPrompt('');
+      setShowAddPhoto(false);
 
-    triggerNostalgicLoading(() => {
-      setSelectedPhotoId(newPhoto.id);
-      setViewMode('photo');
-    }, 'Processando cores de filme analógico...');
+      triggerNostalgicLoading(() => {
+        setSelectedPhotoId(newPhoto.id);
+        setViewMode('photo');
+      }, 'Processando cores de filme analógico...');
+    }
   };
 
   // Local File Upload from device (JPG, PNG, WEBP, GIF) uploaded straight to Supabase Storage
@@ -683,6 +794,33 @@ export default function PhotoAlbums({
               ...p,
               likes: isLiked ? p.likes - 1 : p.likes + 1,
               likedByMe: !isLiked
+            };
+          }
+          return p;
+        });
+        return { ...a, photos: updatedPhotos };
+      }
+      return a;
+    });
+
+    onUpdateAlbums(updatedAlbums);
+  };
+
+  // Love photo toggle
+  const handleLovePhoto = () => {
+    if (!activeAlbumId || !selectedPhotoId) return;
+    playShutterSound();
+
+    const updatedAlbums = albums.map(a => {
+      if (a.id === activeAlbumId) {
+        const updatedPhotos = a.photos.map(p => {
+          if (p.id === selectedPhotoId) {
+            const isLoved = p.lovedByMe;
+            const currentLoves = p.loves !== undefined ? p.loves : Math.max(0, p.likes - 2);
+            return {
+              ...p,
+              loves: isLoved ? currentLoves - 1 : currentLoves + 1,
+              lovedByMe: !isLoved
             };
           }
           return p;
@@ -912,36 +1050,104 @@ export default function PhotoAlbums({
       {/* 2004 Dialup Connection Simulator Loading Screen Overlay */}
       <AnimatePresence>
         {isLoading && (
+          profileTheme === 'minimal-oldweb' ? (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-transparent z-55 flex items-center justify-center pointer-events-auto overflow-hidden"
+            >
+              <div style={{ width: '96px', height: '136px' }}>
+                <iframe
+                  src="/assets/themes/windows-98/ui/temporizador/ampulheta-w98 (1).html"
+                  className="w-full h-full border-0 pointer-events-none select-none"
+                  style={{ border: 'none', overflow: 'hidden', background: 'transparent' }}
+                  scrolling="no"
+                  title="Ampulheta Loader"
+                />
+              </div>
+            </motion.div>
+          ) : (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/85 z-55 flex flex-col justify-center items-center p-4 backdrop-blur-xs font-mono"
+            >
+              <div className="bg-neutral-900 border-2 border-indigo-500 p-6 rounded-lg max-w-sm w-full text-left relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-1 text-[8px] bg-indigo-500 text-white uppercase font-bold">56kbps SECURE</div>
+                
+                <div className="flex items-center gap-2 text-indigo-400 font-bold text-xs uppercase mb-3">
+                  <Camera size={14} className="animate-spin text-pink-500" />
+                  Scrapzone-Secure Photo Loader
+                </div>
+
+                <span className="text-[11px] text-green-400 block h-10 italic leading-snug">
+                  {loadingText}
+                </span>
+
+                {/* Classic Loading Bar */}
+                <div className="w-full bg-black h-4 border border-indigo-800 overflow-hidden relative mt-2 rounded">
+                  <div 
+                    className="h-full bg-indigo-600 transition-all duration-150 relative bg-[linear-gradient(45deg,rgba(255,255,255,0.15)_25%,transparent_25%,transparent_50%,rgba(255,255,255,0.15)_50%,rgba(255,255,255,0.15)_75%,transparent_75%,transparent)] bg-[size:1rem_1rem]" 
+                    style={{ width: `${loadingProgress}%` }}
+                  />
+                </div>
+
+                <div className="flex justify-between items-center text-[9px] text-neutral-400 mt-2 font-mono">
+                  <span>COM PORT 3 OK</span>
+                  <span>{loadingProgress}% RENDERIZADO</span>
+                </div>
+              </div>
+            </motion.div>
+          )
+        )}
+      </AnimatePresence>
+
+      {/* EXPORTANDO FOTO overlay for minimal-oldweb */}
+      <AnimatePresence>
+        {isExporting && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/85 z-55 flex flex-col justify-center items-center p-4 backdrop-blur-xs font-mono"
+            className="fixed inset-0 bg-black/40 z-55 flex items-center justify-center p-4 overflow-hidden select-none"
           >
-            <div className="bg-neutral-900 border-2 border-indigo-500 p-6 rounded-lg max-w-sm w-full text-left relative overflow-hidden">
-              <div className="absolute top-0 right-0 p-1 text-[8px] bg-indigo-500 text-white uppercase font-bold">56kbps SECURE</div>
+            <div className="relative w-full max-w-[500px] aspect-[685.43/406.02] drop-shadow-2xl">
+              {/* Processed SVG */}
+              <div 
+                className="w-full h-full"
+                dangerouslySetInnerHTML={{ __html: getProcessedSvg() }}
+              />
               
-              <div className="flex items-center gap-2 text-indigo-400 font-bold text-xs uppercase mb-3">
-                <Camera size={14} className="animate-spin text-pink-500" />
-                Scrapzone-Secure Photo Loader
-              </div>
+              {/* Clickable transparent buttons overlaid precisely on the SVG coordinates */}
+              {/* CANCEL button */}
+              <button
+                type="button"
+                onClick={handleCancelExport}
+                className="absolute cursor-pointer border-0 bg-transparent opacity-0 active:opacity-10 active:bg-black/10"
+                style={{
+                  left: '81.36%',
+                  top: '83.59%',
+                  width: '15.60%',
+                  height: '8.49%',
+                }}
+                title="Cancelar"
+              />
 
-              <span className="text-[11px] text-green-400 block h-10 italic leading-snug">
-                {loadingText}
-              </span>
-
-              {/* Classic Loading Bar */}
-              <div className="w-full bg-black h-4 border border-indigo-800 overflow-hidden relative mt-2 rounded">
-                <div 
-                  className="h-full bg-indigo-600 transition-all duration-150 relative bg-[linear-gradient(45deg,rgba(255,255,255,0.15)_25%,transparent_25%,transparent_50%,rgba(255,255,255,0.15)_50%,rgba(255,255,255,0.15)_75%,transparent_75%,transparent)] bg-[size:1rem_1rem]" 
-                  style={{ width: `${loadingProgress}%` }}
-                />
-              </div>
-
-              <div className="flex justify-between items-center text-[9px] text-neutral-400 mt-2 font-mono">
-                <span>COM PORT 3 OK</span>
-                <span>{loadingProgress}% RENDERIZADO</span>
-              </div>
+              {/* Close (X) button on top right */}
+              <button
+                type="button"
+                onClick={handleCancelExport}
+                className="absolute cursor-pointer border-0 bg-transparent opacity-0"
+                style={{
+                  left: '92.45%',
+                  top: '13.38%',
+                  width: '7.13%',
+                  height: '9.68%',
+                }}
+                title="Fechar"
+              />
             </div>
           </motion.div>
         )}
@@ -1770,24 +1976,34 @@ export default function PhotoAlbums({
                     <div className="flex items-center gap-4 text-white font-sans text-xs">
                       {/* Amei button (Hot Pink Heart) */}
                       <button
-                        onClick={handleLikePhoto}
-                        className="flex items-center gap-1.5 hover:text-pink-300 transition-colors cursor-pointer font-bold bg-[#8b8989]/30 hover:bg-[#8b8989]/50 p-1 px-2.5 rounded-full border border-white/5"
+                        onClick={handleLovePhoto}
+                        className={`flex items-center gap-1.5 transition-colors cursor-pointer font-bold p-1 px-2.5 rounded-full border border-white/5 ${
+                          activePhoto.lovedByMe 
+                            ? 'bg-pink-600/50 text-pink-300 border-pink-400/30' 
+                            : 'bg-[#8b8989]/30 hover:bg-[#8b8989]/50 hover:text-pink-300'
+                        }`}
                         id="photo-action-like"
                         title="Amei!"
                       >
                         <span className="text-sm">💖</span>
-                        <span className="font-mono text-xs">{activePhoto.likes}</span>
+                        <span className="font-mono text-xs">
+                          {activePhoto.loves !== undefined ? activePhoto.loves : Math.max(0, activePhoto.likes - 2)}
+                        </span>
                       </button>
 
                       {/* Curtir button (Thumbs up) */}
                       <button
                         onClick={handleLikePhoto}
-                        className="flex items-center gap-1.5 hover:text-cyan-300 transition-colors cursor-pointer font-bold bg-[#8b8989]/30 hover:bg-[#8b8989]/50 p-1 px-2.5 rounded-full border border-white/5"
+                        className={`flex items-center gap-1.5 transition-colors cursor-pointer font-bold p-1 px-2.5 rounded-full border border-white/5 ${
+                          activePhoto.likedByMe 
+                            ? 'bg-cyan-600/50 text-cyan-300 border-cyan-400/30' 
+                            : 'bg-[#8b8989]/30 hover:bg-[#8b8989]/50 hover:text-cyan-300'
+                        }`}
                         id="photo-action-thumbs"
                         title="Curtir!"
                       >
                         <span className="text-sm">👍</span>
-                        <span className="font-mono text-xs">{activePhoto.likes + 2}</span>
+                        <span className="font-mono text-xs">{activePhoto.likes}</span>
                       </button>
 
                       {/* Comentários button (Balloon) */}
