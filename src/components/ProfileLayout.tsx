@@ -11,6 +11,7 @@ import GlossyRetroButton from './GlossyRetroButton';
 import { ThemeSelector } from './ThemeSelector';
 import { RainOverlay } from './RainOverlay';
 import { motion, AnimatePresence } from 'motion/react';
+import { MusicPlayer } from './music/MusicPlayer';
 
 const getFontStyleClass = (style?: string) => {
   switch (style) {
@@ -506,7 +507,7 @@ export default function ProfileLayout({
         <div className={`border rounded p-3 text-center transition-all ${themeStyles.cardBg} ${themeStyles.glow} ${themeStyles.borderClass}`}>
           <div className={`relative group mx-auto w-full aspect-square overflow-hidden rounded-lg flex items-center justify-center shadow-xs ${
             profile.theme === 'cyberdeck' 
-              ? 'cyber-neon-border-container p-[4px]' 
+              ? 'cyber-neon-border-container p-[2px]' 
               : 'border-2 border-neutral-300 bg-neutral-100'
           }`}>
             {profile.avatar && profile.avatar !== '👤' && profile.avatar.trim() !== '' ? (
@@ -1194,6 +1195,7 @@ export default function ProfileLayout({
                 onNavigateToTab('photos');
               }}
               className={`relative border rounded shadow-xs text-left cursor-pointer transition-all overflow-hidden flex flex-col ${themeStyles.cardBg} ${themeStyles.borderClass} ${themeStyles.glow} ${themeStyles.font}`}
+              style={(profile.theme === 'default' || !profile.theme) ? { borderColor: '#ededed' } : undefined}
             >
               {/* Header: Foto do Momento */}
               <div className={`px-4 py-3 flex items-center justify-between border-b ${themeStyles.accent} select-none`}>
@@ -1212,7 +1214,7 @@ export default function ProfileLayout({
                 <div 
                   className={`w-full flex justify-center p-3 rounded border relative ${
                     profile.theme === 'cyberdeck' 
-                      ? 'bg-[#0e101f] border-[#06b6d4]/30' 
+                      ? 'bg-[#060b04] border-[#1e2a14]/60' 
                       : profile.theme === 'gotico-retro'
                         ? 'bg-[#150307]/50 border-[#b08d57]/30'
                         : profile.theme === 'minimal-oldweb'
@@ -1638,6 +1640,16 @@ export default function ProfileLayout({
           </div>
         </div>
 
+        {/* 🎵 ScrapZone Music Player Widget */}
+        <div className="mb-4">
+          <MusicPlayer
+            profile={profile}
+            currentUserProfile={profiles?.[loggedInUserId || 'me'] || null}
+            onSaveProfile={onSaveProfile}
+            isOwner={isOwnProfile}
+          />
+        </div>
+
         {/* ✍️ No que você está pensando, chapa? (Nostalgic Status Input) */}
         <div className={`border rounded p-4 transition-all ${themeStyles.cardBg} ${themeStyles.glow} ${themeStyles.borderClass} text-left`}>
           <h4 className="text-xs font-bold font-sans uppercase text-[#1d4ed8] tracking-wider mb-2 select-none flex items-center gap-1.5 ">
@@ -1820,7 +1832,9 @@ export default function ProfileLayout({
                   <img
                     src={friend.avatar}
                     alt={friend.name}
-                    className="w-full h-full object-cover"
+                    className={`w-full h-full object-cover ${
+                      profile.theme === 'cyberdeck' ? 'cyberdeck-friend-img' : ''
+                    }`}
                     referrerPolicy="no-referrer"
                   />
                 </div>
@@ -1845,7 +1859,9 @@ export default function ProfileLayout({
               className={
                 profile.theme === 'gotico-retro'
                   ? "p-1 px-1.5 bg-transparent border-none hover:scale-110 active:scale-95 transition-all shadow-none relative flex items-center justify-center cursor-pointer"
-                  : "p-1 px-1.5 bg-white border border-neutral-300 rounded hover:bg-neutral-50 hover:scale-105 active:scale-95 transition-all shadow-md relative flex items-center justify-center cursor-pointer"
+                  : profile.theme === 'cyberdeck'
+                    ? "p-1 px-1.5 bg-[#070b07] border border-[#638163] rounded hover:bg-[#121b0e] hover:scale-105 active:scale-95 transition-all shadow-md relative flex items-center justify-center cursor-pointer text-[#39ff14]"
+                    : "p-1 px-1.5 bg-white border border-neutral-300 rounded hover:bg-neutral-50 hover:scale-105 active:scale-95 transition-all shadow-md relative flex items-center justify-center cursor-pointer"
               }
               title="Solicitações de Amizade"
             >
@@ -1865,15 +1881,25 @@ export default function ProfileLayout({
                       className={
                         profile.theme === 'gotico-retro' 
                           ? "text-[#ffd700] drop-shadow-[0_0_8px_rgba(255,215,0,0.95)]" 
-                          : "text-[#ff003a]"
+                          : profile.theme === 'cyberdeck'
+                            ? "text-[#39ff14] drop-shadow-[0_0_8px_rgba(57,255,20,0.95)]"
+                            : "text-[#ff003a]"
                       } 
-                      fill={profile.theme === 'gotico-retro' ? "#ffd700" : "#ff003a"} 
+                      fill={
+                        profile.theme === 'gotico-retro' 
+                          ? "#ffd700" 
+                          : profile.theme === 'cyberdeck'
+                            ? "#39ff14"
+                            : "#ff003a"
+                      } 
                     />
                   </motion.div>
                   <span className={
                     profile.theme === 'gotico-retro'
                       ? "absolute -top-1.5 -right-1.5 bg-[#ffd700] text-black text-[8px] font-extrabold rounded-full w-4 h-4 flex items-center justify-center shadow-[0_0_6px_rgba(255,215,0,0.8)] border border-black/30"
-                      : "absolute -top-1.5 -right-1.5 bg-[#ff003a] text-white text-[8px] font-bold rounded-full w-4 h-4 flex items-center justify-center shadow-sm"
+                      : profile.theme === 'cyberdeck'
+                        ? "absolute -top-1.5 -right-1.5 bg-[#39ff14] text-black text-[8px] font-mono font-bold rounded-full w-4 h-4 flex items-center justify-center shadow-[0_0_6px_rgba(57,255,20,0.8)] border border-[#070b07]"
+                        : "absolute -top-1.5 -right-1.5 bg-[#ff003a] text-white text-[8px] font-bold rounded-full w-4 h-4 flex items-center justify-center shadow-sm"
                   }>
                     {pendingReceivedRequests.length}
                   </span>
@@ -1884,7 +1910,9 @@ export default function ProfileLayout({
                   className={
                     profile.theme === 'gotico-retro'
                       ? "text-[#cccccc] fill-[#4a4a4a] drop-shadow-[0_0_4px_rgba(204,204,204,0.45)] opacity-85 hover:opacity-100 transition-opacity"
-                      : "text-neutral-400"
+                      : profile.theme === 'cyberdeck'
+                        ? "text-[#47ff8c] opacity-80"
+                        : "text-neutral-400"
                   } 
                 />
               )}
@@ -2071,7 +2099,9 @@ export default function ProfileLayout({
                     <img
                       src={item.avatar}
                       alt={item.name}
-                      className="w-full h-full object-cover"
+                      className={`w-full h-full object-cover ${
+                        profile.theme === 'cyberdeck' ? 'cyberdeck-friend-img' : ''
+                      }`}
                       referrerPolicy="no-referrer"
                     />
                   </div>

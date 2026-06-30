@@ -114,10 +114,10 @@ export default function SocialSidebar({
           <button
             id="sidebar-nav-profile"
             onClick={() => setCurrentTab('profile')}
-            style={theme === 'cyberdeck' ? { backgroundColor: '#0e101f' } : undefined}
+            style={theme === 'cyberdeck' ? { backgroundColor: '#0c100a' } : undefined}
             className={`px-3 py-2.5 transition-colors border-b border-dashed border-neutral-200/50 flex items-center gap-2 cursor-pointer text-left ${
               currentTab === 'profile' ? 'bg-neutral-100/30 font-bold text-[#d946ef]' : 'hover:bg-neutral-100/15'
-            }`}
+            } ${theme === 'cyberdeck' ? `cyberdeck-btn ${currentTab === 'profile' ? 'active' : ''}` : ''}`}
           >
             <User size={13} className="text-[#1d4ed8]" />
             <span>Perfil</span>
@@ -127,10 +127,10 @@ export default function SocialSidebar({
           <button
             id="sidebar-nav-scrapbook"
             onClick={() => setCurrentTab('scrapbook')}
-            style={theme === 'cyberdeck' ? { backgroundColor: '#0e101f' } : undefined}
+            style={theme === 'cyberdeck' ? { backgroundColor: '#0c100a' } : undefined}
             className={`px-3 py-2.5 transition-colors border-b border-dashed border-neutral-200/50 flex items-center justify-between cursor-pointer text-left ${
               currentTab === 'scrapbook' ? 'bg-neutral-100/30 font-bold text-[#d946ef]' : 'hover:bg-neutral-100/15'
-            }`}
+            } ${theme === 'cyberdeck' ? `cyberdeck-btn ${currentTab === 'scrapbook' ? 'active' : ''}` : ''}`}
           >
             <span className="flex items-center gap-2">
               <MessageSquare size={13} className="text-[#1d4ed8]" />
@@ -143,10 +143,10 @@ export default function SocialSidebar({
           <button
             id="sidebar-nav-testimonials"
             onClick={() => setCurrentTab('testimonials')}
-            style={theme === 'cyberdeck' ? { backgroundColor: '#0e101f' } : undefined}
+            style={theme === 'cyberdeck' ? { backgroundColor: '#0c100a' } : undefined}
             className={`px-3 py-2.5 transition-colors border-b border-dashed border-neutral-200/50 flex items-center justify-between cursor-pointer text-left ${
               currentTab === 'testimonials' ? 'bg-neutral-100/30 font-bold text-[#d946ef]' : 'hover:bg-neutral-100/15'
-            }`}
+            } ${theme === 'cyberdeck' ? `cyberdeck-btn ${currentTab === 'testimonials' ? 'active' : ''}` : ''}`}
           >
             <span className="flex items-center gap-2">
               <Star size={13} className="text-yellow-600" />
@@ -177,10 +177,10 @@ export default function SocialSidebar({
               } catch (e) {}
               setCurrentTab('photos');
             }}
-            style={theme === 'cyberdeck' ? { backgroundColor: '#0e101f' } : undefined}
+            style={theme === 'cyberdeck' ? { backgroundColor: '#0c100a' } : undefined}
             className={`px-3 py-2.5 transition-colors border-b border-dashed border-neutral-200/50 flex items-center justify-between cursor-pointer text-left ${
               currentTab === 'photos' ? 'bg-neutral-100/30 font-bold text-[#d946ef]' : 'hover:bg-neutral-100/15'
-            }`}
+            } ${theme === 'cyberdeck' ? `cyberdeck-btn ${currentTab === 'photos' ? 'active' : ''}` : ''}`}
           >
             <span className="flex items-center gap-2">
               <span className="text-pink-600 font-sans">📸</span>
@@ -193,10 +193,10 @@ export default function SocialSidebar({
           <button
             id="sidebar-nav-communities"
             onClick={() => setCurrentTab('communities')}
-            style={theme === 'cyberdeck' ? { backgroundColor: '#0e101f' } : undefined}
+            style={theme === 'cyberdeck' ? { backgroundColor: '#0c100a' } : undefined}
             className={`px-3 py-2.5 transition-colors border-b border-dashed border-neutral-200/50 flex items-center gap-2 cursor-pointer text-left ${
               currentTab === 'communities' ? 'bg-neutral-100/30 font-bold text-[#d946ef]' : 'hover:bg-neutral-100/15'
-            }`}
+            } ${theme === 'cyberdeck' ? `cyberdeck-btn ${currentTab === 'communities' ? 'active' : ''}` : ''}`}
           >
             <Users size={13} className="text-pink-600" />
             <span>Comunidades</span>
@@ -206,10 +206,10 @@ export default function SocialSidebar({
           <button
             id="sidebar-nav-scrapbook-builder"
             onClick={() => setCurrentTab('scrapbook-builder')}
-            style={theme === 'cyberdeck' ? { backgroundColor: '#0e101f' } : undefined}
+            style={theme === 'cyberdeck' ? { backgroundColor: '#0c100a' } : undefined}
             className={`px-3 py-2.5 transition-colors border-b border-dashed border-neutral-200/50 flex items-center justify-between cursor-pointer text-left ${
               currentTab === 'scrapbook-builder' ? 'bg-neutral-100/30 font-bold text-[#d946ef]' : 'hover:bg-neutral-100/15'
-            }`}
+            } ${theme === 'cyberdeck' ? `cyberdeck-btn ${currentTab === 'scrapbook-builder' ? 'active' : ''}` : ''}`}
           >
             <span className="flex items-center gap-2">
               <Sparkles size={13} className="text-fuchsia-500 animate-pulse" />
@@ -221,8 +221,10 @@ export default function SocialSidebar({
           {/* 5. AMIGOS (MODAL TOGGLE) */}
           <div
             id="sidebar-nav-friends-container"
-            style={theme === 'cyberdeck' ? { backgroundColor: '#0e101f' } : undefined}
-            className="px-3 py-2.5 border-b border-dashed border-neutral-200/50 flex items-center justify-between hover:bg-neutral-100/15"
+            style={theme === 'cyberdeck' ? { backgroundColor: '#0c100a' } : undefined}
+            className={`px-3 py-2.5 border-b border-dashed border-neutral-200/50 flex items-center justify-between hover:bg-neutral-100/15 ${
+              theme === 'cyberdeck' ? `cyberdeck-btn ${activeModal === 'friends' ? 'active' : ''}` : ''
+            }`}
           >
             <div 
               onClick={() => setActiveModal(activeModal === 'friends' ? 'none' : 'friends')}
@@ -255,8 +257,10 @@ export default function SocialSidebar({
           <button
             id="sidebar-nav-visitors-popup"
             onClick={() => setActiveModal(activeModal === 'visitors' ? 'none' : 'visitors')}
-            style={theme === 'cyberdeck' ? { backgroundColor: '#0e101f' } : undefined}
-            className={`px-3 py-2.5 transition-colors border-b border-dashed border-neutral-200/50 flex items-center justify-between cursor-pointer text-left hover:bg-neutral-100/15`}
+            style={theme === 'cyberdeck' ? { backgroundColor: '#0c100a' } : undefined}
+            className={`px-3 py-2.5 transition-colors border-b border-dashed border-neutral-200/50 flex items-center justify-between cursor-pointer text-left hover:bg-neutral-100/15 ${
+              theme === 'cyberdeck' ? `cyberdeck-btn ${activeModal === 'visitors' ? 'active' : ''}` : ''
+            }`}
           >
             <span className="flex items-center gap-2">
               <Eye size={13} className="text-[#d946ef]" />
@@ -269,8 +273,10 @@ export default function SocialSidebar({
           <button
             id="sidebar-nav-favorites-popup"
             onClick={() => setActiveModal(activeModal === 'favorites' ? 'none' : 'favorites')}
-            style={theme === 'cyberdeck' ? { backgroundColor: '#0e101f' } : undefined}
-            className={`px-3 py-2.5 transition-colors flex items-center justify-between cursor-pointer text-left hover:bg-neutral-100/15`}
+            style={theme === 'cyberdeck' ? { backgroundColor: '#0c100a' } : undefined}
+            className={`px-3 py-2.5 transition-colors flex items-center justify-between cursor-pointer text-left hover:bg-neutral-100/15 ${
+              theme === 'cyberdeck' ? `cyberdeck-btn ${activeModal === 'favorites' ? 'active' : ''}` : ''
+            }`}
           >
             <span className="flex items-center gap-2">
               <Award size={13} className="text-amber-500" />

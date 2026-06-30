@@ -154,7 +154,7 @@ export default function OrkutHeader({
           >
             <button
               type="submit"
-              className={`${themeStyles.topBarBg} border-neutral-400 border-r-0 h-8 w-8 flex items-center justify-center ${themeStyles.topBarText} cursor-pointer`}
+              className={`${themeStyles.searchBarBg || themeStyles.topBarBg} border-neutral-400 border-r-0 h-8 w-8 flex items-center justify-center ${themeStyles.topBarText} cursor-pointer`}
               title="Pesquisar"
             >
               <Search size={16} className="stroke-[3]" />
@@ -266,9 +266,9 @@ export default function OrkutHeader({
               
               if (themeId === 'cyberdeck') {
                 if (isActive) {
-                  buttonClassName = "bg-[#0e101f] text-[#00ffcc] border border-[#d946ef] shadow-[0_0_8px_rgba(217,70,239,0.6)]";
+                  buttonClassName = "bg-[#0c100a] text-[#39ff14] border border-[#d946ef] shadow-[0_0_8px_rgba(217,70,239,0.6)]";
                 } else {
-                  buttonClassName = "bg-[#05070f] text-[#94a3b8] border border-[#0d2e3a]/80 hover:bg-[#0e101f] hover:text-[#00ffcc] hover:border-[#d946ef] hover:shadow-[0_0_8px_rgba(217,70,239,0.6)]";
+                  buttonClassName = "bg-[#060b04] text-[#94a3b8] border border-[#1e2a14] hover:bg-[#0c100a] hover:text-[#39ff14] hover:border-[#d946ef] hover:shadow-[0_0_8px_rgba(217,70,239,0.6)]";
                 }
               } else if (themeStyles.bg.includes('bg-checkerboard')) {
                 if (item.id === 'communities' && currentTab === 'communities') {
@@ -313,7 +313,7 @@ export default function OrkutHeader({
                 }}
                 className={`px-4 py-2 text-[11px] font-black uppercase tracking-wide border-2 rounded-lg shadow-sm transition-all cursor-pointer shrink-0 ml-1.5 hover:scale-102 font-sans ${
                   themeId === 'cyberdeck'
-                    ? 'border-[#d946ef]/60 bg-[#05070f] text-[#00ffcc] hover:bg-[#0e101f] hover:shadow-[0_0_8px_rgba(217,70,239,0.6)]'
+                    ? 'border-[#d946ef]/60 bg-[#060b04] text-[#39ff14] hover:bg-[#0c100a] hover:shadow-[0_0_8px_rgba(217,70,239,0.6)]'
                     : themeStyles.bg.includes('bg-checkerboard')
                     ? 'border-pink-500 bg-neutral-800 text-pink-300 hover:shadow-[0_0_10px_#ec4899]'
                     : 'border-pink-600 bg-white hover:bg-pink-50 text-pink-600'

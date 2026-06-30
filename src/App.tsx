@@ -2071,7 +2071,7 @@ export default function App() {
       {/* 2. Main content container */}
       <main 
         className="flex-1 max-w-6xl w-full mx-auto px-4 py-6 font-sans"
-        style={currentViewedProfile.theme === 'cyberdeck' ? { backgroundColor: '#09090c' } : undefined}
+        style={currentViewedProfile.theme === 'cyberdeck' ? { backgroundColor: 'transparent' } : undefined}
       >
         {/* If viewing a friend's profile, show a nice retro ribbon allowing return to my own profile */}
         {!isOwnProfile && (

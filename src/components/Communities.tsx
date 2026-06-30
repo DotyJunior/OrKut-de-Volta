@@ -2196,7 +2196,7 @@ export default function Communities({
             <div className={`border rounded p-3 text-center transition-all ${themeStyles.cardBg} ${themeStyles.glow} ${themeStyles.borderClass}`}>
               <div className={`relative group mx-auto w-full aspect-square overflow-hidden rounded-lg flex items-center justify-center shadow-xs ${
                 myProfile.theme === 'cyberdeck' 
-                  ? 'cyber-neon-border-container p-[4px]' 
+                  ? 'cyber-neon-border-container p-[2px]' 
                   : 'border-2 border-neutral-300 bg-neutral-100'
               }`}>
                 {myProfile.avatar && myProfile.avatar !== '👤' && myProfile.avatar.trim() !== '' ? (

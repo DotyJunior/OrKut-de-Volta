@@ -193,5 +193,64 @@ body {
   z-index: 0;
 }
 
+/* Cyberdeck Circuit Board Seamless Texture */
+.bg-cyberdeck-circuit {
+  background-color: #1c2214 !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300' viewBox='0 0 300 300'%3E%3Cg fill='none' stroke='%23324626' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' stroke-opacity='0.7'%3E%3Cpath d='M 0,30 L 75,30 L 105,60 L 195,60 L 225,30 L 300,30' /%3E%3Cpath d='M 30,0 L 30,60 L 60,90 L 60,165 L 90,195 L 180,195 L 210,225 L 210,300' /%3E%3Cpath d='M 0,240 L 60,240 L 90,270 L 195,270 L 225,240 L 300,240' /%3E%3Cpath d='M 270,0 L 270,75 L 240,105 L 240,165 L 270,195 L 270,300' /%3E%3Cpath d='M 165,60 L 187.5,82.5 L 187.5,142.5 L 210,165 L 232.5,165' /%3E%3Cpath d='M 75,120 L 142.5,120 L 165,142.5 L 165,180' /%3E%3Cpath d='M 0,150 L 45,150 L 67.5,172.5' /%3E%3Cpath d='M 225,150 L 277.5,150' /%3E%3C/g%3E%3Cg fill='%23121b0e' stroke='%233a5229' stroke-width='1.2' stroke-opacity='0.85'%3E%3Ccircle cx='75' cy='30' r='4' /%3E%3Ccircle cx='195' cy='60' r='4' /%3E%3Ccircle cx='225' cy='30' r='4' /%3E%3Ccircle cx='60' cy='90' r='4' /%3E%3Ccircle cx='90' cy='195' r='4' /%3E%3Ccircle cx='180' cy='195' r='4' /%3E%3Ccircle cx='210' cy='225' r='4' /%3E%3Ccircle cx='240' cy='105' r='4' /%3E%3Ccircle cx='270' cy='195' r='4' /%3E%3Ccircle cx='165' cy='60' r='4' /%3E%3Ccircle cx='187.5' cy='142.5' r='4' /%3E%3Ccircle cx='142.5' cy='120' r='4' /%3E%3Ccircle cx='165' cy='142.5' r='4' /%3E%3C/g%3E%3Cg fill='%2339ff14' fill-opacity='0.6' stroke='%2339ff14' stroke-opacity='0.9' stroke-width='0.5'%3E%3Ccircle cx='75' cy='30' r='1.5' /%3E%3Ccircle cx='180' cy='195' r='1.5' /%3E%3Ccircle cx='240' cy='105' r='1.5' /%3E%3Ccircle cx='142.5' cy='120' r='1.5' /%3E%3C/g%3E%3C/svg%3E");
+  background-size: 300px 300px;
+}
+
+/* Cyberdeck Social Menu Buttons & Hover Effects */
+.cyberdeck-btn {
+  background-color: #0c100a !important;
+  color: #4c6643 !important; /* Dim green/slate text */
+  border-bottom: 1px solid #1a2410 !important;
+  border-left: 4px solid transparent !important;
+  font-family: monospace !important;
+  text-transform: lowercase !important; /* matches "recados", "perfil" lowercase aesthetic from image */
+  font-weight: 500 !important;
+  letter-spacing: 0.05em;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.cyberdeck-btn:hover,
+.cyberdeck-btn.active {
+  background-color: #1e2a14 !important; /* Greenish dark PCB highlight */
+  color: #39ff14 !important; /* Bright fluorescent green text */
+  border-left: 4px solid #39ff14 !important; /* Bright solid green left highlight trace */
+  box-shadow: inset 0 0 8px rgba(57, 255, 20, 0.15);
+}
+
+.cyberdeck-btn svg {
+  color: #4c6643 !important;
+  transition: all 0.2s ease-in-out;
+}
+
+.cyberdeck-btn:hover svg,
+.cyberdeck-btn.active svg {
+  color: #39ff14 !important;
+}
+
+/* Adjust nested badges inside cyberdeck buttons */
+.cyberdeck-btn span.font-mono,
+.cyberdeck-btn span.font-bold {
+  background-color: #1c2a18 !important;
+  color: #39ff14 !important;
+  border: 1px solid #1a2410 !important;
+}
+
+/* Cyberdeck green monochrome monitor effect for friends pictures */
+.cyberdeck-friend-img {
+  filter: grayscale(100%) brightness(0.7) sepia(100%) hue-rotate(60deg) saturate(3) !important;
+  transition: filter 0.3s ease !important;
+}
+
+.group:hover .cyberdeck-friend-img,
+.cyberdeck-friend-img:hover {
+  filter: none !important;
+}
+
+
+
 
 

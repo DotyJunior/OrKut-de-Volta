@@ -32,6 +32,25 @@ export interface Profile {
   emailCodeAttempts?: number;
   emailCodeResendsCount?: number;
   emailCodeLastSentAt?: number;
+  listeningNow?: {
+    title: string;
+    artist: string;
+    source: string;
+    url: string;
+    coverUrl?: string;
+    isPlaying: boolean;
+    timestamp: number;
+  } | null;
+  lastPlayedMusic?: {
+    title: string;
+    artist: string;
+    source: string;
+    url: string;
+    timestamp: number;
+    likesList?: string[];
+  } | null;
+  premiumStatus?: "free" | "pro";
+  uploadedMusicSize?: number;
 }
 
 export interface Scrap {

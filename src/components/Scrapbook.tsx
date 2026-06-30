@@ -3,6 +3,7 @@ import { ShieldAlert, ShieldCheck, Lock, Unlock, Key, RefreshCw, Send, HelpCircl
 import { encryptAES, decryptAES, computeSHA256 } from '../utils/crypto';
 import { Scrap, Profile } from '../types';
 import SocialActions from './SocialActions';
+import { getThemeStyles } from '../lib/theme';
 
 interface ScrapbookProps {
   scraps: Scrap[];
@@ -25,6 +26,9 @@ export default function Scrapbook({
   onShareToFeed,
   onGoToBuilder
 }: ScrapbookProps) {
+  const isCyberdeck = activeProfile.theme === 'cyberdeck';
+  const themeStyles = getThemeStyles(activeProfile.theme || 'default');
+
   const [scrapText, setScrapText] = useState('');
   const [useEncryption, setUseEncryption] = useState(true);
   const [encryptionPhrase, setEncryptionPhrase] = useState('orkut-default-sec-key-1337');
@@ -140,14 +144,29 @@ export default function Scrapbook({
   };
 
   return (
-    <div id="scrapbook-view" className="bg-white border border-neutral-300 rounded p-4 shadow-sm text-left">
+    <div 
+      id="scrapbook-view" 
+      className={`rounded p-4 shadow-sm text-left transition-all ${
+        isCyberdeck 
+          ? 'bg-[#2e342d] border-2 border-[#2e3e28] shadow-[0_0_12px_rgba(58,90,30,0.35)]' 
+          : 'bg-white border border-neutral-300'
+      }`}
+    >
       {/* Title */}
-      <div className="flex justify-between items-center border-b pb-2 mb-4">
+      <div className={`flex justify-between items-center border-b pb-2 mb-4 ${
+        isCyberdeck ? 'border-[#1e2a14]' : 'border-neutral-200'
+      }`}>
         <div>
-          <h2 className="text-lg font-bold font-sans text-neutral-800">
-            Página de Recados (Scrapbook) de <strong>{activeProfile.name}</strong>
+          <h2 className={`text-lg font-bold px-3 py-1.5 rounded transition-all ${
+            isCyberdeck 
+              ? 'bg-[#18221d] text-[#79ceb4] border border-[#1e2a14] font-mono' 
+              : 'text-neutral-800 font-sans'
+          }`}>
+            Página de Recados (Scrapbook) de <strong className={isCyberdeck ? 'text-[#39ff14]' : ''}>{activeProfile.name}</strong>
           </h2>
-          <p className="text-xs text-neutral-500 font-sans">
+          <p className={`text-xs mt-1 transition-all ${
+            isCyberdeck ? 'text-[#a7b1ae] font-mono' : 'text-neutral-500 font-sans'
+          }`}>
             {isOwnProfile 
               ? "Esta é a sua página. Seus amigos podem enviar recados públicos ou criptografados."
               : `Escreva um scrapbook para ${activeProfile.name}. Ative criptografia para proteger contra espionagem!`
@@ -156,7 +175,11 @@ export default function Scrapbook({
         </div>
         <button 
           onClick={() => setCryptoExplainOpen(!cryptoExplainOpen)}
-          className="flex items-center gap-1 text-[11px] font-bold text-pink-600 hover:underline"
+          className={`flex items-center gap-1 text-[11px] font-bold hover:underline transition-colors ${
+            isCyberdeck 
+              ? 'text-[#47ff8c] font-mono hover:text-[#39ff14]' 
+              : 'text-pink-600'
+          }`}
         >
           <HelpCircle size={14} />
           {cryptoExplainOpen ? "Ocultar Info Sec" : "Como funciona?"}
@@ -164,15 +187,19 @@ export default function Scrapbook({
       </div>
 
       {cryptoExplainOpen && (
-        <div className="bg-blue-50 border border-blue-200 rounded p-3 mb-4 text-xs text-blue-800 font-sans leading-relaxed">
-          <h4 className="font-bold mb-1 flex items-center gap-1">🛡️ Infraestrutura Crypto do Scrapzone Secure:</h4>
+        <div className={`border rounded p-3 mb-4 text-xs leading-relaxed transition-all ${
+          isCyberdeck 
+            ? 'bg-[#060b04] border-[#1e2a14] text-[#a7b1ae] font-mono' 
+            : 'bg-blue-50 border border-blue-200 text-blue-800 font-sans'
+        }`}>
+          <h4 className={`font-bold mb-1 flex items-center gap-1 ${isCyberdeck ? 'text-[#47ff8c]' : ''}`}>🛡️ Infraestrutura Crypto do Scrapzone Secure:</h4>
           <p className="mb-2">
             No antigo Orkut de 2004, mensagens eram salvas em texto puro em servidores frágeis de SQL. Aqui, se você selecionar <strong>Criptografia Ativa</strong>, a mensagem é imediatamente encriptada no seu próprio navegador usando <strong>Symmetric AES-256-GCM</strong>.
           </p>
           <ul className="list-disc pl-4 space-y-1">
-            <li><strong>Chave Secreta:</strong> Usada para embaralhar a string localmente.</li>
-            <li><strong>Assinatura Digital:</strong> Um hash SHA-256 garante que ninguém interceptou ou alterou o conteúdo na rede.</li>
-            <li><strong>Decodificação:</strong> Para ler, o destinatário precisa possuir ou inserir a mesma frase chave!</li>
+            <li><strong className={isCyberdeck ? 'text-[#79ceb4]' : ''}>Chave Secreta:</strong> Usada para emaranhar a string localmente.</li>
+            <li><strong className={isCyberdeck ? 'text-[#79ceb4]' : ''}>Assinatura Digital:</strong> Um hash SHA-256 garante que ninguém interceptou ou alterou o conteúdo na rede.</li>
+            <li><strong className={isCyberdeck ? 'text-[#79ceb4]' : ''}>Decodificação:</strong> Para ler, o destinatário precisa possuir ou inserir a mesma frase chave!</li>
           </ul>
         </div>
       )}
@@ -200,10 +227,28 @@ export default function Scrapbook({
 
       {/* Write form */}
       {!isOwnProfile && (
-        <form onSubmit={handleSubmit} className="bg-neutral-50 border border-neutral-200 rounded p-3 mb-6">
+        <form 
+          onSubmit={handleSubmit} 
+          className={`rounded p-3 mb-6 border transition-all ${
+            isCyberdeck 
+              ? 'bg-[#0c100a] border-[#1e2a14]' 
+              : 'bg-neutral-50 border border-neutral-200'
+          }`}
+        >
           <div className="flex justify-between items-center mb-2">
-            <label className="block text-xs font-bold text-neutral-600 uppercase">Escrever novo scrapbook:</label>
-            <span id="scrapbook-char-counter" className="text-[10px] font-mono text-neutral-500 bg-neutral-200/55 px-1.5 py-0.5 rounded">
+            <label className={`block text-xs font-bold uppercase ${
+              isCyberdeck ? 'text-[#79ceb4] font-mono' : 'text-neutral-600'
+            }`}>
+              Escrever novo scrapbook:
+            </label>
+            <span 
+              id="scrapbook-char-counter" 
+              className={`text-[10px] font-mono px-1.5 py-0.5 rounded transition-all ${
+                isCyberdeck 
+                  ? 'bg-[#18221d] text-[#47ff8c] border border-[#1e2a14]' 
+                  : 'text-neutral-500 bg-neutral-200/55'
+              }`}
+            >
               {scrapText.length} caracteres
             </span>
           </div>
@@ -220,7 +265,9 @@ export default function Scrapbook({
             className={`w-full px-3 py-2 text-xs border rounded focus:outline-none focus:ring-1 transition-all ${
               validationError 
                 ? 'border-red-500 ring-2 ring-red-500/15 text-red-900 bg-red-50/10 focus:ring-red-500' 
-                : 'border-neutral-300 focus:ring-blue-500 bg-white'
+                : isCyberdeck
+                  ? 'border-[#1e2a14] focus:ring-[#47ff8c] bg-[#060b04] text-[#4ade80] placeholder-[#4c6643] font-mono'
+                  : 'border-neutral-300 focus:ring-blue-500 bg-white'
             }`}
             disabled={isProcessing}
             required
@@ -241,36 +288,46 @@ export default function Scrapbook({
             </div>
           )}
 
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 mt-3 pt-3 border-t border-dashed border-neutral-200">
+          <div className={`flex flex-col md:flex-row justify-between items-start md:items-center gap-3 mt-3 pt-3 border-t border-dashed ${
+            isCyberdeck ? 'border-[#1e2a14]' : 'border-neutral-200'
+          }`}>
             {/* Secure Switch controls */}
             <div className="flex flex-wrap items-center gap-4">
-              <label className="flex items-center gap-1.5 cursor-pointer text-xs font-semibold select-none text-neutral-700">
+              <label className={`flex items-center gap-1.5 cursor-pointer text-xs font-semibold select-none ${
+                isCyberdeck ? 'text-[#a7b1ae] font-mono' : 'text-neutral-700'
+              }`}>
                 <input
                   id="toggle-crypto-scrap"
                   type="checkbox"
                   checked={useEncryption}
                   onChange={(e) => setUseEncryption(e.target.checked)}
-                  className="rounded border-neutral-300 text-[#1d4ed8]"
+                  className={`rounded border-neutral-300 ${
+                    isCyberdeck ? 'accent-[#47ff8c]' : 'text-[#1d4ed8]'
+                  }`}
                 />
                 <span className="flex items-center gap-1">
                   {useEncryption ? (
-                    <ShieldCheck size={14} className="text-green-600" />
+                    <ShieldCheck size={14} className={isCyberdeck ? "text-[#47ff8c]" : "text-green-600"} />
                   ) : (
-                    <ShieldAlert size={14} className="text-yellow-600" />
+                    <ShieldAlert size={14} className={isCyberdeck ? "text-yellow-500" : "text-yellow-600"} />
                   )}
                   Transmitir com Encriptação AES-GCM
                 </span>
               </label>
 
               {useEncryption && (
-                <div className="flex items-center gap-1.5 text-xs">
-                  <span className="text-[10px] text-neutral-500 font-bold uppercase">Passphrase:</span>
+                <div className={`flex items-center gap-1.5 text-xs ${isCyberdeck ? 'font-mono text-[#a7b1ae]' : ''}`}>
+                  <span className={`text-[10px] font-bold uppercase ${isCyberdeck ? 'text-[#79ceb4]' : 'text-neutral-500'}`}>Passphrase:</span>
                   <input
                     id="input-encryption-passphrase"
                     type="password"
                     value={encryptionPhrase}
                     onChange={(e) => setEncryptionPhrase(e.target.value)}
-                    className="px-2 py-0.5 border border-neutral-300 rounded text-[11px] font-mono bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 w-[150px]"
+                    className={`px-2 py-0.5 border rounded text-[11px] font-mono focus:outline-none focus:ring-1 w-[150px] transition-all ${
+                      isCyberdeck 
+                        ? 'bg-[#060b04] border-[#1e2a14] text-[#4ade80] focus:ring-[#47ff8c]' 
+                        : 'border-neutral-300 bg-white focus:ring-blue-500'
+                    }`}
                     placeholder="Chave secreta..."
                   />
                 </div>
@@ -281,7 +338,11 @@ export default function Scrapbook({
               id="btn-send-scrap"
               type="submit"
               disabled={isProcessing || !scrapText.trim() || !!validationError}
-              className="flex items-center gap-1.5 px-4 py-1.5 bg-[#dee7f4] hover:bg-[#c6d7ed] border border-[#adc3df] text-[#1d4ed8] font-bold text-xs rounded transition-all cursor-pointer shadow-sm disabled:opacity-50"
+              className={`flex items-center gap-1.5 px-4 py-1.5 font-bold text-xs rounded transition-all cursor-pointer shadow-sm disabled:opacity-50 ${
+                isCyberdeck 
+                  ? 'bg-[#1c2a18] hover:bg-[#1e2a14] border border-[#2e3e28] text-[#39ff14] font-mono' 
+                  : 'bg-[#dee7f4] hover:bg-[#c6d7ed] border border-[#adc3df] text-[#1d4ed8]'
+              }`}
             >
               {isProcessing ? (
                 <>
@@ -302,7 +363,11 @@ export default function Scrapbook({
       {/* Recados List */}
       <div className="space-y-4">
         {filteredScraps.length === 0 ? (
-          <div className="text-center py-12 text-sm text-neutral-500 border border-dashed rounded italic">
+          <div className={`text-center py-12 text-sm italic border rounded transition-all ${
+            isCyberdeck 
+              ? 'bg-[#060b04] border-2 border-[#1e2a14] text-[#a7b1ae] font-mono shadow-[inset_0_0_8px_rgba(58,90,30,0.15)]' 
+              : 'text-neutral-500 border-dashed border-neutral-300 bg-white'
+          }`}>
             Nenhum scrap registrado ainda. Que tal escrever o primeiro?
           </div>
         ) : (
@@ -311,28 +376,51 @@ export default function Scrapbook({
             const hasCiphertext = !!scrap.ciphertext;
 
             return (
-              <div key={scrap.id} className="border border-neutral-200 rounded overflow-hidden shadow-sm bg-white">
+              <div 
+                key={scrap.id} 
+                className={`border rounded overflow-hidden shadow-sm transition-all ${
+                  isCyberdeck 
+                    ? 'border-[#1e2a14] bg-[#0c100a]' 
+                    : 'border-neutral-200 bg-white'
+                }`}
+              >
                 {/* Header block */}
-                <div className="bg-[#dee7f4]/40 px-3 py-2 flex justify-between items-center border-b border-neutral-100 text-xs">
+                <div className={`px-3 py-2 flex justify-between items-center border-b text-xs ${
+                  isCyberdeck 
+                    ? 'bg-[#18221d]/60 border-[#1a2410] text-[#a7b1ae] font-mono' 
+                    : 'bg-[#dee7f4]/40 border-neutral-100'
+                }`}>
                   <div className="flex items-center gap-2">
                     <img
                       src={scrap.fromAvatar}
                       alt={scrap.fromName}
-                      className="w-6 h-6 rounded object-cover border border-neutral-300 flex-shrink-0"
+                      className={`w-6 h-6 rounded object-cover flex-shrink-0 ${
+                        isCyberdeck ? 'border border-[#1e2a14]' : 'border border-neutral-300'
+                      }`}
                       referrerPolicy="no-referrer"
                     />
-                    <span className="font-bold text-[#1d4ed8]">{scrap.fromName}</span>
+                    <span className={`font-bold ${
+                      isCyberdeck ? 'text-[#39ff14]' : 'text-[#1d4ed8]'
+                    }`}>{scrap.fromName}</span>
                     <span className="text-[10px] text-neutral-400 font-mono">({scrap.timestamp})</span>
                   </div>
 
                   <div className="flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-bold">
                     {scrap.isEncrypted ? (
-                      <span className="bg-green-100 text-green-800 px-1.5 py-0.5 rounded flex items-center gap-1">
+                      <span className={`px-1.5 py-0.5 rounded flex items-center gap-1 ${
+                        isCyberdeck 
+                          ? 'bg-[#1c2a18] text-[#47ff8c] border border-[#1e2a14]' 
+                          : 'bg-green-100 text-green-800'
+                      }`}>
                         <Lock size={10} />
                         Cifrado ({scrap.algorithm})
                       </span>
                     ) : (
-                      <span className="bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded flex items-center gap-1">
+                      <span className={`px-1.5 py-0.5 rounded flex items-center gap-1 ${
+                        isCyberdeck 
+                          ? 'bg-[#18221d] text-[#a7b1ae] border border-[#1e2a14]/60' 
+                          : 'bg-yellow-100 text-yellow-800'
+                      }`}>
                         <Unlock size={10} />
                         Texto Puro
                       </span>
@@ -343,25 +431,39 @@ export default function Scrapbook({
                 {/* Content body and interactive decrypter */}
                 <div className="p-3 text-xs leading-relaxed font-sans flex flex-col gap-2">
                   {scrap.isEncrypted && !isDecrypted ? (
-                    <div className="bg-neutral-50 border border-neutral-200 rounded p-2.5">
-                      <div className="font-mono text-[10px] text-neutral-600 break-all mb-2">
+                    <div className={`border rounded p-2.5 ${
+                      isCyberdeck ? 'bg-[#060b04] border-[#1e2a14]' : 'bg-neutral-50 border border-neutral-200'
+                    }`}>
+                      <div className={`font-mono text-[10px] break-all mb-2 ${
+                        isCyberdeck ? 'text-[#a7b1ae]' : 'text-neutral-600'
+                      }`}>
                         <strong>Ciphertext Hex:</strong> {scrap.ciphertext?.split(':')[0]}
                       </div>
                       
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-[10px] text-neutral-500 font-bold uppercase">Chave de Decifragem:</span>
+                        <span className={`text-[10px] font-bold uppercase ${
+                          isCyberdeck ? 'text-[#79ceb4] font-mono' : 'text-neutral-500'
+                        }`}>Chave de Decifragem:</span>
                         <input
                           id={`input-decrypt-key-${scrap.id}`}
                           type="password"
                           value={decryptionKeys[scrap.id] || ''}
                           onChange={(e) => setDecryptionKeys({ ...decryptionKeys, [scrap.id]: e.target.value })}
-                          className="px-2 py-0.5 border border-neutral-300 rounded text-[11px] font-mono bg-white w-[160px]"
+                          className={`px-2 py-0.5 border rounded text-[11px] font-mono w-[160px] focus:outline-none focus:ring-1 ${
+                            isCyberdeck 
+                              ? 'bg-[#060b04] border-[#1e2a14] text-[#4ade80] focus:ring-[#47ff8c]' 
+                              : 'bg-white border-neutral-300'
+                          }`}
                           placeholder="Usar mesma passphrase..."
                         />
                         <button
                           id={`btn-decrypt-${scrap.id}`}
                           onClick={() => handleDecryptScrap(scrap.id, scrap.ciphertext!)}
-                          className="px-3 py-1 bg-[#1d4ed8] hover:bg-[#1e40af] text-white font-bold text-[10px] rounded flex items-center gap-1 shadow-sm transition-colors"
+                          className={`px-3 py-1 font-bold text-[10px] rounded flex items-center gap-1 shadow-sm transition-colors ${
+                            isCyberdeck 
+                              ? 'bg-[#1c2a18] hover:bg-[#1e2a14] text-[#39ff14] border border-[#2e3e28] font-mono' 
+                              : 'bg-[#1d4ed8] hover:bg-[#1e40af] text-white'
+                          }`}
                         >
                           <Key size={10} />
                           Decifrar Mensagem
@@ -370,13 +472,19 @@ export default function Scrapbook({
                     </div>
                   ) : (
                     <div className="flex flex-col gap-2">
-                      <p className="text-neutral-700 whitespace-pre-wrap font-sans">
+                      <p className={`whitespace-pre-wrap ${
+                        isCyberdeck ? 'text-[#a7b1ae] font-mono' : 'text-neutral-700 font-sans'
+                      }`}>
                         {isDecrypted ? decryptedScraps[scrap.id] : scrap.rawContent}
                       </p>
                       {scrap.imageUrl && (
-                        <div className="mt-2 text-center bg-neutral-950 border-2 border-dashed border-pink-400 p-2.5 rounded shadow-[0_0_15px_rgba(236,72,153,0.3)] inline-block max-w-full md:max-w-md self-start relative overflow-hidden group">
+                        <div className={`mt-2 text-center border-2 border-dashed p-2.5 rounded shadow-[0_0_15px_rgba(236,72,153,0.3)] inline-block max-w-full md:max-w-md self-start relative overflow-hidden group ${
+                          isCyberdeck ? 'bg-[#060b04] border-[#1e2a14]' : 'bg-neutral-950 border-pink-400'
+                        }`}>
                           {/* Y2K overlay watermark */}
-                          <div className="absolute right-1.5 top-1.5 bg-fuchsia-600/90 text-[7px] text-white font-bold px-1 rounded-sm uppercase tracking-wider select-none z-10 font-mono">
+                          <div className={`absolute right-1.5 top-1.5 text-[7px] text-white font-bold px-1 rounded-sm uppercase tracking-wider select-none z-10 font-mono ${
+                            isCyberdeck ? 'bg-[#1c2a18] text-[#39ff14]' : 'bg-fuchsia-600/90'
+                          }`}>
                             Glitter v2008
                           </div>
 
@@ -385,7 +493,11 @@ export default function Scrapbook({
                             <a
                               href={scrap.imageUrl}
                               download={`scrap_glitter_${scrap.id}.png`}
-                              className="px-3 py-1.5 bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white rounded font-bold text-[10px] flex items-center gap-1 shadow-md transition-all scale-95 group-hover:scale-100 duration-200 no-underline cursor-pointer border border-pink-400"
+                              className={`px-3 py-1.5 rounded font-bold text-[10px] flex items-center gap-1 shadow-md transition-all scale-95 group-hover:scale-100 duration-200 no-underline cursor-pointer border ${
+                                isCyberdeck 
+                                  ? 'bg-[#1c2a18] text-[#39ff14] border-[#1e2a14] hover:bg-[#1e2a14]' 
+                                  : 'bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white border-pink-400'
+                              }`}
                               onClick={() => {
                                 try {
                                   const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -407,7 +519,9 @@ export default function Scrapbook({
                             className="max-w-full rounded object-contain max-h-[320px] border border-white/20 select-none bg-[#0a0a0c]"
                             referrerPolicy="no-referrer"
                           />
-                          <div className="mt-1.5 flex items-center justify-between text-[8px] text-pink-300 font-mono tracking-wider font-extrabold uppercase">
+                          <div className={`mt-1.5 flex items-center justify-between text-[8px] font-mono tracking-wider font-extrabold uppercase ${
+                            isCyberdeck ? 'text-[#47ff8c]' : 'text-pink-300'
+                          }`}>
                             <span>✨ Scrapbook Builder</span>
                             <span className="text-[7px]">Secure Channel Signature</span>
                           </div>
@@ -417,19 +531,29 @@ export default function Scrapbook({
                   )}
 
                   {isDecrypted && (
-                    <div className="flex items-center gap-1 mt-1 text-[10px] text-green-800 font-semibold font-mono bg-green-50 border border-green-200 self-start px-2 py-0.5 rounded">
+                    <div className={`flex items-center gap-1 mt-1 text-[10px] font-semibold font-mono border self-start px-2 py-0.5 rounded ${
+                      isCyberdeck 
+                        ? 'bg-[#1c2a18] text-[#39ff14] border-[#1e2a14]' 
+                        : 'bg-green-50 border-green-200 text-green-800'
+                    }`}>
                       <ShieldCheck size={12} />
                       Decodificado com sucesso. Hash de integridade verificado!
                     </div>
                   )}
 
                   {/* Subtle Sec Engine notation */}
-                  <div className="flex flex-wrap items-center gap-1.5 border-t border-neutral-100/70 pt-1.5 mt-1.5 text-[9px] text-neutral-400 font-mono select-none">
-                    <span className="flex items-center gap-0.5 text-blue-700/60 font-semibold">
+                  <div className={`flex flex-wrap items-center gap-1.5 border-t pt-1.5 mt-1.5 text-[9px] font-mono select-none ${
+                    isCyberdeck ? 'border-[#1a2410]/60 text-[#4c6643]' : 'border-neutral-100/70 text-neutral-400'
+                  }`}>
+                    <span className={`flex items-center gap-0.5 font-semibold ${
+                      isCyberdeck ? 'text-[#39ff14]/70' : 'text-blue-700/60'
+                    }`}>
                       🛡️ Recado protegido pela Rust Engine
                     </span>
                     <span>•</span>
-                    <span className="text-[#d946ef]/60 font-semibold">
+                    <span className={`font-semibold ${
+                      isCyberdeck ? 'text-[#79ceb4]/70' : 'text-[#d946ef]/60'
+                    }`}>
                       🔑 Assinatura digital verificada
                     </span>
                   </div>

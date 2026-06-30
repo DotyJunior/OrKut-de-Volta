@@ -70,6 +70,19 @@
         },
         "statusOnline": {
           "type": "string"
+        },
+        "listeningNow": {
+          "type": "object",
+          "description": "Active song details being listened to right now (Ouvindo Agora status)"
+        },
+        "lastPlayedMusic": {
+          "type": "object",
+          "description": "Metadata of the last played song"
+        },
+        "premiumStatus": {
+          "type": "string",
+          "enum": ["free", "pro"],
+          "description": "User plan type (free or pro)"
         }
       },
       "required": [
