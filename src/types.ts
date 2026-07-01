@@ -51,6 +51,9 @@ export interface Profile {
   } | null;
   premiumStatus?: "free" | "pro";
   uploadedMusicSize?: number;
+  coverType?: "library" | "custom";
+  coverId?: string;
+  coverUrl?: string;
 }
 
 export interface Scrap {

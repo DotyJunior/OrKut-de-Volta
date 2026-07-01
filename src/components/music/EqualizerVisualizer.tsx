@@ -4,12 +4,14 @@ interface EqualizerVisualizerProps {
   isPlaying: boolean;
   audioRef?: React.RefObject<HTMLAudioElement | null>;
   theme?: string;
+  className?: string;
 }
 
 export const EqualizerVisualizer: React.FC<EqualizerVisualizerProps> = ({
   isPlaying,
   audioRef,
   theme = "default",
+  className = "w-full bg-[#293545] rounded-xl py-3 px-4 flex items-end justify-center gap-1 h-16 select-none border border-[#1e293b]/30",
 }) => {
   const barCount = 14;
   const [heights, setHeights] = useState<number[]>(Array(barCount).fill(15));
@@ -123,7 +125,7 @@ export const EqualizerVisualizer: React.FC<EqualizerVisualizerProps> = ({
   };
 
   return (
-    <div className="w-full bg-[#293545] rounded-xl py-3 px-4 flex items-end justify-center gap-1 h-16 select-none border border-[#1e293b]/30">
+    <div className={className}>
       {heights.map((height, idx) => (
         <div
           key={idx}

@@ -3,6 +3,7 @@ import { PREDEFINED_LIBRARY_TRACKS, MUSIC_CATEGORIES, LibraryTrack } from "../..
 import { db, auth, storage, ref, uploadBytes, getDownloadURL } from "../../firebase";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { Search, Music, Upload, Link, Check, AlertTriangle, Disc, Heart, Shield, HelpCircle, X } from "lucide-react";
+import { MusicCoverTab } from "./MusicCoverTab";
 
 interface MusicConfigModalProps {
   isOpen: boolean;
@@ -23,6 +24,11 @@ interface MusicConfigModalProps {
     coverUrl?: string;
     premiumStatus: "free" | "pro";
   }) => Promise<void>;
+  coverType: "library" | "custom";
+  coverId: string;
+  coverUrl: string;
+  onCoverChange: (type: "library" | "custom", id: string, url: string) => void;
+  onSaveCover: () => void;
 }
 
 export const MusicConfigModal: React.FC<MusicConfigModalProps> = ({
@@ -31,11 +37,16 @@ export const MusicConfigModal: React.FC<MusicConfigModalProps> = ({
   currentTrack,
   premiumStatus,
   onSave,
+  coverType,
+  coverId,
+  coverUrl,
+  onCoverChange,
+  onSaveCover,
 }) => {
   if (!isOpen) return null;
 
-  // Active Tab: 'library' | 'external' | 'upload'
-  const [activeTab, setActiveTab] = useState<"library" | "external" | "upload">("library");
+  // Active Tab: 'library' | 'external' | 'upload' | 'cover'
+  const [activeTab, setActiveTab] = useState<"library" | "external" | "upload" | "cover">("library");
   
   // Premium Plan Selection
   const [plan, setPlan] = useState<"free" | "pro">(premiumStatus);
@@ -345,10 +356,10 @@ export const MusicConfigModal: React.FC<MusicConfigModalProps> = ({
         </div>
 
         {/* Tabs Bar */}
-        <div className="flex border-b border-neutral-250 bg-[#e1eaf2]">
+        <div className="flex border-b border-neutral-250 bg-[#e1eaf2] overflow-x-auto">
           <button
             onClick={() => setActiveTab("library")}
-            className={`flex-1 py-2 text-xs font-bold transition-all border-r border-neutral-250 flex items-center justify-center gap-1.5 ${
+            className={`flex-1 min-w-[110px] py-2 text-xs font-bold transition-all border-r border-neutral-250 flex items-center justify-center gap-1.5 ${
               activeTab === "library"
                 ? "bg-white text-[#1d4ed8] border-b-2 border-b-[#1d4ed8]"
                 : "text-neutral-600 hover:bg-white/40"
@@ -358,7 +369,7 @@ export const MusicConfigModal: React.FC<MusicConfigModalProps> = ({
           </button>
           <button
             onClick={() => setActiveTab("external")}
-            className={`flex-1 py-2 text-xs font-bold transition-all border-r border-neutral-250 flex items-center justify-center gap-1.5 ${
+            className={`flex-1 min-w-[150px] py-2 text-xs font-bold transition-all border-r border-neutral-250 flex items-center justify-center gap-1.5 ${
               activeTab === "external"
                 ? "bg-white text-[#1d4ed8] border-b-2 border-b-[#1d4ed8]"
                 : "text-neutral-600 hover:bg-white/40"
@@ -374,7 +385,7 @@ export const MusicConfigModal: React.FC<MusicConfigModalProps> = ({
               }
               setActiveTab("upload");
             }}
-            className={`flex-1 py-2 text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+            className={`flex-1 min-w-[100px] py-2 text-xs font-bold transition-all border-r border-neutral-250 flex items-center justify-center gap-1.5 ${
               plan !== "pro" ? "opacity-50 cursor-not-allowed" : ""
             } ${
               activeTab === "upload"
@@ -384,10 +395,20 @@ export const MusicConfigModal: React.FC<MusicConfigModalProps> = ({
           >
             <Upload className="w-3.5 h-3.5" /> Enviar MP3
           </button>
+          <button
+            onClick={() => setActiveTab("cover")}
+            className={`flex-1 min-w-[100px] py-2 text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+              activeTab === "cover"
+                ? "bg-white text-pink-600 border-b-2 border-b-pink-600"
+                : "text-neutral-600 hover:bg-white/40"
+            }`}
+          >
+            <Disc className="w-3.5 h-3.5 text-pink-500 animate-spin-slow" /> Capa do CD
+          </button>
         </div>
 
         {/* Scrollable Form Content */}
-        <div className="p-4 flex-1 overflow-y-auto max-h-[400px]">
+        <div className={`p-4 flex-1 overflow-y-auto max-h-[400px] transition-colors duration-300 ${activeTab === "cover" ? "bg-[#11111c]" : ""}`}>
           
           {/* 1. LIBRARY TAB */}
           {activeTab === "library" && (
@@ -683,6 +704,41 @@ export const MusicConfigModal: React.FC<MusicConfigModalProps> = ({
                   ) : (
                     "Enviar Mídia e Definir"
                   )}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* 4. CAPA DO CD TAB */}
+          {activeTab === "cover" && (
+            <div className="space-y-4 p-4 rounded-xl" style={{ backgroundColor: "#11111c" }}>
+              <MusicCoverTab
+                premiumStatus={premiumStatus}
+                coverType={coverType}
+                coverId={coverId}
+                coverUrl={coverUrl}
+                onChangeCover={onCoverChange}
+                songTitle={currentTrack?.title || "Sensorium (Gothic Symphony)"}
+                artistName={currentTrack?.artist || "EPICA"}
+              />
+              
+              {/* Bottom footer button bar specifically for CD Cover config tab as requested */}
+              <div className="pt-3 border-t border-blue-950/10 flex justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-5 py-2 bg-neutral-900/10 hover:bg-neutral-100 border border-neutral-300 text-neutral-600 hover:text-neutral-800 font-extrabold text-xs uppercase tracking-wider rounded cursor-pointer transition-all active:scale-95"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onSaveCover();
+                  }}
+                  className="px-5 py-2 bg-gradient-to-r from-pink-500 to-[#d946ef] hover:from-pink-600 hover:to-fuchsia-600 text-white font-extrabold text-xs uppercase tracking-wider rounded cursor-pointer shadow-[0_0_15px_rgba(236,72,153,0.35)] hover:shadow-[0_0_20px_rgba(236,72,153,0.55)] transition-all active:scale-95 flex items-center gap-1.5"
+                >
+                  <Check className="w-3.5 h-3.5 stroke-[3px]" /> Salvar Capa
                 </button>
               </div>
             </div>
